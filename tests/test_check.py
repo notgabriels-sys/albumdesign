@@ -10,7 +10,7 @@ from PIL import Image
 from coverforge.checks import check_cover
 from coverforge.cli import main
 from coverforge.report import Status
-from coverforge.spec import Spec
+from coverforge.spec import Spec, get_profile
 
 
 def _make_cover(path, size=(3000, 3000), mode="RGB", fmt="PNG"):
@@ -118,6 +118,44 @@ def test_cli_strict_turns_warning_into_failure(tmp_path):
 
 def test_cli_no_args_returns_usage():
     assert main([]) == 2
+
+
+def test_apple_profile_fails_below_3000(tmp_path):
+    path = _make_cover(tmp_path / "cover.png", size=(2000, 2000))
+    # Default profile only warns below the recommended size...
+    assert _status_for(check_cover(path, get_profile("default")), "resolution") is Status.WARN
+    # ...but Apple treats 3000 as a hard floor.
+    assert _status_for(check_cover(path, get_profile("apple")), "resolution") is Status.FAIL
+
+
+def test_spotify_profile_allows_small(tmp_path):
+    path = _make_cover(tmp_path / "cover.png", size=(800, 800))
+    # 800px fails the default 1400 minimum but clears Spotify's 640 floor.
+    assert _status_for(check_cover(path, get_profile("default")), "resolution") is Status.FAIL
+    assert _status_for(check_cover(path, get_profile("spotify")), "resolution") is Status.WARN
+
+
+def test_unknown_profile_raises():
+    with pytest.raises(KeyError):
+        get_profile("nope")
+
+
+def test_cli_profile_flag(tmp_path):
+    path = _make_cover(tmp_path / "cover.png", size=(2000, 2000))
+    assert main(["check", path]) == 0  # default: warn only
+    assert main(["check", "--profile", "apple", path]) == 1  # apple: hard fail
+
+
+def test_cli_flag_overrides_profile(tmp_path):
+    path = _make_cover(tmp_path / "cover.png", size=(2000, 2000))
+    # --min-size overrides the apple profile's 3000 floor back down.
+    assert main(["check", "--profile", "apple", "--min-size", "1400", path]) == 0
+
+
+def test_report_shows_non_default_profile(tmp_path):
+    path = _make_cover(tmp_path / "cover.png")
+    assert "profile: apple" in check_cover(path, get_profile("apple")).render()
+    assert "profile:" not in check_cover(path, get_profile("default")).render()
 
 
 if __name__ == "__main__":

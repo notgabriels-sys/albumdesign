@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from coverforge import __version__
 from coverforge.checks import check_cover
 from coverforge.report import Status
-from coverforge.spec import Spec
+from coverforge.spec import DEFAULT_PROFILE, PROFILES, Spec, get_profile
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -29,6 +29,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Check one or more cover images against the requirements.",
     )
     check.add_argument("paths", nargs="+", metavar="IMAGE", help="path(s) to cover image(s)")
+    check.add_argument(
+        "--profile",
+        choices=sorted(PROFILES),
+        default=DEFAULT_PROFILE,
+        help=f"distributor requirement preset (default: {DEFAULT_PROFILE})",
+    )
     check.add_argument(
         "--min-size",
         type=int,
@@ -71,6 +77,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _spec_from_args(args: argparse.Namespace) -> Spec:
+    base = get_profile(args.profile)
     overrides: dict[str, object] = {}
     if args.min_size is not None:
         overrides["min_pixels"] = args.min_size
@@ -78,7 +85,7 @@ def _spec_from_args(args: argparse.Namespace) -> Spec:
         overrides["recommended_pixels"] = args.recommended_size
     if args.no_square:
         overrides["require_square"] = False
-    return dataclasses.replace(Spec(), **overrides)
+    return dataclasses.replace(base, **overrides)
 
 
 def _use_color(choice: bool | None) -> bool:

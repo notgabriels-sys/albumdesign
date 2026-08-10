@@ -35,3 +35,32 @@ class Spec:
 
     #: Human-facing name for the profile, shown in reports.
     name: str = field(default="default")
+
+
+# Named presets for specific distributors/platforms. The ``default`` profile is
+# the safe common denominator; the others encode a platform's own published
+# floors (e.g. Apple Music treats 3000x3000 as a hard minimum, Spotify accepts
+# down to 640x640). Sources drift over time, so these are convenient starting
+# points, not a substitute for a platform's current spec page.
+PROFILES: dict[str, Spec] = {
+    "default": Spec(name="default"),
+    "apple": Spec(name="apple", min_pixels=3000, recommended_pixels=3000),
+    "spotify": Spec(name="spotify", min_pixels=640, recommended_pixels=3000),
+    "distrokid": Spec(name="distrokid", min_pixels=1400, recommended_pixels=3000),
+    "bandcamp": Spec(name="bandcamp", min_pixels=1400, recommended_pixels=3000),
+}
+
+#: The default profile name used when none is requested.
+DEFAULT_PROFILE = "default"
+
+
+def get_profile(name: str) -> Spec:
+    """Return the :class:`Spec` for a named profile.
+
+    Raises :class:`KeyError` with a helpful message for an unknown name.
+    """
+    try:
+        return PROFILES[name]
+    except KeyError:
+        available = ", ".join(sorted(PROFILES))
+        raise KeyError(f"unknown profile {name!r}; choose from: {available}") from None

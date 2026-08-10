@@ -46,10 +46,32 @@ cover.png
 The command exits `0` when nothing failed, `1` when any check failed (or when
 `--strict` and there are warnings), so it drops into scripts and CI.
 
+### Profiles
+
+Target a specific platform's published floors with `--profile`:
+
+```sh
+coverforge check --profile apple cover.png
+```
+
+| Profile | Minimum | Recommended |
+| --- | --- | --- |
+| `default` | 1400px | 3000px |
+| `apple` | 3000px | 3000px |
+| `spotify` | 640px | 3000px |
+| `distrokid` | 1400px | 3000px |
+| `bandcamp` | 1400px | 3000px |
+
+These are convenient starting points based on each platform's published
+requirements, not a substitute for their current spec pages. Individual flags
+override the chosen profile, so `--profile apple --min-size 1400` relaxes the
+minimum back down.
+
 ### Options
 
 | Flag | Description |
 | --- | --- |
+| `--profile NAME` | Distributor preset: `default`, `apple`, `spotify`, `distrokid`, `bandcamp`. |
 | `--min-size PX` | Minimum width/height in pixels (default 1400). |
 | `--recommended-size PX` | Recommended width/height in pixels (default 3000). |
 | `--no-square` | Do not require a square (1:1) image. |

@@ -26,7 +26,7 @@ def check_cover(path: str, spec: Spec | None = None) -> Report:
     produces a single FAIL result and no further checks are attempted.
     """
     spec = spec or Spec()
-    report = Report(path=path)
+    report = Report(path=path, profile=spec.name)
 
     if not os.path.exists(path):
         report.add("file", Status.FAIL, "no such file")

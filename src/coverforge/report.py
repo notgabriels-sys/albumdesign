@@ -46,6 +46,7 @@ class Report:
     """A collection of results for a single cover image."""
 
     path: str
+    profile: str = "default"
     results: list[Result] = field(default_factory=list)
 
     def add(self, check: str, status: Status, message: str) -> Result:
@@ -70,7 +71,10 @@ class Report:
         return counts
 
     def render(self, color: bool = False) -> str:
-        lines = [f"{self.path}"]
+        header = self.path
+        if self.profile and self.profile != "default":
+            header = f"{header}  (profile: {self.profile})"
+        lines = [header]
         lines.extend(result.render(color=color) for result in self.results)
         counts = self.counts()
         lines.append(
