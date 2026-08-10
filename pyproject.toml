@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coverforge"
+version = "0.1.0"
+description = "Validate album cover artwork against digital-distribution requirements."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "coverforge contributors" }]
+keywords = ["album", "cover", "artwork", "music", "distribution", "spotify", "apple-music"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "Pillow>=9.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+coverforge = "coverforge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/notgabriels-sys/albumdesign"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coverforge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
