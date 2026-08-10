@@ -13,7 +13,7 @@ master can't legitimately reach.
 ```
 $ coverforge check master.png
 master.png
-  3200x3200  RGB  PNG  4.1 MB  vs 9 target(s)
+  3200x3200  RGBA  PNG  4.1 MB  vs 9 target(s)
 
   ! has transparency; it will be flattened onto #ffffff. Most stores reject alpha
     outright, so check the result looks right

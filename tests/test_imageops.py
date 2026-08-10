@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -92,6 +93,62 @@ def test_normalise_applies_exif_orientation(tmp_path):
     exif[0x0112] = 6  # rotate 90
     im.save(path, exif=exif)
     assert normalise(path).size == (200, 400)
+
+
+ICC_DIR = Path("/System/Library/ColorSync/Profiles")
+
+
+def _icc(filename):
+    path = ICC_DIR / filename
+    if not path.exists():
+        pytest.skip(f"{filename} not available on this machine")
+    return path.read_bytes()
+
+
+def _tagged(tmp_path, name, icc, mode="RGB", colour=(200, 30, 40)):
+    path = tmp_path / name
+    im = Image.new(mode, (600, 600), colour)
+    im.save(path, icc_profile=icc, quality=95)
+    return path
+
+
+def test_inspect_names_a_wide_gamut_profile(tmp_path):
+    path = _tagged(tmp_path, "wide.jpg", _icc("AdobeRGB1998.icc"))
+    assert inspect(path).icc_description == "Adobe RGB (1998)"
+
+
+def test_normalise_actually_converts_wide_gamut_to_srgb(tmp_path):
+    path = _tagged(tmp_path, "wide.jpg", _icc("AdobeRGB1998.icc"))
+    with Image.open(path) as raw:
+        before = raw.convert("RGB").getpixel((300, 300))
+    after = normalise(path).getpixel((300, 300))
+    # Same numbers in a wider gamut mean a more saturated colour, so sRGB has
+    # to push red up to represent it.
+    assert after != before
+    assert after[0] > before[0]
+
+
+def test_normalise_converts_tagged_cmyk(tmp_path):
+    path = _tagged(tmp_path, "cmyk.jpg", _icc("Generic CMYK Profile.icc"), mode="CMYK", colour=(0, 200, 180, 10))
+    out = normalise(path)
+    assert out.mode == "RGB"
+    assert out.size == (600, 600)
+
+
+def test_srgb_tagged_master_is_left_alone(tmp_path):
+    from PIL import ImageCms
+
+    srgb = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    path = _tagged(tmp_path, "srgb.jpg", srgb)
+    with Image.open(path) as raw:
+        before = raw.convert("RGB").getpixel((300, 300))
+    assert normalise(path).getpixel((300, 300)) == before
+
+
+def test_broken_icc_profile_does_not_break_the_export(tmp_path):
+    path = _tagged(tmp_path, "junk.jpg", b"this is not an icc profile")
+    assert inspect(path).icc_description == "unreadable ICC profile"
+    assert normalise(path).mode == "RGB"
 
 
 def test_render_cover_crops_to_square(art_factory):
