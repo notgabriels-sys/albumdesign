@@ -3,8 +3,10 @@
 ## Goal
 
 Turn Coverforge's existing `manifest.json` into a portable, deterministic
-delivery-capture record that can be safely shared with a label, designer,
-artist, or later companion tool without exposing the operator's absolute paths.
+delivery-capture record that can be shared as path-free local evidence with a
+label, designer, artist, or later companion tool, subject to the stated local-
+byte and metadata limitations. This is not a general safety, provenance,
+rights, or approval claim.
 
 ## Problem
 
@@ -26,8 +28,10 @@ the document likely to be shared.
 
 ## Manifest contract
 
-Every non-dry build that produces at least one delivery output writes exactly
-one `manifest.json` with these root fields:
+Exactly one `manifest.json` is written only when a non-dry build emits at least
+one delivery output. Dry-run builds and builds whose targets are entirely
+skipped retain no-write behavior and do not write a manifest. A qualifying
+build writes exactly one `manifest.json` with these root fields:
 
 - `schema_version`: integer `1`.
 - `generated_by`: string `"coverforge"`.
@@ -58,8 +62,10 @@ streaming standard-library helper while building the manifest, avoiding a
 second in-memory copy of an image file.
 
 No new runtime dependency, account, upload, network request, subprocess,
-deletion, rename, or overwrite policy is introduced. Existing target selection,
-dry-run behavior, exit codes, and delivery filenames stay unchanged.
+deletion, rename, or overwrite policy is introduced. The schema preserves the
+current output-file write behavior and introduces no new overwrite policy.
+Existing target selection, dry-run behavior, exit codes, and delivery filenames
+stay unchanged.
 
 ## Testing and acceptance criteria
 

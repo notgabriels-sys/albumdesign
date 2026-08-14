@@ -2,8 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every non-dry Coverforge build emit a versioned, path-free,
-hash-bound artwork-delivery manifest that is safe to share as local evidence.
+**Goal:** Make each qualifying non-dry Coverforge build emit one versioned,
+path-free, hash-bound artwork-delivery manifest that can be shared as local
+evidence subject to stated local-byte and metadata limitations. This is not a
+general safety, provenance, rights, or approval claim.
 
 **Architecture:** Keep `BuildResult.as_dict()` as the owner-local command-line
 view, including its useful absolute input and output locations. Add a separate
@@ -21,11 +23,15 @@ pytest, Hatchling.
   deletion, rename, or overwrite policy.
 - Preserve existing target selection, exit codes, dry-run behavior, delivery
   filenames, and owner-local `BuildResult.as_dict()` semantics.
+- Write exactly one manifest only for a non-dry build that emits at least one
+  delivery output. Dry-run and entirely skipped builds retain no-write behavior.
 - The written `manifest.json` must never contain the source path, source name,
   output directory, absolute path, timestamp, or source-media bytes.
 - Every source/output SHA-256 identifies local bytes only; it is not a
   signature, source-authentication statement, ownership/rights decision,
   approval, platform-acceptance, or release-readiness verdict.
+- Preserve the current output-file write behavior; introduce no new overwrite
+  policy.
 - Do not stage or alter the user's untracked `artwork/` directory.
 
 ---
@@ -51,21 +57,21 @@ pytest, Hatchling.
 - Produces: the contract for `portable_manifest_payload()` and the exact test
   boundary used in Task 2.
 
-- [ ] **Step 1: Review the design against the existing implementation**
+- [x] **Step 1: Review the design against the existing implementation**
 
 Confirm `BuildResult.as_dict()` includes `master` and `out_dir`, and confirm
 `_write_manifest()` currently serializes that owner-local structure. Confirm
 that `Output.as_dict()` lacks a digest and that no existing manifest schema
 version is promised.
 
-- [ ] **Step 2: Check the design document for unbounded claims**
+- [x] **Step 2: Check the design document for unbounded claims**
 
 Run: `rg -n -i 'upload|network|platform compliance|approval|signature|rights|revenue' docs/superpowers/specs/2026-08-14-coverforge-portable-manifest-design.md`
 
 Expected: any references to those concepts are explicit limitations, not a
 claim that Coverforge performs them.
 
-- [ ] **Step 3: Commit the design record before feature code**
+- [x] **Step 3: Commit the design record before feature code**
 
 Run:
 
@@ -145,11 +151,10 @@ def test_written_manifest_is_portable_while_build_result_remains_owner_local(mas
 
 - [ ] **Step 2: Run the test to verify the expected red state**
 
-Run:
+After activating a disposable Python 3.13 environment, run:
 
 ```bash
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python \
-  -m pytest tests/test_build_and_cli.py::test_written_manifest_is_portable_while_build_result_remains_owner_local -q
+python -m pytest tests/test_build_and_cli.py::test_written_manifest_is_portable_while_build_result_remains_owner_local -q
 ```
 
 Expected: one assertion failure because the existing unversioned manifest has
@@ -229,11 +234,10 @@ Replace `_write_manifest()` so it serializes only
 
 - [ ] **Step 4: Run the focused test to verify green**
 
-Run:
+After activating the disposable Python 3.13 environment, run:
 
 ```bash
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python \
-  -m pytest tests/test_build_and_cli.py::test_written_manifest_is_portable_while_build_result_remains_owner_local -q
+python -m pytest tests/test_build_and_cli.py::test_written_manifest_is_portable_while_build_result_remains_owner_local -q
 ```
 
 Expected: `1 passed`; the test verifies actual generated images and the
@@ -242,11 +246,10 @@ expectation.
 
 - [ ] **Step 5: Run the full test suite before documentation changes**
 
-Run:
+After activating the disposable Python 3.13 environment, run:
 
 ```bash
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python \
-  -m pytest -q
+python -m pytest -q
 ```
 
 Expected: all existing tests plus the new integration test pass under Python
@@ -328,11 +331,11 @@ unstaged.
 
 - [ ] **Step 1: Run source-level verification**
 
-Run:
+After activating the disposable Python 3.13 environment, run:
 
 ```bash
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python -m pytest -q
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python -m compileall -q coverforge
+python -m pytest -q
+python -m compileall -q coverforge
 git diff --check
 ```
 
@@ -340,21 +343,22 @@ Expected: no test failures, no compilation errors, and no whitespace errors.
 
 - [ ] **Step 2: Build and smoke-test an installed wheel**
 
-Install the `build` package only in the disposable Python 3.13 environment,
-then create an exact temporary destination and run:
+Install the `build` package only in the activated disposable Python 3.13
+environment, then create an exact temporary destination and run:
 
 ```bash
+python -m pip install build
 BUILD_OUTPUT_DIR="$(mktemp -d /private/tmp/coverforge-wheel.XXXXXX)"
-/var/folders/pc/9qf6qbqx0931ywj0v8v4srf00000gn/T/coverforge-manifest-venv.XXXXXX.xbNw1uwUwf/bin/python \
-  -m build --outdir "$BUILD_OUTPUT_DIR"
+python -m build --outdir "$BUILD_OUTPUT_DIR"
 ```
 
 Create a fresh temporary virtual environment, install the newly built wheel,
 generate a synthetic 3000-by-3000 PNG using Pillow, and run its installed
 `coverforge build` command with `--only web_thumb --json`. Inspect the emitted
 `manifest.json` to prove it has schema version `1`, no temporary path, and
-hashes matching the actual master/output bytes. Delete only the exact temporary
-directories created for this smoke check after recording the command output.
+hashes matching the actual master/output bytes. Retain the exact temporary
+directories and verification artifacts for manual/operator cleanup; this plan
+defines no deletion policy.
 
 - [ ] **Step 3: Inspect the final diff and Git state**
 
