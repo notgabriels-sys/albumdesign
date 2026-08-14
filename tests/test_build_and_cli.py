@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from PIL import Image
+import pytest
 
 from coverforge.build import build, output_name
 from coverforge.cli import main
@@ -113,6 +114,15 @@ def test_written_manifest_is_portable_while_build_result_remains_owner_local(mas
     owner_local = result.as_dict()
     assert owner_local["master"] == str(master)
     assert owner_local["out_dir"] == str(out)
+
+
+def test_build_rejects_path_bearing_programmatic_slug_before_writing(master, tmp_path):
+    out = tmp_path / "delivery"
+
+    with pytest.raises(ValueError, match="slug"):
+        build(inspect(master), [ALL_TARGETS[0]], out_dir=out, slug=str(master))
+
+    assert not out.exists()
 
 
 def test_cli_targets_json(capsys):

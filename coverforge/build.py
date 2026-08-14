@@ -130,6 +130,8 @@ def build(
 ) -> BuildResult:
     """Render every target from one master, skipping the ones that can't be met."""
     slug = slug or slugify(src.path.stem)
+    if Path(slug).is_absolute() or "/" in slug or "\\" in slug:
+        raise ValueError("slug must not be an absolute path or contain path separators")
     findings = check(src, targets, flatten_colour, allow_upscale)
     result = BuildResult(source=src, slug=slug, out_dir=out_dir, findings=findings)
 
