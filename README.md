@@ -1,167 +1,11 @@
-# coverforge
-
-Preflight your release artwork, then export the whole per-platform delivery pack
-in one command.
-
-You finish a cover, and then comes the boring half: 3000×3000 for the
-distributor, 1400×1400 for Beatport, something under 2 MB for SoundCloud, a 9:16
-crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG
-— because one wrong file gets the release bounced a week before it drops.
-`coverforge` does that pass for you and tells you up front which targets your
-master can't legitimately reach.
-
-```
-$ coverforge check master.png
-master.png
-  3200x3200  RGBA  PNG  4.1 MB  vs 9 target(s)
-
-  ! has transparency; it will be flattened onto #ffffff. Most stores reject alpha
-    outright, so check the result looks right
-  - no ICC profile embedded; assuming sRGB
-
-  ok 9/9 targets clear: bandcamp, spotify, apple_music, beatport, soundcloud,
-     instagram_post, instagram_story, web_thumb, archive
-
-$ coverforge build master.png -o delivery/ --name "Lack of Fate - Drift Protocol"
-master.png -> delivery
-  bandcamp          3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--bandcamp--3000x3000.jpg
-  spotify           3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--spotify--3000x3000.jpg
-  apple_music       3000x3000  jpeg q95   994 KB  lack-of-fate-drift-protocol--apple_music--3000x3000.jpg
-  beatport          1400x1400  jpeg q92   286 KB  lack-of-fate-drift-protocol--beatport--1400x1400.jpg
-  soundcloud        1400x1400  jpeg q90   264 KB  lack-of-fate-drift-protocol--soundcloud--1400x1400.jpg
-  instagram_post    1080x1080  jpeg q90   183 KB  lack-of-fate-drift-protocol--instagram_post--1080x1080.jpg
-  instagram_story   1080x1920  jpeg q90   202 KB  lack-of-fate-drift-protocol--instagram_story--1080x1920.jpg
-  web_thumb           600x600  jpeg q85    75 KB  lack-of-fate-drift-protocol--web_thumb--600x600.jpg
-  archive           3000x3000  png        197 KB  lack-of-fate-drift-protocol--archive--3000x3000.png
-
-9 files written, worst finding: info
-```
-
-## Install
-
-Needs Python 3.11+ (it uses the stdlib TOML reader). Pillow is the only
-dependency.
-
-```bash
-uv venv && uv pip install -e .
-# or: python3 -m venv .venv && .venv/bin/pip install -e .
-```
-
-Then `coverforge ...`, or `python -m coverforge ...` without installing.
-
-## What it actually does to your pixels
-
-Every export goes through the same normalisation, once per master:
-
-- **EXIF rotation is baked in**, so a phone-shot or scanned element can't flip
-  later in someone else's renderer.
-- **Converted to sRGB** through the embedded ICC profile if there is one. CMYK
-  masters are converted too — with a warning, because the colour *will* shift and
-  you want to see that before a store does.
-- **Alpha is flattened** onto a colour you choose (`--flatten '#000000'`), never
-  silently dropped.
-- **Resized with Lanczos**: centre-crop for square targets, scale-to-fit with a
-  blurred backdrop for the 9:16 story.
-- **Encoded baseline, 4:4:4, sRGB-tagged.** Progressive JPEGs get rejected by
-  some delivery pipelines, and chroma subsampling smears exactly the hard-edged
-  typography that cover art is made of.
-- **Size caps are respected.** SoundCloud's 2 MB ceiling is enforced by bisecting
-  JPEG quality down to the highest value that fits, and if even quality 55 won't
-  fit you get told rather than shipped mush.
-
-## What it refuses to do
-
-It will not upscale your master to fake a spec. If a 1600px master is fed to a
-3000px target, that target is **skipped** with the reason printed. `--allow-upscale`
-overrides it when you've decided you don't care.
-
-Targets with a hard platform floor (`min_source`) are a harder no: below that, the
-target is skipped even with `--allow-upscale`, because the store would reject it
-anyway.
-
-## Commands
-
-```bash
-coverforge targets                       # list targets, sizes, floors, notes
-coverforge check ART... [--strict]       # report only, writes nothing
-coverforge build ART... -o DIR           # write the delivery pack
-```
-
-`ART` can be files or a directory. Point it at a folder of variants and each one
-gets its own output folder:
-
-```bash
-coverforge build ~/art/ft007-variants/ -o delivery/ --group dsp
-# delivery/ft007-cover-v1/... delivery/ft007-cover-v2/... etc.
-```
-
-Useful flags:
-
-| Flag | Effect |
-| --- | --- |
-| `--only spotify,bandcamp` | just these targets |
-| `--group dsp` | groups are `dsp`, `social`, `web`, `archive` |
-| `--name "Artist - Title"` | slugified into the output filenames |
-| `--flatten '#000000'` | colour behind transparency (default white) |
-| `--allow-upscale` | render targets larger than the master |
-| `--dry-run` | build: report what would be written |
-| `--strict` | check: exit non-zero on warnings, not just errors |
-| `--json` | machine-readable output from any command |
-
-Exit codes: `0` clean, `1` findings (errors, or warnings under `--strict`, or
-skipped targets), `2` bad usage or unreadable input. So this drops into a
-pre-delivery script:
-
-```bash
-coverforge check final-master.tif --strict || exit 1
-```
-
-Every build also drops a `manifest.json` and a `DELIVERY.md` table next to the
-files — the second one is handy to paste into a mail to a label or distributor.
-
-## The specs are yours to edit
-
-`coverforge/targets.toml` holds every target. **The numbers in it are a best-effort
-snapshot, and platforms change requirements without announcing it** — check them
-against whatever your distributor currently demands before you rely on them.
-
-Adding a target is a few lines:
-
-```toml
-[targets.vinyl_sleeve]
-name = "Vinyl sleeve proof"
-group = "print"
-width = 3500
-height = 3500
-format = "png"
-min_source = 3500
-fit = "cover"
-notes = "Send to the pressing plant."
-```
-
-Keep your own set outside the repo and merge it on top of the built-ins:
-
-```bash
-coverforge build master.png -o out/ --extra-targets ~/.config/coverforge.toml
-```
-
-`--extra-targets` overrides matching keys and adds new ones; `--targets-file`
-replaces the built-in set entirely.
-
-## Development
-
-```bash
-uv pip install -e '.[dev]'
-python -m pytest tests -q
-```
 # Coverforge
 
 Local preflight and delivery-pack builder for release artwork.
 
 ## Install
 
-Use Python 3.11 or newer. From the repository root, create or activate your
-environment and install the project with its development tools:
+Use Python 3.11 or newer. From the repository root, install Coverforge with
+its development dependencies:
 
 ```bash
 python3.11 -m pip install -e ".[dev]"
@@ -169,66 +13,61 @@ python3.11 -m pip install -e ".[dev]"
 
 ## Use
 
-List the currently configured delivery targets before checking an artwork
-master:
+Inspect the configured target definitions:
 
 ```bash
 coverforge targets
 ```
 
-Run a report-only preflight. `check` reads the image and prints findings; it
-does not write files:
+Run a report-only preflight for an image. `check` reads the supplied image and
+prints findings; it writes no files:
 
 ```bash
 coverforge check path/to/master.png
 ```
 
-Build a delivery pack into an explicit output directory:
+Write a delivery pack to an explicit output directory:
 
 ```bash
 coverforge build path/to/master.png --name my-release -o build/my-release
 ```
 
-To preview the build report without writing anything, add `--dry-run`:
+Preview the build result without writing output:
 
 ```bash
 coverforge build path/to/master.png --name my-release -o build/my-release --dry-run
 ```
 
-The master argument may also be a directory of image files. Use `--only` or
-`--group` to select targets, and `--targets-file` or `--extra-targets` when a
-different target definition is needed.
+The image argument can also be a directory. Use `--only` or `--group` to limit
+the selected targets.
 
 ## What a build writes
 
-A real build writes one rendered file for each target it can produce, in the
-output directory. It also writes:
+A non-dry-run build that can produce at least one selected target writes one
+rendered delivery file per produced target in the output directory. It also
+writes `DELIVERY.md`, a human-readable inventory, and `manifest.json`, the
+machine-readable capture. Skipped targets have no rendered file.
 
-- `DELIVERY.md`, a human-readable inventory of the files, dimensions, formats,
-  sizes, skipped targets, and findings.
-- `manifest.json`, the machine-readable capture for that build.
-
-Skipped targets do not produce files. `check` and `build --dry-run` write no
-files. A dry run reports what would be produced but does not create the output
-directory, rendered artwork, `DELIVERY.md`, or `manifest.json`.
+`check` is report-only and writes nothing. `build --dry-run` reports the
+planned result but writes no output directory, delivery files, `DELIVERY.md`,
+or `manifest.json`.
 
 ## Portable manifest boundary
 
-`manifest.json` is schema version 1 and is path-free for valid slugs. It
-contains the local source SHA-256, each emitted output file's SHA-256, and a
-deterministic `capture_id`, alongside dimensions, formats, byte counts,
-findings, and skipped targets. It is only a capture of local bytes selected
-and emitted by this run; its digests do not establish authorship, ownership,
-rights, approval, platform acceptance, or release readiness.
+`manifest.json` uses schema version 1. For a valid slug it contains no local
+paths. It records the source SHA-256, every emitted output SHA-256, and a
+deterministic `capture_id`, with local byte counts and rendering facts. It is a
+capture of local bytes selected and emitted by this run only.
 
 Coverforge does not upload files, determine rights, validate external
-acceptance, or guarantee platform compliance. Verify the destination's actual
-requirements and complete any external delivery steps separately.
+acceptance, or guarantee destination compliance. The manifest is local
+evidence only, not proof of authorship, ownership, rights, approval, or
+release-readiness.
 
 ## Target definitions
 
-The built-in target definitions are in `coverforge/targets.toml` and are
-editable. Destination requirements drift, so inspect the current definitions
-and verify the real destination requirements before delivery. Local target
-settings are a preflight and rendering configuration, not an external
-acceptance decision.
+The built-in definitions are in `coverforge/targets.toml` and are editable.
+Use `--targets-file` to replace them or `--extra-targets` to merge changes.
+Destination requirements drift, so verify current requirements before
+delivery. These definitions configure a local workflow; they do not determine
+an external outcome.
