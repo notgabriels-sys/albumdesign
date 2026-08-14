@@ -154,3 +154,81 @@ replaces the built-in set entirely.
 uv pip install -e '.[dev]'
 python -m pytest tests -q
 ```
+# Coverforge
+
+Local preflight and delivery-pack builder for release artwork.
+
+## Install
+
+Use Python 3.11 or newer. From the repository root, create or activate your
+environment and install the project with its development tools:
+
+```bash
+python3.11 -m pip install -e ".[dev]"
+```
+
+## Use
+
+List the currently configured delivery targets before checking an artwork
+master:
+
+```bash
+coverforge targets
+```
+
+Run a report-only preflight. `check` reads the image and prints findings; it
+does not write files:
+
+```bash
+coverforge check path/to/master.png
+```
+
+Build a delivery pack into an explicit output directory:
+
+```bash
+coverforge build path/to/master.png --name my-release -o build/my-release
+```
+
+To preview the build report without writing anything, add `--dry-run`:
+
+```bash
+coverforge build path/to/master.png --name my-release -o build/my-release --dry-run
+```
+
+The master argument may also be a directory of image files. Use `--only` or
+`--group` to select targets, and `--targets-file` or `--extra-targets` when a
+different target definition is needed.
+
+## What a build writes
+
+A real build writes one rendered file for each target it can produce, in the
+output directory. It also writes:
+
+- `DELIVERY.md`, a human-readable inventory of the files, dimensions, formats,
+  sizes, skipped targets, and findings.
+- `manifest.json`, the machine-readable capture for that build.
+
+Skipped targets do not produce files. `check` and `build --dry-run` write no
+files. A dry run reports what would be produced but does not create the output
+directory, rendered artwork, `DELIVERY.md`, or `manifest.json`.
+
+## Portable manifest boundary
+
+`manifest.json` is schema version 1 and is path-free for valid slugs. It
+contains the local source SHA-256, each emitted output file's SHA-256, and a
+deterministic `capture_id`, alongside dimensions, formats, byte counts,
+findings, and skipped targets. It is only a capture of local bytes selected
+and emitted by this run; its digests do not establish authorship, ownership,
+rights, approval, platform acceptance, or release readiness.
+
+Coverforge does not upload files, determine rights, validate external
+acceptance, or guarantee platform compliance. Verify the destination's actual
+requirements and complete any external delivery steps separately.
+
+## Target definitions
+
+The built-in target definitions are in `coverforge/targets.toml` and are
+editable. Destination requirements drift, so inspect the current definitions
+and verify the real destination requirements before delivery. Local target
+settings are a preflight and rendering configuration, not an external
+acceptance decision.
