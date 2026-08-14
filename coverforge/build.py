@@ -2,14 +2,41 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Mapping
 
 from . import imageops
 from .imageops import Encoded, SourceImage, human_bytes, slugify
 from .preflight import ERROR, Finding, check, cover_scale, worst_level
 from .specs import Target
+
+
+_MANIFEST_SCHEMA_VERSION = 1
+_MANIFEST_BOUNDARY = (
+    "This capture records selected local source facts and emitted delivery-file bytes. "
+    "Its SHA-256 values and capture ID identify bytes captured by this local run; "
+    "they do not authenticate a creator or tool, establish ownership, rights, approval, "
+    "platform acceptance, or release readiness."
+)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(64 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def manifest_capture_id(payload: Mapping[str, object]) -> str:
+    canonical = {key: value for key, value in payload.items() if key != "capture_id"}
+    encoded = json.dumps(
+        canonical, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return f"cfp_{hashlib.sha256(encoded).hexdigest()[:20]}"
 
 
 @dataclass
@@ -19,6 +46,7 @@ class Output:
     bytes_written: int
     quality: int
     over_cap: bool
+    sha256: str
 
     def as_dict(self) -> dict:
         return {
@@ -33,6 +61,9 @@ class Output:
             "over_size_cap": self.over_cap,
         }
 
+    def as_manifest_dict(self) -> dict:
+        return {**self.as_dict(), "sha256": self.sha256}
+
 
 @dataclass
 class BuildResult:
@@ -42,6 +73,7 @@ class BuildResult:
     outputs: list[Output] = field(default_factory=list)
     skipped: list[tuple[Target, str]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
+    source_sha256: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -57,6 +89,30 @@ class BuildResult:
             "skipped": [{"target": t.key, "reason": reason} for t, reason in self.skipped],
             "findings": [f.as_dict() for f in self.findings],
         }
+
+
+def portable_manifest_payload(result: BuildResult) -> dict[str, object]:
+    if result.source_sha256 is None:
+        raise ValueError("portable manifest requires a captured source digest")
+
+    payload: dict[str, object] = {
+        "schema_version": _MANIFEST_SCHEMA_VERSION,
+        "generated_by": "coverforge",
+        "boundary": _MANIFEST_BOUNDARY,
+        "slug": result.slug,
+        "source": {
+            "sha256": result.source_sha256,
+            "bytes": result.source.file_bytes,
+            "dimensions": result.source.dimensions,
+            "mode": result.source.mode,
+            "format": result.source.file_format,
+        },
+        "outputs": [output.as_manifest_dict() for output in result.outputs],
+        "skipped": [{"target": target.key, "reason": reason} for target, reason in result.skipped],
+        "findings": [finding.as_dict() for finding in result.findings],
+    }
+    payload["capture_id"] = manifest_capture_id(payload)
+    return payload
 
 
 def output_name(slug: str, target: Target) -> str:
@@ -94,6 +150,8 @@ def build(
     if not renderable or dry_run:
         return result
 
+    result.source_sha256 = _sha256_file(src.path)
+
     # Decode and colour-manage once, then resize per target.
     normalised = imageops.normalise(src.path, flatten_colour)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -110,6 +168,7 @@ def build(
                 bytes_written=encoded.size,
                 quality=encoded.quality,
                 over_cap=encoded.over_cap,
+                sha256=hashlib.sha256(encoded.data).hexdigest(),
             )
         )
 
@@ -119,10 +178,9 @@ def build(
 
 
 def _write_manifest(result: BuildResult) -> None:
-    payload = result.as_dict()
-    payload["generated_by"] = "coverforge"
+    payload = portable_manifest_payload(result)
     (result.out_dir / "manifest.json").write_text(
-        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
 

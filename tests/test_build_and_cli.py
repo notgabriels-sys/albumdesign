@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 from PIL import Image
@@ -73,6 +74,45 @@ def test_build_writes_manifest_and_delivery_note(master, tmp_path):
     note = (out / "DELIVERY.md").read_text()
     assert "# lof001" in note
     assert "Bandcamp" in note
+
+
+def test_written_manifest_is_portable_while_build_result_remains_owner_local(master, tmp_path):
+    out = tmp_path / "delivery"
+    source = inspect(master)
+    result = build(source, ALL_TARGETS, out_dir=out, slug="lof001")
+
+    raw = (out / "manifest.json").read_text(encoding="utf-8")
+    manifest = json.loads(raw)
+
+    assert manifest.get("schema_version") == 1
+    assert manifest["generated_by"] == "coverforge"
+    assert manifest["slug"] == "lof001"
+    assert str(tmp_path) not in raw
+    assert str(master) not in raw
+    assert master.name not in raw
+    assert "master" not in manifest
+    assert "out_dir" not in manifest
+    assert set(manifest["source"]) == {"sha256", "bytes", "dimensions", "mode", "format"}
+    assert manifest["source"] == {
+        "sha256": hashlib.sha256(master.read_bytes()).hexdigest(),
+        "bytes": master.stat().st_size,
+        "dimensions": source.dimensions,
+        "mode": source.mode,
+        "format": source.file_format,
+    }
+    for output in manifest["outputs"]:
+        rendered = out / output["file"]
+        assert output["sha256"] == hashlib.sha256(rendered.read_bytes()).hexdigest()
+
+    capture_payload = {key: value for key, value in manifest.items() if key != "capture_id"}
+    canonical = json.dumps(
+        capture_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    assert manifest["capture_id"] == f"cfp_{hashlib.sha256(canonical).hexdigest()[:20]}"
+
+    owner_local = result.as_dict()
+    assert owner_local["master"] == str(master)
+    assert owner_local["out_dir"] == str(out)
 
 
 def test_cli_targets_json(capsys):
