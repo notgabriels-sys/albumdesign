@@ -10,7 +10,14 @@ from pathlib import Path
 from . import report
 from .build import build, summarise
 from .contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
-from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
+from .imageops import (
+    READABLE_SUFFIXES,
+    ImageError,
+    SourceImage,
+    inspect,
+    is_image_path,
+    slugify,
+)
 from .preflight import ERROR, WARN, check, worst_level
 from .specs import SpecError, TargetSet, load_targets
 
@@ -117,7 +124,7 @@ def cmd_check(args) -> int:
                 }
             )
         else:
-            print(report.format_check(src, findings, targets, colour))
+            print(report.format_check(src, findings, targets, colour, args.allow_upscale))
             print()
 
     if args.json:
@@ -188,6 +195,24 @@ def cmd_build(args) -> int:
             dry_run=args.dry_run,
         )
         results.append(result)
+
+        # Building into an occupied directory overwrites silently and leaves
+        # anything it did not write sitting there. Zip that folder for a
+        # distributor and you ship stale art the manifest does not describe.
+        if not args.dry_run and result.outputs:
+            written = {o.path.name for o in result.outputs} | {"manifest.json", "DELIVERY.md"}
+            stale = sorted(
+                p.name
+                for p in out_dir.iterdir()
+                if p.is_file() and p.name not in written and p.suffix.lower() in READABLE_SUFFIXES
+            )
+            if stale:
+                print(
+                    f"warning: {out_dir} also holds {len(stale)} image(s) this build did not write "
+                    f"and manifest.json does not describe: {', '.join(stale[:6])}"
+                    + (" ..." if len(stale) > 6 else ""),
+                    file=sys.stderr,
+                )
 
         if not args.json:
             print(report.format_build(result, colour))

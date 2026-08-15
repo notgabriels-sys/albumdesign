@@ -1,5 +1,6 @@
 import hashlib
 import io
+import re
 import json
 from pathlib import Path
 
@@ -369,3 +370,43 @@ def test_an_implausible_image_header_is_an_error_not_a_crash(tmp_path):
         + chunk(b"IEND", b"")
     )
     assert main(["check", str(bomb)]) == 2
+
+
+def test_check_summary_agrees_with_what_build_writes(art_factory, tmp_path, capsys):
+    """`check` counted upscale-skipped targets as clear while `build` skipped them.
+
+    The two decided separately. They now share build.plan(), so the headline
+    count cannot drift from reality again.
+    """
+    master = art_factory("ns", size=(3000, 2000))
+    assert main(["check", str(master)]) in (0, 1)
+    check_out = capsys.readouterr().out
+    clear = int(re.search(r"ok (\d+)/\d+ targets clear", check_out).group(1))
+
+    result = build(inspect(master), ALL_TARGETS, out_dir=tmp_path / "b", slug="ns")
+    assert clear == len(result.outputs), (clear, len(result.outputs), check_out)
+
+
+def test_dry_run_reports_the_files_it_would_write(master, tmp_path, capsys):
+    """--dry-run promises to report what would be written, and used to report nothing."""
+    out = tmp_path / "dry"
+    assert main(["build", str(master), "-o", str(out), "--name", "Dry", "--dry-run"]) in (0, 1)
+    printed = capsys.readouterr().out
+
+    assert "would write" in printed
+    for target in build(inspect(master), ALL_TARGETS, out_dir=tmp_path / "real", slug="dry").outputs:
+        assert target.path.name in printed
+    assert not out.exists()
+
+
+def test_building_into_an_occupied_directory_warns_about_stale_art(master, tmp_path, capsys):
+    """Stale covers in a delivery folder are not in the manifest, so zipping it
+    for a distributor ships art nothing accounts for."""
+    out = tmp_path / "pack"
+    assert main(["build", str(master), "-o", str(out), "--name", "First"]) in (0, 1)
+    capsys.readouterr()
+    assert main(["build", str(master), "-o", str(out), "--name", "Second"]) in (0, 1)
+    err = capsys.readouterr().err
+
+    assert "manifest.json does not describe" in err
+    assert "first--" in err
