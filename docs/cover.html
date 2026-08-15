@@ -158,8 +158,9 @@
       <p class="srcnote">There is no single size that satisfies everyone. Apple's artist page asks for
         4000px while CD Baby and TuneCore reject anything over 3000px, so the practical answer is to
         master at 4000 and deliver a 3000px square JPEG in sRGB, under 10 MB. Beatport also rejects
-        art tagged above 72 DPI. Specs were checked against platform documentation in August 2026 and
-        do drift, so confirm against your own distributor before release.</p>
+        art tagged above 72 DPI, and SoundCloud's own upload form caps images at 2 MB, so keep a
+        compressed copy for that. Specs were checked against platform documentation in August 2026
+        and do drift, so confirm against your own distributor before release.</p>
     </div>
   </section>
 
@@ -176,11 +177,13 @@
   // platforms do not agree with each other, so `note` carries the caveat that a
   // single number cannot express.
   var PLATFORMS=[
-    {name:"Bandcamp",min:1400,rec:3000,note:"1400 floor, feed it 3000"},
+    {name:"Bandcamp",min:1400,rec:1400,note:"1400 floor, no published ideal (“bigger is better”)"},
     {name:"Spotify",min:640,rec:3000,note:"accepts 640 to 10000, wants the highest you have"},
     {name:"Apple Music",min:1400,rec:3000,note:"delivery spec: 1400 min, 3000 recommended"},
     {name:"Beatport",min:0,rec:3000,note:"no published minimum, prefers 3000"},
-    {name:"SoundCloud",min:800,rec:3000,note:"800 floor, 3000 recommended"},
+    // SoundCloud publishes two different specs and they are easy to confuse.
+    {name:"SoundCloud upload",min:800,rec:800,note:"800 floor, but the file must be under 2 MB",maxBytes:2*1024*1024},
+    {name:"SoundCloud distro",min:3000,rec:3000,note:"3000 minimum, perfect square"},
     {name:"Instagram",min:1080,rec:1080,note:"downscales anything wider than 1080"}
   ];
   // Distributors that refuse art LARGER than this. Being too big is a real
@@ -318,6 +321,7 @@
       var st,label;
       if(!small||!isSquare){st="fail";label=!isSquare?"needs 1:1 square":"unknown size";}
       else if(p.min&&small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
+      else if(p.maxBytes&&info.bytes>p.maxBytes){st="fail";label=fmtBytes(info.bytes)+" is over its "+fmtBytes(p.maxBytes)+" limit";}
       else if(p.name==="Instagram"&&small>p.rec){st="pass";label="downscaled to "+p.rec+"px on upload";}
       else if(small<p.rec){st="warn";label=small+"px ok · "+p.rec+" ideal";}
       else{st="pass";label=p.note;}
