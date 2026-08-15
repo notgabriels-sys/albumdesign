@@ -12,7 +12,13 @@ let failures = 0;
 const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) failures++; };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  // Use a preinstalled Chromium when one is present (this repo's dev sandbox),
+  // otherwise let Playwright resolve its own download (CI).
+  const fs = require('fs');
+  const local = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+                 '/opt/pw-browsers/chromium/chrome-linux/chrome']
+                 .find(p => { try { return fs.existsSync(p); } catch { return false; } });
+  const browser = await chromium.launch(local ? { executablePath: local } : {});
 
   for (const scheme of ['light', 'dark']) {
     const ctx = await browser.newContext({ colorScheme: scheme, viewport: { width: 360, height: 740 } });
@@ -67,8 +73,11 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(r.verdict === 'Ready to ship', `3000px JPEG -> verdict "${r.verdict}"`);
 
   r = await runCover('over_4000.jpg');
-  ok(check(r, 'resolution').pill === 'WARN', `4000px -> resolution WARN (the ceiling bug we fixed)`);
-  ok(/3000px ceiling/.test(check(r, 'resolution').msg), `4000px -> message names the 3000 ceiling`);
+  // The ceiling is its own check, independent of the floor chain, so an image
+  // can be both under the recommendation and over the ceiling and hear both.
+  ok(!!check(r, 'oversize'), `4000px -> a separate oversize check fires`);
+  ok(check(r, 'oversize').pill === 'WARN', `4000px -> oversize WARN (the ceiling bug we fixed)`);
+  ok(/3000px ceiling/.test(check(r, 'oversize').msg), `4000px -> message names the 3000 ceiling`);
 
   r = await runCover('cmyk_3000.jpg');
   ok(check(r, 'colour').pill === 'FAIL', `CMYK -> colour FAIL (${check(r,'colour').pill}: ${check(r,'colour').msg})`);
@@ -105,6 +114,17 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(tp <= -22 && tp >= -24, `browser true peak ${tp} dBTP near -23 (sine amplitude)`);
   const appleRow = m.rows.find(t => /Apple/.test(t));
   ok(/never boosted|as-is/.test(appleRow), `Apple row respects attenuate-only -> "${appleRow}"`);
+
+  // ---- audio edge cases: must not leak Infinity or hang ----
+  console.log('\n=== loudness edge cases ===');
+  for (const [f, want] of [['silence.wav', /nothing to measure/], ['tiny_200ms.wav', /Too short/]]) {
+    await page.goto('file://' + path.join(DOCS, 'loudness.html'));
+    await page.setInputFiles('#file', path.join(FIX, f));
+    await page.waitForTimeout(3000);
+    const o = await page.evaluate(() => ({ status: document.getElementById('status').textContent, text: document.body.innerText }));
+    ok(want.test(o.status), `${f} -> clear message ("${o.status.slice(0, 46)}")`);
+    ok(!/Infinity/.test(o.text), `${f} -> no Infinity leaked to the UI`);
+  }
 
   // ---- functional: checklist persistence ----
   console.log('\n=== release checklist ===');

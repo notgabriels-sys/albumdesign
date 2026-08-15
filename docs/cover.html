@@ -204,27 +204,38 @@
 
   function parseHeader(buf){
     var d=new DataView(buf), out={format:"unknown",width:0,height:0,mode:"unknown"};
-    // PNG
-    if(d.byteLength>24&&d.getUint32(0)===0x89504E47){
+    var n=d.byteLength;
+    // PNG. Needs 26 bytes: colour type is byte 25, so >24 was one short.
+    if(n>=26&&d.getUint32(0)===0x89504E47&&d.getUint32(12)===0x49484452){
       out.format="PNG"; out.width=d.getUint32(16); out.height=d.getUint32(20);
       var ct=d.getUint8(25);
       out.mode={0:"Grayscale",2:"RGB",3:"Palette",4:"Grayscale+A",6:"RGBA"}[ct]||"unknown";
       return out;
     }
-    // JPEG
-    if(d.byteLength>4&&d.getUint16(0)===0xFFD8){
+    // JPEG. Every read is bounds-checked: the buffer may end mid-segment, and
+    // an unguarded DataView read throws, which would kill the whole result.
+    if(n>4&&d.getUint16(0)===0xFFD8){
       out.format="JPEG"; var o=2;
-      while(o<d.byteLength){
-        if(d.getUint8(o)!==0xFF){o++;continue}
+      while(o+1<n){
+        if(d.getUint8(o)!==0xFF) break;        // not on a marker; do not resync,
+                                               // scanning ahead can lock onto an
+                                               // EXIF thumbnail's SOF and report
+                                               // the thumbnail's size as the cover
         var m=d.getUint8(o+1);
+        if(m===0xFF){o++;continue}             // legal fill bytes before a marker
+        if(m===0x00){o+=2;continue}            // stuffed byte in entropy data
+        if(m===0x01||(m>=0xD0&&m<=0xD9)){o+=2;continue} // TEM, RSTn, SOI, EOI: no length
+        if(o+4>n) break;
         if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){
+          if(o+10>n) break;
           out.height=d.getUint16(o+5); out.width=d.getUint16(o+7);
           var comp=d.getUint8(o+9);
           out.mode=comp===4?"CMYK":comp===1?"Grayscale":"RGB";
           return out;
         }
-        if(m===0xD8||m===0xD9||(m>=0xD0&&m<=0xD7)){o+=2;continue}
-        o+=2+d.getUint16(o+2);
+        var len=d.getUint16(o+2);
+        if(len<2) break;                       // malformed; fall back to the decoded size
+        o+=2+len;
       }
       return out;
     }
@@ -235,16 +246,37 @@
     return out;
   }
 
+  function safeParse(buf){
+    // A parser bug must never take the whole result down with it.
+    try{ return parseHeader(buf); }
+    catch(e){ return {format:"unknown",width:0,height:0,mode:"unknown"}; }
+  }
+
   function handle(file){
-    var reader=new FileReader();
-    reader.onload=function(){
-      var info=parseHeader(reader.result); info.bytes=file.size;
+    // Two-stage read. 64 KB covers most files, but a CMYK export from Photoshop
+    // carries a CMYK ICC profile of a megabyte or more, which pushes the frame
+    // header past that window. Missing it there would silently downgrade the
+    // hard CMYK rejection to a vague warning, on exactly the files this tool
+    // exists to catch, so widen the read and parse again.
+    var LOOK = 64*1024, WIDE = 8*1024*1024;
+    var finish=function(info){
+      info.bytes=file.size;
       var url=URL.createObjectURL(file), img=new Image();
       img.onload=function(){ if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight} render(info,url) };
       img.onerror=function(){ render(info,url) };
       img.src=url;
     };
-    reader.readAsArrayBuffer(file.slice(0,64*1024));
+    var read=function(bytes,cb){
+      var r=new FileReader();
+      r.onload=function(){cb(safeParse(r.result))};
+      r.onerror=function(){cb({format:"unknown",width:0,height:0,mode:"unknown"})};
+      r.readAsArrayBuffer(file.slice(0,bytes));
+    };
+    read(LOOK,function(info){
+      var incomplete = info.format==="JPEG" && (!info.width || info.mode==="unknown");
+      if(incomplete && file.size>LOOK) read(Math.min(file.size,WIDE),finish);
+      else finish(info);
+    });
   }
 
   function render(info,url){
@@ -267,10 +299,14 @@
         checks.push(["resolution","warn",small+"px clears the common 1400 floor, but "+HIGHEST_FLOOR_WHO+" requires "+HIGHEST_FLOOR+"px. Export at 3000"]);
       } else if(small<3000){
         checks.push(["resolution","warn",small+"px is accepted, but 3000px is what every platform recommends"]);
-      } else if(large>DIST_MAX){
-        checks.push(["resolution","warn",large+"px is over the "+DIST_MAX+"px ceiling "+DIST_MAX_WHO+" enforce, they reject art this large. Keep this as your master and deliver a "+DIST_MAX+"px copy"]);
       } else {
         checks.push(["resolution","pass",w+" x "+h]);
+      }
+      // Checked independently of the floor chain above: a 2000x4000 image is
+      // both under the recommendation and over the ceiling, and needs to hear
+      // about both.
+      if(large>DIST_MAX){
+        checks.push(["oversize","warn",large+"px is over the "+DIST_MAX+"px ceiling "+DIST_MAX_WHO+" enforce, they reject art this large. Keep this as your master and deliver a "+DIST_MAX+"px copy"]);
       }
     }
     // colour
