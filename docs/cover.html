@@ -103,6 +103,7 @@
   .plat{border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:var(--surface-2)}
   .plat .n{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600}
   .plat .s{color:var(--muted);font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .srcnote{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0;padding:0 15px 16px}
   .tick{width:9px;height:9px;border-radius:50%;flex:none}
 
   footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
@@ -154,6 +155,11 @@
     <div class="card platforms">
       <h4>Platform readiness</h4>
       <div class="pgrid" id="platforms"></div>
+      <p class="srcnote">There is no single size that satisfies everyone. Apple's artist page asks for
+        4000px while CD Baby and TuneCore reject anything over 3000px, so the practical answer is to
+        master at 4000 and deliver a 3000px square JPEG in sRGB, under 10 MB. Beatport also rejects
+        art tagged above 72 DPI. Specs were checked against platform documentation in August 2026 and
+        do drift, so confirm against your own distributor before release.</p>
     </div>
   </section>
 
@@ -166,14 +172,21 @@
 
 <script>
 (function(){
+  // Checked against platform documentation, August 2026. Specs drift and the
+  // platforms do not agree with each other, so `note` carries the caveat that a
+  // single number cannot express.
   var PLATFORMS=[
-    {name:"Bandcamp",min:1400,rec:3000},
-    {name:"Spotify",min:640,rec:3000},
-    {name:"Apple Music",min:3000,rec:3000},
-    {name:"Beatport",min:1400,rec:1400},
-    {name:"SoundCloud",min:800,rec:3000},
-    {name:"Instagram",min:1080,rec:1080}
+    {name:"Bandcamp",min:1400,rec:3000,note:"1400 floor, feed it 3000"},
+    {name:"Spotify",min:640,rec:3000,note:"accepts 640 to 10000, wants the highest you have"},
+    {name:"Apple Music",min:1400,rec:3000,note:"delivery spec: 1400 min, 3000 recommended"},
+    {name:"Beatport",min:0,rec:3000,note:"no published minimum, prefers 3000"},
+    {name:"SoundCloud",min:800,rec:3000,note:"800 floor, 3000 recommended"},
+    {name:"Instagram",min:1080,rec:1080,note:"downscales anything wider than 1080"}
   ];
+  // Distributors that refuse art LARGER than this. Being too big is a real
+  // rejection, not just wasted bytes, and most checkers miss it.
+  var DIST_MAX=3000, DIST_MAX_WHO="CD Baby and TuneCore";
+  var HIGHEST_FLOOR=1600, HIGHEST_FLOOR_WHO="TuneCore";
   var sev={pass:0,warn:1,fail:2};
   var $=function(id){return document.getElementById(id)};
   var drop=$("drop"), fileIn=$("file");
@@ -237,17 +250,25 @@
     var checks=[];
 
     // format
-    if(info.format==="JPEG"||info.format==="PNG") checks.push(["format","pass",info.format]);
-    else checks.push(["format","fail",(info.format==="unknown"?"Unrecognised file":info.format)+" is not accepted — export a JPG or PNG"]);
+    if(info.format==="JPEG") checks.push(["format","pass","JPEG, the one format every distributor documents"]);
+    else if(info.format==="PNG") checks.push(["format","warn","PNG is accepted by most, but DistroKid documents JPG only. Export a JPEG to be safe"]);
+    else checks.push(["format","fail",(info.format==="unknown"?"Unrecognised file":info.format)+" is not accepted — export a JPEG"]);
     // square
     if(w&&h){ if(w===h) checks.push(["square","pass",w+" x "+h]);
       else checks.push(["square","fail",w+" x "+h+" is not square — crop it to 1:1"]); }
     // resolution
     if(small){
-      if(small<1400) checks.push(["resolution","fail",small+"px is below the 1400px minimum most stores enforce"]);
-      else if(small<3000) checks.push(["resolution","warn",small+"px works, but 3000px is the safe target"]);
-      else if(large>6000) checks.push(["resolution","warn",large+"px is very large — some uploaders reject oversized art"]);
-      else checks.push(["resolution","pass",w+" x "+h]);
+      if(small<1400){
+        checks.push(["resolution","fail",small+"px is below the 1400px floor most distributors enforce"]);
+      } else if(small<HIGHEST_FLOOR){
+        checks.push(["resolution","warn",small+"px clears the common 1400 floor, but "+HIGHEST_FLOOR_WHO+" requires "+HIGHEST_FLOOR+"px. Export at 3000"]);
+      } else if(small<3000){
+        checks.push(["resolution","warn",small+"px is accepted, but 3000px is what every platform recommends"]);
+      } else if(large>DIST_MAX){
+        checks.push(["resolution","warn",large+"px is over the "+DIST_MAX+"px ceiling "+DIST_MAX_WHO+" enforce, they reject art this large. Keep this as your master and deliver a "+DIST_MAX+"px copy"]);
+      } else {
+        checks.push(["resolution","pass",w+" x "+h]);
+      }
     }
     // colour
     var m=info.mode;
@@ -258,7 +279,7 @@
     else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG — re-export as RGB"]);
     else checks.push(["colour","warn","Colour mode unread — make sure it is RGB / sRGB"]);
     // filesize
-    if(info.bytes>20*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is large — some platforms cap uploads around 10-20 MB"]);
+    if(info.bytes>10*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is over the 10 MB ceiling TuneCore and Ditto enforce. Aim for 5 to 8 MB"]);
     else checks.push(["filesize","pass",fmtBytes(info.bytes)]);
 
     // specs
@@ -296,9 +317,10 @@
     PLATFORMS.forEach(function(p){
       var st,label;
       if(!small||!isSquare){st="fail";label=!isSquare?"needs 1:1 square":"unknown size";}
-      else if(small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
+      else if(p.min&&small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
+      else if(p.name==="Instagram"&&small>p.rec){st="pass";label="downscaled to "+p.rec+"px on upload";}
       else if(small<p.rec){st="warn";label=small+"px ok · "+p.rec+" ideal";}
-      else{st="pass";label=small+"px — clears "+p.min+"px";}
+      else{st="pass";label=p.note;}
       var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[st];
       var el=document.createElement("div"); el.className="plat";
       el.innerHTML="<div class='n'>"+p.name+"<span class='tick' style='background:"+col2+"'></span></div>"+
