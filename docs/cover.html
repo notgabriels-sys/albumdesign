@@ -299,7 +299,11 @@
     // format
     if(info.format==="JPEG") checks.push(["format","pass","JPEG, the one format every distributor documents"]);
     else if(info.format==="PNG") checks.push(["format","warn","PNG is accepted by most, but DistroKid documents JPG only. Export a JPEG to be safe"]);
-    else checks.push(["format","fail",(info.format==="unknown"?"Unrecognised file":info.format)+" is not accepted — export a JPEG"]);
+    // TIFF and GIF are not universally rejected: Spotify's provider spec lists
+    // TIFF, and Bandcamp, CD Baby and TuneCore all document GIF. Warn rather
+    // than fail, since "not accepted" would be wrong for those platforms.
+    else if(info.format==="unknown") checks.push(["format","fail","Unrecognised file — export a JPEG"]);
+    else checks.push(["format","warn",info.format+" is accepted by some stores but not all. Export a JPEG, which every distributor documents"]);
     // square
     if(w&&h){ if(w===h) checks.push(["square","pass",w+" x "+h]);
       else checks.push(["square","fail",w+" x "+h+" is not square — crop it to 1:1"]); }
@@ -310,7 +314,7 @@
       } else if(small<HIGHEST_FLOOR){
         checks.push(["resolution","warn",small+"px clears the common 1400 floor, but "+HIGHEST_FLOOR_WHO+" requires "+HIGHEST_FLOOR+"px. Export at 3000"]);
       } else if(small<3000){
-        checks.push(["resolution","warn",small+"px is accepted, but 3000px is what every platform recommends"]);
+        checks.push(["resolution","warn",small+"px is accepted, but 3000px is what most distributors recommend and what Spotify, Apple and Beatport ask for"]);
       } else {
         checks.push(["resolution","pass",w+" x "+h]);
       }
