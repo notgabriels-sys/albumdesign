@@ -122,6 +122,15 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   const appleRow = m.rows.find(t => /Apple/.test(t));
   ok(/never boosted|as-is/.test(appleRow), `Apple row respects attenuate-only -> "${appleRow}"`);
 
+  // A -23 LUFS master is 9 LU below YouTube's -14 reference. YouTube turns loud
+  // content down and never raises quiet content, so it must not claim a lift.
+  const ytRow = m.rows.find(t => /YouTube/.test(t));
+  ok(!/turned up/.test(ytRow), `YouTube does not claim to boost a quiet master -> "${ytRow}"`);
+  ok(/never boosted|as-is/.test(ytRow), `YouTube row is attenuate-only -> "${ytRow}"`);
+  // Tidal's boost behaviour is disputed, so it must not assert one either.
+  const tidalRow = m.rows.find(t => /Tidal/.test(t));
+  ok(!/turned up/.test(tidalRow), `Tidal does not assert a boost -> "${tidalRow}"`);
+
   // ---- audio edge cases: must not leak Infinity or hang ----
   console.log('\n=== loudness edge cases ===');
   for (const [f, want] of [['silence.wav', /nothing to measure/], ['tiny_200ms.wav', /Too short/]]) {
