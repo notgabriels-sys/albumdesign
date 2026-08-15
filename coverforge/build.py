@@ -66,6 +66,9 @@ class BuildResult:
     skipped: list[tuple[Target, str]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     source_sha256: str | None = None
+    # What a build would write. Populated even on a dry run, which otherwise
+    # had nothing to report despite --dry-run promising to report it.
+    planned: list[Target] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -107,6 +110,36 @@ def portable_manifest_payload(result: BuildResult) -> dict[str, object]:
     return payload
 
 
+def plan(
+    src: SourceImage,
+    targets: list[Target],
+    findings: list[Finding],
+    allow_upscale: bool = False,
+) -> tuple[list[Target], list[tuple[Target, str]]]:
+    """Split targets into what a build would render and what it would skip.
+
+    Both `build` and the `check` report call this, so the two can never
+    disagree about whether a target is reachable. They used to decide
+    separately, and `check` counted upscale-skipped targets as clear while
+    `build` skipped them.
+    """
+    blocking = {f.target for f in findings if f.level == ERROR and f.target}
+    renderable: list[Target] = []
+    skipped: list[tuple[Target, str]] = []
+    for target in targets:
+        if target.key in blocking:
+            reason = next(
+                f.message for f in findings if f.target == target.key and f.level == ERROR
+            )
+            skipped.append((target, reason))
+            continue
+        if not allow_upscale and cover_scale(src, target) > 1.0001:
+            skipped.append((target, "would upscale the master; pass --allow-upscale to force"))
+            continue
+        renderable.append(target)
+    return renderable, skipped
+
+
 def output_name(slug: str, target: Target) -> str:
     return f"{slug}--{target.key}--{target.dimensions}.{target.extension}"
 
@@ -127,19 +160,9 @@ def build(
     findings = check(src, targets, flatten_colour, allow_upscale)
     result = BuildResult(source=src, slug=slug, out_dir=out_dir, findings=findings)
 
-    blocking = {f.target for f in findings if f.level == ERROR and f.target}
-    renderable: list[Target] = []
-    for target in targets:
-        if target.key in blocking:
-            reason = next(
-                f.message for f in findings if f.target == target.key and f.level == ERROR
-            )
-            result.skipped.append((target, reason))
-            continue
-        if not allow_upscale and cover_scale(src, target) > 1.0001:
-            result.skipped.append((target, "would upscale the master; pass --allow-upscale to force"))
-            continue
-        renderable.append(target)
+    renderable, skipped = plan(src, targets, findings, allow_upscale)
+    result.skipped.extend(skipped)
+    result.planned = list(renderable)
 
     if not renderable or dry_run:
         return result
