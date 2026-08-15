@@ -255,7 +255,7 @@ def _positive_int(value: object, label: str) -> None:
 def _reject_output_inside_source_dirs(output_path: Path, sources: tuple[SourceImage, ...]) -> None:
     for source in sources:
         try:
-            output_path.relative_to(source.path.parent.resolve())
+            output_path.relative_to(source.path.resolve().parent)
         except ValueError:
             continue
         raise ContactSheetError(

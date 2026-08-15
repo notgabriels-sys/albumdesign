@@ -19,8 +19,8 @@ and html escaping; no new dependency, server, account, upload, or subprocess.
   primary checkout.
 - Create exactly two files in a fresh output directory: `CONTACT_SHEET.jpg`
   and `CONTACT_SHEET.html`.
-- Reject outputs inside every selected image parent; do this before output
-  creation.
+- Reject outputs inside every selected image's resolved parent; do this before
+  output creation.
 - The offline HTML may retain source filenames for review, but never an
   absolute source path. Escape all source-derived text.
 - Compose the sheet in memory before output creation. A failed input must not

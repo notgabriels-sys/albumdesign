@@ -43,9 +43,10 @@ or records an approval decision. It creates a derivative contact-sheet JPEG
 and offline HTML index only.
 
 The output directory must not exist and must be outside every selected image's
-parent directory. This prevents an output sheet from being written into a
-variant folder and accidentally becoming a later input. The command completes
-all input inspection and in-memory composition before it creates the output
+resolved parent directory. This prevents an output sheet from being written
+into a variant folder (including when the selected image was reached through a
+symlink) and accidentally becoming a later input. The command completes all
+input inspection and in-memory composition before it creates the output
 directory, so an unreadable image does not leave a partial review packet.
 
 The HTML index contains only filenames, image dimensions, and the fixed
@@ -80,8 +81,9 @@ leakage, and hostile filename escaping in the HTML index.
    review files in a new outside-output directory.
 2. The sheet has a deterministic grid geometry, while the HTML index maps each
    ordinal to its selected filename and dimensions without absolute paths.
-3. An output inside any selected source directory is rejected before any
-   directory or file is written.
+3. An output inside any selected source directory, including the resolved
+   directory of a symlinked source, is rejected before any directory or file
+   is written.
 4. `--dry-run` writes nothing, malformed images fail cleanly, and unsafe
    layout values are rejected.
 5. The HTML index safely escapes a hostile filename instead of treating it as

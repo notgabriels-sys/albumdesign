@@ -48,6 +48,20 @@ def test_contact_sheet_refuses_output_inside_a_selected_image_directory(art_fact
     assert not output.exists()
 
 
+def test_contact_sheet_refuses_output_inside_the_resolved_source_directory(art_factory, tmp_path):
+    real_source = art_factory("variant", size=(3000, 3000))
+    links = tmp_path / "links"
+    links.mkdir()
+    linked_source = links / "variant-link.png"
+    linked_source.symlink_to(real_source)
+    output = real_source.parent / "review"
+
+    with pytest.raises(ContactSheetError, match="outside selected image directories"):
+        plan_contact_sheet([inspect(linked_source)], output)
+
+    assert not output.exists()
+
+
 def test_contact_sheet_plan_validates_layout_without_writing(art_factory, tmp_path):
     sources = [
         inspect(art_factory("variant-one", size=(3000, 3000))),
