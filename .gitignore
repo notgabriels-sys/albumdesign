@@ -10,3 +10,6 @@ tools/fixtures/
 tools/node_modules/
 node_modules/
 uv.lock
+
+# Personal handoff/planning docs must never land in this public repo.
+chatgpt-handoff-*.md
