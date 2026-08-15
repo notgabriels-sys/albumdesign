@@ -154,3 +154,16 @@ replaces the built-in set entirely.
 uv pip install -e '.[dev]'
 python -m pytest tests -q
 ```
+
+The browser tools in `docs/` have their own checks. They need Playwright and
+the image fixtures, which are generated rather than committed:
+
+```bash
+npm install playwright
+python tools/make_fixtures.py     # writes tools/fixtures/
+node tools/browser_test.js        # functional: parsing, loudness, checklist
+node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
+```
+
+`verify_lufs.py` and `verify_truepeak.py` check the loudness maths against
+the EBU Tech 3341 test signals independently of the browser.
