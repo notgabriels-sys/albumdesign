@@ -208,3 +208,16 @@ node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
 
 `verify_lufs.py` and `verify_truepeak.py` check the loudness maths against
 the EBU Tech 3341 test signals independently of the browser.
+
+Two more run in CI and need nothing installed:
+
+```bash
+python tools/consistency_check.py       # cross-page invariants
+python tools/sync_artifacts.py --check  # are the published copies stale?
+```
+
+`consistency_check.py` asserts the things that have actually gone wrong: the
+rate table agreeing across every page that quotes it, no unverified payment
+link reaching a page, the cover tool and the checklist not contradicting each
+other, and no page making a network call, which is what "nothing is uploaded"
+means. Each check is there because that exact thing broke once.

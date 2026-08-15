@@ -27,6 +27,14 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -e '.[dev]'
       - run: python -m pytest tests -q
+      # Cross-page invariants: prices agreeing, no unverified payment link, the
+      # tools not contradicting each other, no page making a network call.
+      # Every check here corresponds to something that actually broke once.
+      - name: docs consistency
+        run: python tools/consistency_check.py
+      # The published artifact copies are derived, never hand-edited.
+      - name: artifact copies derive cleanly
+        run: python tools/sync_artifacts.py --out "$RUNNER_TEMP/artifacts"
 
   maths:
     name: loudness maths vs EBU Tech 3341
