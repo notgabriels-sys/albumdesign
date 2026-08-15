@@ -75,11 +75,25 @@ which made them useless as gates. Keep them asserting.
 - **Check `main` before building anything.** A whole CLI was once rebuilt from
   scratch when a better version was already merged.
 
+## The site is live
+
+https://notgabriels-sys.github.io/albumdesign/ serves `docs/` from `main`.
+Gabriel switched Pages on himself, because he had to: an Actions token is
+refused with "Resource not accessible by integration" when it tries to *create*
+a Pages site, and the Pages REST path is blocked by this environment's proxy.
+Deploying to the existing site is fine, so pushes to `main` publish normally.
+
+`*.github.io` is also blocked by the egress proxy, so the served page cannot be
+fetched from here. To check a deploy, read the `pages build and deployment` run
+and the `github-pages` deployment sha instead, and render `docs/` locally with
+Playwright to check appearance.
+
 ## Open, needs Gabriel
 
-- GitHub Pages is not switched on. Settings → Pages → `main` → `/docs`.
-  The token cannot do this; it fails with "Resource not accessible by
-  integration".
-- The Stripe link in `docs/shop.html` cannot be read from here (proxy blocks
-  it), so the shop deliberately names no amount and defers to the Stripe page.
-  Confirm what it charges before advertising a figure.
+- The Stripe link in `docs/shop.html` cannot be read from here (`buy.stripe.com`
+  is refused by the egress gateway with a 403 on CONNECT), so the shop
+  deliberately names no amount and defers to the Stripe page. Confirm what it
+  charges before advertising a figure.
+- GVL catalogue table and the Förderantrag both have blanks only he can fill:
+  real release dates, ISRCs, which tracks were actually released, real bio
+  facts and real costs. Do not guess any of them.
