@@ -41,6 +41,35 @@ coverforge build path/to/master.png --name my-release -o build/my-release --dry-
 The image argument can also be a directory. Use `--only` or `--group` to limit
 the selected targets.
 
+## Review a batch of variants
+
+Turn a directory of cover variants into one offline review packet before
+choosing which master to export:
+
+```bash
+coverforge contact-sheet /path/to/cover-variants \
+  --title "FT011 visual review" \
+  --columns 4 \
+  -o /path/to/review-packets/ft011
+```
+
+It writes exactly two files in a **new output directory outside every selected
+image directory**:
+
+- `CONTACT_SHEET.jpg`: numbered, letterboxed preview grid;
+- `CONTACT_SHEET.html`: an offline review index that maps the numbers to
+  filenames, dimensions, and image modes.
+
+Use `--dry-run` to validate the same images, layout, size guard, and output
+location without creating files. `--cell-size`, `--columns`, and
+`--background #rrggbb` tune the presentation; `--json` prints the owner-local
+planned or written paths for scripts.
+
+The review packet contains a derivative sheet and source filenames to make
+discussion practical. It does not upload or alter source art, copy originals,
+record approval, determine rights, or establish delivery or platform
+acceptance.
+
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one
