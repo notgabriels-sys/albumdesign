@@ -90,10 +90,25 @@ Playwright to check appearance.
 
 ## Open, needs Gabriel
 
-- The Stripe link in `docs/shop.html` cannot be read from here (`buy.stripe.com`
-  is refused by the egress gateway with a 403 on CONNECT), so the shop
-  deliberately names no amount and defers to the Stripe page. Confirm what it
-  charges before advertising a figure.
+- **There is no payment button on the shop, on purpose. Do not add one back
+  from memory.** The link that used to be there was read through the Stripe MCP
+  and turned out to be a €1,200 "Speech Audio QC — Full Audit (50% deposit)",
+  `tax_behavior: exclusive`, with another €1,200 invoiced on delivery. It sat on
+  the mixing and mastering page labelled "Pay €25 deposit". Wrong service, wrong
+  amount, and a tax treatment that contradicted the Kleinunternehmer line right
+  above it.
+
+  The URL on the page was the test link's slug with `test_` deleted, so it
+  either charged that audit or resolved to nothing. Booking starts by email and
+  the invoice follows, which is what the copy always said anyway.
+
+  Before any card button goes back: get a **live-mode** payment link for mixing
+  and mastering and **read it** with the Stripe MCP (`GetPaymentLinks`, then
+  `GetPaymentLinksPaymentLinkLineItems` for `unit_amount` and `tax_behavior`).
+  `buy.stripe.com` is blocked by the egress gateway, so a browser cannot check
+  it and neither can curl. Reading the API object is the only verification that
+  works. Do not accept a remembered figure as confirmation, including his: that
+  is how this one survived two rounds of review.
 - GVL catalogue table and the Förderantrag both have blanks only he can fill:
   real release dates, ISRCs, which tracks were actually released, real bio
   facts and real costs. Do not guess any of them.
