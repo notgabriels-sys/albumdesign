@@ -3,6 +3,14 @@
 Preflight your release artwork, then export the whole per-platform delivery pack
 in one command.
 
+**Free browser tools, nothing to install:**
+[cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
+[LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
+[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html)
+
+They run entirely in your browser. Nothing is uploaded, so unreleased masters
+stay on your machine.
+
 You finish a cover, and then comes the boring half: 3000×3000 for the
 distributor, 1400×1400 for Beatport, something under 2 MB for SoundCloud, a 9:16
 crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG
