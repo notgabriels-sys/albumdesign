@@ -6,10 +6,23 @@ tool, so running this checks the numbers the tool actually reports.
 Reference: a stereo 1 kHz sine at -23.0 dBFS must read -23.0 LUFS (+/- 0.1).
     https://tech.ebu.ch/docs/tech/tech3341.pdf
 
+Exits non-zero if any measurement falls outside tolerance, so this is
+usable as a CI gate and not just a report.
+
 Run:  python tools/verify_lufs.py
 """
 
 import math
+import sys
+
+FAILURES = []
+
+def check(label, got, expect, tol):
+    ok = abs(got - expect) <= tol
+    print(f"{label:34s} -> measured {got:7.2f} LUFS  (expect {expect:6.1f} +/-{tol})  "
+          + ("ok" if ok else "FAIL"))
+    if not ok:
+        FAILURES.append(f"{label}: {got:.2f} vs {expect:.1f} (tol {tol})")
 
 # EXACT port of the coefficients + logic used in docs/loudness.html
 def biquad(x,b0,b1,b2,a1,a2):
@@ -53,7 +66,8 @@ for target in (-23.0, -33.0):
     sine=[amp*math.sin(2*math.pi*1000*i/rate) for i in range(n)]
     chans=[kweight(sine), kweight(list(sine))]
     I=integrated(blocks(chans,rate,0.4,0.1))
-    print(f"stereo 1kHz sine @ {target:6.1f} dBFS  ->  measured {I:7.2f} LUFS   (expect {target:6.1f})   delta {I-target:+.2f}")
+    # Tech 3341 allows +/-0.1 LU on this signal.
+    check(f"stereo 1kHz sine @ {target:6.1f} dBFS", I, target, 0.1)
 
 # Gating test: loud -23 dBFS tone with long silence around it.
 # The absolute (-70 LUFS) and relative (-10 LU) gates must exclude the silence,
@@ -63,11 +77,19 @@ seg=lambda secs,a: [a*math.sin(2*math.pi*1000*i/rate) for i in range(int(rate*se
 sig = seg(5,0.0) + seg(10,amp) + seg(5,0.0)
 chans=[kweight(sig), kweight(list(sig))]
 I=integrated(blocks(chans,rate,0.4,0.1))
-print(f"tone with silence around it       ->  measured {I:7.2f} LUFS   (expect ~-23.0, gates must drop silence)")
+# Block edges straddling the silence pull this slightly low, hence 0.3.
+check("tone with silence around it", I, -23.0, 0.3)
 
 # Quiet-but-not-silent passage: -23 tone + a -50 dBFS passage.
 # Relative gate should exclude the quiet part.
 sig2 = seg(10,amp) + seg(10,10**(-50.0/20.0))
 chans2=[kweight(sig2), kweight(list(sig2))]
 I2=integrated(blocks(chans2,rate,0.4,0.1))
-print(f"tone + quiet -50 dBFS passage     ->  measured {I2:7.2f} LUFS   (expect ~-23.0, relative gate drops quiet)")
+check("tone + quiet -50 dBFS passage", I2, -23.0, 0.3)
+
+if FAILURES:
+    print("\n" + str(len(FAILURES)) + " measurement(s) out of tolerance:")
+    for f in FAILURES:
+        print("  " + f)
+    sys.exit(1)
+print("\nall LUFS measurements within tolerance")
