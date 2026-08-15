@@ -145,19 +145,31 @@ def inspect(path: Path) -> SourceImage:
         raise ImageError(f"file not found: {path}") from None
     except UnidentifiedImageError:
         raise ImageError(f"not a readable image: {path}") from None
+    except Image.DecompressionBombError:
+        # A header can claim a pixel count far beyond what it could hold.
+        # Pillow refuses, and that refusal is an answer about the file, not a
+        # crash, so it exits like any other unreadable master.
+        raise ImageError(f"image header declares an implausible size: {path}") from None
     except OSError as exc:
         raise ImageError(f"could not read {path}: {exc}") from None
 
 
-def normalise(path: Path, flatten_colour: str = "#ffffff") -> Image.Image:
+def normalise(
+    path: Path, flatten_colour: str = "#ffffff", *, data: bytes | None = None
+) -> Image.Image:
     """Open a master and return a flat 8-bit sRGB RGB image.
 
     Handles EXIF rotation, ICC conversion, CMYK, and alpha flattening, which
     are the four things that quietly change how art looks between your screen
     and a store page.
+
+    Pass ``data`` to decode bytes already read from ``path``. The manifest
+    hashes the master, and hashing one read while decoding a second would let
+    the recorded digest describe bytes that were never rendered.
     """
+    source = io.BytesIO(data) if data is not None else path
     try:
-        with Image.open(path) as opened:
+        with Image.open(source) as opened:
             im = opened.convert("RGBA") if opened.mode in ALPHA_MODES else opened.copy()
             icc = opened.info.get("icc_profile")
     except UnidentifiedImageError:

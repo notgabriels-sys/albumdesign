@@ -23,14 +23,6 @@ _MANIFEST_BOUNDARY = (
 )
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(64 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def manifest_capture_id(payload: Mapping[str, object]) -> str:
     canonical = {key: value for key, value in payload.items() if key != "capture_id"}
     encoded = json.dumps(
@@ -152,10 +144,17 @@ def build(
     if not renderable or dry_run:
         return result
 
-    result.source_sha256 = _sha256_file(src.path)
+    # Read the master once, then hash and decode the same bytes. Hashing a
+    # separate read would let source.sha256 describe a file that was never
+    # rendered if the master changed underneath us mid-build.
+    try:
+        raw = src.path.read_bytes()
+    except OSError as exc:
+        raise imageops.ImageError(f"could not read {src.path}: {exc}") from None
+    result.source_sha256 = hashlib.sha256(raw).hexdigest()
 
     # Decode and colour-manage once, then resize per target.
-    normalised = imageops.normalise(src.path, flatten_colour)
+    normalised = imageops.normalise(src.path, flatten_colour, data=raw)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for target in renderable:
