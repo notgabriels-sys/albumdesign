@@ -175,6 +175,71 @@ def test_cli_build_batch_of_variants_gets_one_folder_each(tmp_path, art_factory,
     assert (out / "cover-v0" / "cover-v0--bandcamp--3000x3000.jpg").exists()
 
 
+def test_cli_contact_sheet_writes_an_offline_variant_review(tmp_path, art_factory, capsys):
+    variants = tmp_path / "variants"
+    variants.mkdir()
+    for index in range(3):
+        Image.open(art_factory(size=(3000, 3000))).save(variants / f"cover-v{index}.png")
+
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+    code = main(
+        [
+            "contact-sheet",
+            str(variants),
+            "-o",
+            str(output),
+            "--title",
+            "Lack of Fate review",
+            "--columns",
+            "2",
+            "--cell-size",
+            "120",
+        ]
+    )
+
+    assert code == 0
+    assert sorted(path.name for path in output.iterdir()) == [
+        "CONTACT_SHEET.html",
+        "CONTACT_SHEET.jpg",
+    ]
+    assert "Wrote offline contact-sheet review" in capsys.readouterr().out
+
+
+def test_cli_contact_sheet_dry_run_validates_without_creating_output(art_factory, tmp_path, capsys):
+    source = art_factory(size=(3000, 3000))
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+
+    code = main(
+        [
+            "contact-sheet",
+            str(source),
+            "-o",
+            str(output),
+            "--dry-run",
+            "--columns",
+            "2",
+            "--cell-size",
+            "120",
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["dry_run"] is True
+    assert payload["contact_sheet"]["dimensions"] == "324x304"
+    assert not output.exists()
+
+
+def test_cli_contact_sheet_rejects_nonpositive_column_count(art_factory, tmp_path, capsys):
+    source = art_factory(size=(3000, 3000))
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+
+    assert main(["contact-sheet", str(source), "-o", str(output), "--columns", "0"]) == 2
+    assert "columns must be a positive integer" in capsys.readouterr().err
+    assert not output.exists()
+
+
 def test_cli_build_rejects_name_with_multiple_masters(tmp_path, art_factory, capsys):
     a, b = art_factory(), art_factory()
     code = main(["build", str(a), str(b), "-o", str(tmp_path / "o"), "--name", "one"])

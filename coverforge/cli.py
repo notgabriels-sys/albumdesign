@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import report
 from .build import build, summarise
+from .contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
 from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
 from .preflight import ERROR, WARN, check, worst_level
 from .specs import SpecError, TargetSet, load_targets
@@ -187,6 +188,54 @@ def cmd_build(args) -> int:
     return EXIT_OK
 
 
+def cmd_contact_sheet(args) -> int:
+    """Create one offline contact-sheet review packet from selected artwork variants."""
+    masters = collect_masters(args.masters)
+    if not masters:
+        print("no images found", file=sys.stderr)
+        return EXIT_USAGE
+
+    sources: list[SourceImage] = []
+    failed_reads = 0
+    for path in masters:
+        try:
+            sources.append(inspect(path))
+        except ImageError as exc:
+            failed_reads += 1
+            print(f"{path}: {exc}", file=sys.stderr)
+    if failed_reads:
+        return EXIT_USAGE
+
+    title = args.title or "Coverforge contact sheet"
+    kwargs = {
+        "title": title,
+        "columns": args.columns,
+        "cell_size": args.cell_size,
+        "background": args.background,
+    }
+    try:
+        result = (
+            plan_contact_sheet(sources, Path(args.out), **kwargs)
+            if args.dry_run
+            else write_contact_sheet(sources, Path(args.out), **kwargs)
+        )
+    except ContactSheetError as exc:
+        print(f"contact-sheet error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps({"dry_run": args.dry_run, "contact_sheet": result.as_dict()}, indent=2))
+    elif args.dry_run:
+        print(
+            f"Planned offline contact-sheet review: {result.source_count} variants "
+            f"at {result.dimensions}"
+        )
+    else:
+        print(f"Wrote offline contact-sheet review: {result.output_dir}")
+        print(f"  {result.source_count} variants · {result.dimensions} · {result.columns} columns")
+    return EXIT_OK
+
+
 def _add_target_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--only", help="comma-separated target keys, e.g. spotify,bandcamp")
     parser.add_argument("--group", help="comma-separated groups, e.g. dsp,social")
@@ -225,6 +274,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--json", action="store_true")
     _add_target_flags(p_build)
     p_build.set_defaults(func=cmd_build)
+
+    p_contact_sheet = sub.add_parser(
+        "contact-sheet", help="write an offline visual-review packet for artwork variants"
+    )
+    p_contact_sheet.add_argument("masters", nargs="+", help="image files or directories of images")
+    p_contact_sheet.add_argument("-o", "--out", required=True, help="new output directory outside images")
+    p_contact_sheet.add_argument("--title", help="review title shown in the HTML index")
+    p_contact_sheet.add_argument("--columns", type=int, default=4, help="positive grid column count")
+    p_contact_sheet.add_argument(
+        "--cell-size", type=int, default=480, help="positive preview-cell size in pixels"
+    )
+    p_contact_sheet.add_argument("--background", default="#101116", help="preview background #rrggbb")
+    p_contact_sheet.add_argument("--dry-run", action="store_true", help="validate and plan without writing")
+    p_contact_sheet.add_argument("--json", action="store_true")
+    p_contact_sheet.set_defaults(func=cmd_contact_sheet)
 
     return parser
 
