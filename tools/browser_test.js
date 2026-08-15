@@ -1,0 +1,128 @@
+// Real browser test of the published tools. Run:
+//   uv run --with pillow python tools/make_fixtures.py
+//   npm i playwright && node tools/browser_test.js
+// Real browser test of the published tools: load each page, catch console
+// errors, feed real files through the UI, and assert on what the user sees.
+const { chromium } = require('playwright');
+const path = require('path');
+
+const DOCS = path.join(__dirname, '..', 'docs');
+const FIX = path.join(__dirname, 'fixtures');
+let failures = 0;
+const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) failures++; };
+
+(async () => {
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+
+  for (const scheme of ['light', 'dark']) {
+    const ctx = await browser.newContext({ colorScheme: scheme, viewport: { width: 360, height: 740 } });
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+    page.on('pageerror', e => errs.push('pageerror: ' + e.message));
+
+    console.log(`\n=== ${scheme} theme, 360px wide ===`);
+    for (const f of ['index', 'cover', 'loudness', 'release', 'shop']) {
+      await page.goto('file://' + path.join(DOCS, f + '.html'));
+      await page.waitForTimeout(150);
+      // horizontal overflow check at phone width
+      const overflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+      ok(!overflow, `${f}.html no horizontal overflow at 360px`);
+      // body must paint an explicit background (artifact/theme requirement)
+      const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      ok(bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent', `${f}.html body has explicit background (${bg})`);
+    }
+    ok(errs.length === 0, `no console errors across pages${errs.length ? ' -> ' + errs.slice(0, 3).join(' | ') : ''}`);
+    await ctx.close();
+  }
+
+  // ---- functional: cover tool ----
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+
+  const runCover = async (file) => {
+    await page.goto('file://' + path.join(DOCS, 'cover.html'));
+    await page.setInputFiles('#file', path.join(FIX, file));
+    await page.waitForSelector('#results.show', { timeout: 8000 });
+    await page.waitForTimeout(250);
+    return page.evaluate(() => ({
+      verdict: document.getElementById('vtitle').textContent,
+      checks: [...document.querySelectorAll('#checks li')].map(li => ({
+        pill: li.querySelector('.pill').textContent.trim(),
+        name: li.querySelector('.name').textContent.trim(),
+        msg:  li.querySelector('.msg').textContent.trim(),
+      })),
+      platforms: [...document.querySelectorAll('.plat')].map(p => p.textContent.trim()),
+    }));
+  };
+  const check = (r, name) => r.checks.find(c => c.name.toLowerCase() === name);
+
+  console.log('\n=== cover tool, real files ===');
+  let r = await runCover('good_3000.jpg');
+  ok(check(r, 'resolution').pill === 'PASS', `3000px JPEG -> resolution PASS (${check(r,'resolution').pill})`);
+  ok(check(r, 'format').pill === 'PASS', `3000px JPEG -> format PASS`);
+  ok(r.verdict === 'Ready to ship', `3000px JPEG -> verdict "${r.verdict}"`);
+
+  r = await runCover('over_4000.jpg');
+  ok(check(r, 'resolution').pill === 'WARN', `4000px -> resolution WARN (the ceiling bug we fixed)`);
+  ok(/3000px ceiling/.test(check(r, 'resolution').msg), `4000px -> message names the 3000 ceiling`);
+
+  r = await runCover('cmyk_3000.jpg');
+  ok(check(r, 'colour').pill === 'FAIL', `CMYK -> colour FAIL (${check(r,'colour').pill}: ${check(r,'colour').msg})`);
+
+  r = await runCover('nonsquare.jpg');
+  ok(check(r, 'square').pill === 'FAIL', `1200x1600 -> square FAIL`);
+  ok(r.verdict === 'Not ready to upload', `non-square -> verdict "${r.verdict}"`);
+
+  r = await runCover('alpha_3000.png');
+  ok(check(r, 'colour').pill === 'WARN', `RGBA PNG -> colour WARN (alpha)`);
+  ok(check(r, 'format').pill === 'WARN', `PNG -> format WARN (DistroKid documents JPG only)`);
+
+  // SoundCloud split: a 3000px file over 2MB must fail SC upload only
+  const scRow = r.platforms.find(t => /SoundCloud upload/.test(t));
+  ok(!!scRow, `SoundCloud upload row present -> "${scRow}"`);
+
+  // ---- functional: loudness tool with a known -23 dBFS sine ----
+  console.log('\n=== loudness tool, known -23.0 dBFS stereo sine ===');
+  await page.goto('file://' + path.join(DOCS, 'loudness.html'));
+  await page.setInputFiles('#file', path.join(FIX, 'sine_-23dBFS.wav'));
+  await page.waitForSelector('#results.show', { timeout: 60000 });
+  await page.waitForTimeout(400);
+  const m = await page.evaluate(() => {
+    const g = {};
+    document.querySelectorAll('.metric').forEach(el => {
+      g[el.querySelector('.k').textContent.trim()] = el.querySelector('.v').textContent.trim();
+    });
+    return { metrics: g, rows: [...document.querySelectorAll('#ptable tr')].map(t => t.textContent.replace(/\s+/g,' ').trim()) };
+  });
+  const lufs = parseFloat(m.metrics['Integrated']);
+  const tp = parseFloat(m.metrics['True peak']);
+  console.log('   measured in-browser:', JSON.stringify(m.metrics));
+  ok(Math.abs(lufs - (-23.0)) <= 0.3, `browser LUFS ${lufs} within 0.3 of -23.0`);
+  ok(tp <= -22 && tp >= -24, `browser true peak ${tp} dBTP near -23 (sine amplitude)`);
+  const appleRow = m.rows.find(t => /Apple/.test(t));
+  ok(/never boosted|as-is/.test(appleRow), `Apple row respects attenuate-only -> "${appleRow}"`);
+
+  // ---- functional: checklist persistence ----
+  console.log('\n=== release checklist ===');
+  await page.goto('file://' + path.join(DOCS, 'release.html'));
+  await page.click('li[data-id="s0i0"]');
+  let pct = await page.textContent('#pct');
+  ok(/^1 \//.test(pct), `ticking an item updates progress (${pct})`);
+  await page.reload();
+  await page.waitForTimeout(150);
+  pct = await page.textContent('#pct');
+  ok(/^1 \//.test(pct), `progress survives reload (${pct})`);
+  await page.click('#reset');
+  pct = await page.textContent('#pct');
+  ok(/^0 \//.test(pct), `reset clears progress (${pct})`);
+
+  ok(errs.length === 0, `no uncaught page errors during functional tests${errs.length ? ' -> ' + errs.join(' | ') : ''}`);
+
+  await browser.close();
+  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}`);
+  process.exit(failures ? 1 : 0);
+})();
