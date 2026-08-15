@@ -1,5 +1,7 @@
 import hashlib
+import io
 import json
+from pathlib import Path
 
 from PIL import Image
 import pytest
@@ -288,3 +290,82 @@ def test_srgb_profile_has_no_embedded_timestamp():
 
     assert SRGB_BYTES is not None
     assert SRGB_BYTES[24:36] == b"\x00" * 12
+
+
+def test_manifest_hashes_the_bytes_it_actually_rendered(master, tmp_path, monkeypatch):
+    """source.sha256 must describe the read that was decoded, not a second one.
+
+    Hashing the file and then reopening it left a window where the manifest
+    could certify a digest for bytes that were never rendered.
+    """
+    import coverforge.imageops as imageops_module
+
+    replacement = io.BytesIO()
+    Image.new("RGB", (3000, 3000), (0, 255, 0)).save(replacement, format="PNG")
+    original = imageops_module.normalise
+
+    def swap_then_decode(path, flatten_colour="#ffffff", *, data=None):
+        Path(path).write_bytes(replacement.getvalue())
+        return original(path, flatten_colour, data=data)
+
+    monkeypatch.setattr(imageops_module, "normalise", swap_then_decode)
+    targets = [t for t in ALL_TARGETS if t.key == "spotify"]
+    result = build(inspect(master), targets, out_dir=tmp_path / "d", slug="probe")
+
+    manifest = json.loads((tmp_path / "d" / "manifest.json").read_text())
+    # The file on disk is now the replacement, so a digest matching it would
+    # mean we hashed bytes we never rendered.
+    assert manifest["source"]["sha256"] != hashlib.sha256(master.read_bytes()).hexdigest()
+    assert manifest["source"]["sha256"] == result.source_sha256
+
+
+def test_masters_sharing_a_name_do_not_overwrite_each_others_packs(tmp_path, capsys):
+    """Two folders can hold a master with the same stem, and --name is refused
+    for multi-master runs, so the second build used to overwrite the first."""
+    first_dir = tmp_path / "a"
+    second_dir = tmp_path / "b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    Image.new("RGB", (3000, 3000), (200, 0, 0)).save(first_dir / "ft011.png")
+    Image.new("RGB", (3000, 3000), (0, 0, 200)).save(second_dir / "ft011.png")
+    out = tmp_path / "out"
+
+    code = main(
+        [
+            "build",
+            str(first_dir / "ft011.png"),
+            str(second_dir / "ft011.png"),
+            "-o",
+            str(out),
+            "--only",
+            "spotify",
+        ]
+    )
+    assert code == 0
+
+    packs = sorted(p.name for p in out.iterdir() if p.is_dir())
+    assert packs == ["ft011", "ft011-2"], packs
+    for pack in packs:
+        manifest = json.loads((out / pack / "manifest.json").read_text())
+        produced = {o["file"] for o in manifest["outputs"]}
+        on_disk = {p.name for p in (out / pack).glob("*.jpg")}
+        # Nothing in the pack that the manifest does not describe.
+        assert on_disk == produced, (pack, on_disk, produced)
+
+
+def test_an_implausible_image_header_is_an_error_not_a_crash(tmp_path):
+    import struct
+    import zlib
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+    header = struct.pack(">IIBBBBB", 20000, 20000, 8, 2, 0, 0, 0)
+    bomb = tmp_path / "bomb.png"
+    bomb.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(b"\x00" * 40))
+        + chunk(b"IEND", b"")
+    )
+    assert main(["check", str(bomb)]) == 2

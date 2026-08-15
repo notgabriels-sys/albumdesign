@@ -1,7 +1,14 @@
 from PIL import Image
 import pytest
 
-from coverforge.contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
+from pathlib import Path
+
+from coverforge.contactsheet import (
+    HTML_FILENAME,
+    ContactSheetError,
+    plan_contact_sheet,
+    write_contact_sheet,
+)
 from coverforge.imageops import inspect
 
 
@@ -98,3 +105,46 @@ def test_contact_sheet_escapes_hostile_variant_filenames_in_html(art_factory, tm
     html = (output / "CONTACT_SHEET.html").read_text(encoding="utf-8")
     assert hostile.name not in html
     assert "&lt;img src=x onerror=alert(1)&gt;.png" in html
+
+
+def test_output_is_refused_inside_a_folder_of_symlinked_sources(tmp_path):
+    """Curating variants as symlinks must not open a hole in the containment rule.
+
+    Resolving each source before taking its parent only ever tested the link
+    targets' directory, so a packet could be written straight into the folder
+    being reviewed.
+    """
+    real = tmp_path / "real"
+    picks = tmp_path / "picks"
+    real.mkdir()
+    picks.mkdir()
+    sources = []
+    for name in ("a", "b"):
+        Image.new("RGB", (400, 400), (90, 90, 90)).save(real / f"{name}.png")
+        (picks / f"{name}.png").symlink_to(real / f"{name}.png")
+        sources.append(inspect(picks / f"{name}.png"))
+
+    with pytest.raises(ContactSheetError):
+        write_contact_sheet(sources, picks / "review")
+
+    # A destination outside both folders still works.
+    assert write_contact_sheet(sources, tmp_path / "out").output_dir.exists()
+
+
+def test_a_failed_write_leaves_no_half_written_packet(tmp_path, monkeypatch):
+    """A truncated packet looks valid but reviews wrongly, so it must not survive."""
+    Image.new("RGB", (400, 400), (10, 10, 10)).save(tmp_path / "a.png")
+    source = inspect(tmp_path / "a.png")
+    out = tmp_path / "packet"
+
+    real_write_text = Path.write_text
+
+    def explode(self, *args, **kwargs):
+        if self.name == HTML_FILENAME:
+            raise OSError(28, "No space left on device")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", explode)
+    with pytest.raises(ContactSheetError):
+        write_contact_sheet([source], out)
+    assert not out.exists()

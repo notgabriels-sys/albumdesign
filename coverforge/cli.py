@@ -148,6 +148,7 @@ def cmd_build(args) -> int:
     colour = report.use_colour()
     results = []
     failed_reads = 0
+    used_slugs: dict[str, Path] = {}
 
     for path in masters:
         try:
@@ -158,7 +159,23 @@ def cmd_build(args) -> int:
             continue
 
         slug = slugify(args.name) if args.name else slugify(path.stem)
-        # One folder per master keeps batches of variants from colliding.
+        # One folder per master keeps batches of variants from colliding. Two
+        # masters in different folders can still share a stem, though, and
+        # --name is refused for multi-master runs, so suffix the later ones.
+        # Without this the second build silently overwrites the first pack's
+        # manifest, leaving files it says were never produced.
+        if len(masters) > 1:
+            if slug in used_slugs:
+                n = 2
+                while f"{slug}-{n}" in used_slugs:
+                    n += 1
+                print(
+                    f"note: {path} has the same name as {used_slugs[slug]}, "
+                    f"writing to {slug}-{n}/ so neither pack is overwritten",
+                    file=sys.stderr,
+                )
+                slug = f"{slug}-{n}"
+            used_slugs[slug] = path
         out_dir = out_root if len(masters) == 1 else out_root / slug
 
         result = build(
