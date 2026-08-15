@@ -1,19 +1,22 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
 <title>Studio Shop</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
-    --ink:#14161c; --muted:#5c6270; --faint:#878d9b; --accent:#5a46e0; --accent-2:#7d5cf0;
+    --ink:#14161c; --muted:#5c6270; --faint:#6a707f; --accent:#5a46e0; --accent-2:#7d5cf0;
     --shadow:0 1px 2px rgba(20,22,28,.05),0 10px 30px rgba(20,22,28,.07);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
-    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
     --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}}
   :root[data-theme="dark"]{
     --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
-    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
     --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}
   *{box-sizing:border-box} html,body{margin:0}
   body{background:var(--ground);color:var(--ink);
@@ -64,8 +67,21 @@
   footer a{color:var(--accent);text-decoration:none;font-weight:600}
   footer .proj{margin-left:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.05em;color:var(--faint)}
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+  .svc{overflow:visible}
+  .tscroll{overflow-x:auto;border-radius:16px}
+  .nav a{display:inline-block;padding:6px 4px}
+  :root{--on-accent:#fff}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--on-accent:#0b0c10}}
+  :root[data-theme="dark"]{--on-accent:#0b0c10}
+  .buy{color:var(--on-accent)}
+
 </style>
 
+<a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
   <div class="top">
     <span class="brand">STUDIO<b>·</b>SHOP</span>
@@ -76,6 +92,7 @@
     </nav>
   </div>
 
+  <main id="main">
   <div class="hero">
     <span class="eyebrow">Mixing, mastering &amp; sounds</span>
     <h1>Get your music finished, or grab the tools I use.</h1>
@@ -84,22 +101,22 @@
   </div>
 
   <section>
-    <p class="label">Mixing &amp; mastering</p>
-    <div class="svc">
+    <h2 class="label">Mixing &amp; mastering</h2>
+    <div class="svc"><div class="tscroll" role="region" aria-label="Mixing and mastering rates" tabindex="0">
       <table>
-        <thead><tr><th>Service</th><th style="text-align:right">Per track</th><th style="text-align:right">4-track EP</th><th></th></tr></thead>
+        <thead><tr><th scope="col">Service</th><th scope="col" style="text-align:right">Per track</th><th scope="col" style="text-align:right">4-track EP</th><th scope="col"><span class="sr-only">Book</span></th></tr></thead>
         <tbody>
-          <tr><td>Mastering</td><td class="n">€25</td><td class="n">€75</td>
-            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mastering%20booking">Book &#8594;</a></td></tr>
-          <tr><td>Mixing</td><td class="n">€90</td><td class="n">€270</td>
-            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mixing%20booking">Book &#8594;</a></td></tr>
-          <tr><td>Mix + master</td><td class="n">€110</td><td class="n">€330</td>
-            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mix%20%2B%20master%20booking">Book &#8594;</a></td></tr>
+          <tr><th scope="row">Mastering</th><td class="n">€25</td><td class="n">€75</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mastering%20booking" aria-label="Book mastering">Book &#8594;</a></td></tr>
+          <tr><th scope="row">Mixing</th><td class="n">€90</td><td class="n">€270</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mixing%20booking" aria-label="Book mixing">Book &#8594;</a></td></tr>
+          <tr><th scope="row">Mix + master</th><td class="n">€110</td><td class="n">€330</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mix%20%2B%20master%20booking" aria-label="Book mix and master">Book &#8594;</a></td></tr>
         </tbody>
       </table>
-    </div>
+    </div></div>
     <div class="payrow">
-      <a class="buy" href="https://buy.stripe.com/fZu00icvwaw29Eec09abK01" target="_blank" rel="noopener">Pay by card</a>
+      <a class="buy" href="https://buy.stripe.com/fZu00icvwaw29Eec09abK01" target="_blank" rel="noopener" aria-label="Pay by card, opens Stripe in a new tab">Pay by card</a>
       <p class="paynote">Booking starts by email and a short brief, so we agree the work before any money moves.
         Once the scope is set you can pay by card on a secure Stripe page, which shows the exact amount before
         you confirm. Bank transfer also works if you prefer.</p>
@@ -107,7 +124,7 @@
   </section>
 
   <section>
-    <p class="label">Production resources</p>
+    <h2 class="label">Production resources</h2>
     <div class="cards">
       <div class="card">
         <div class="kh"><h3>Duress — Vol. 1</h3><span class="soon">soon</span></div>
@@ -127,8 +144,11 @@
     </div>
   </section>
 
+  </main>
   <footer>
     <span>Studio Shop — Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
     <span class="proj">Fate Through · Lack of Fate · Hologram People</span>
   </footer>
 </div>
+
+</html>

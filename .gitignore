@@ -8,3 +8,5 @@ build/
 .DS_Store
 tools/fixtures/
 tools/node_modules/
+node_modules/
+uv.lock
