@@ -85,6 +85,7 @@ anyway.
 coverforge targets                       # list targets, sizes, floors, notes
 coverforge check ART... [--strict]       # report only, writes nothing
 coverforge build ART... -o DIR           # write the delivery pack
+coverforge contact-sheet ART... -o DIR   # offline review packet for variants
 ```
 
 `ART` can be files or a directory. Point it at a folder of variants and each one
@@ -118,6 +119,38 @@ coverforge check final-master.tif --strict || exit 1
 
 Every build also drops a `manifest.json` and a `DELIVERY.md` table next to the
 files — the second one is handy to paste into a mail to a label or distributor.
+
+## Picking between variants
+
+Before you decide which master to export, turn a folder of variants into a
+single sheet you can look at:
+
+```bash
+coverforge contact-sheet ~/art/ft011-variants/ \
+  --title "FT011 visual review" --columns 4 -o review/ft011
+```
+
+It writes exactly two files, into a **new** directory that must sit outside
+every source image's own folder:
+
+- `CONTACT_SHEET.jpg` — a numbered, letterboxed preview grid
+- `CONTACT_SHEET.html` — an offline index mapping each number to its filename,
+  dimensions and colour mode
+
+`--dry-run` validates the images, layout and output location without writing
+anything. `--cell-size`, `--columns` and `--background '#rrggbb'` tune the
+sheet. Source art is never copied, altered or uploaded.
+
+## What manifest.json is, and is not
+
+The manifest is schema version 1. For a valid name it contains no local paths,
+so it is safe to hand to someone else. It records the SHA-256 of the source and
+of every file written, plus a deterministic `capture_id` derived from the rest
+of the payload.
+
+That is a record of **the bytes this run read and wrote on your machine**. It is
+not proof of authorship, ownership, rights, approval or release-readiness, and
+it says nothing about whether a platform will accept the files.
 
 ## The specs are yours to edit
 
