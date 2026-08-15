@@ -1,0 +1,312 @@
+<title>Coverforge</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --accent:#5a46e0;
+    --pass:#1f9d57; --warn:#b0761c; --fail:#d23f34;
+    --pass-bg:#e7f5ec; --warn-bg:#f7efdd; --fail-bg:#fbe8e6;
+    --shadow:0 1px 2px rgba(20,22,28,.06),0 8px 24px rgba(20,22,28,.06);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+      --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+      --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+      --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+    --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:26px}
+  .brand{font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    font-weight:700;letter-spacing:.32em;font-size:15px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .tag{color:var(--muted);font-size:13.5px}
+  .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .priv::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:var(--pass);margin-right:7px;vertical-align:1px}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.08;margin:.1em 0 .35em;
+    letter-spacing:-.02em;text-wrap:balance;max-width:20ch}
+  .lede{color:var(--muted);font-size:16px;max-width:60ch;margin:0 0 22px}
+
+  .drop{
+    position:relative;border:1.5px dashed var(--line);border-radius:16px;
+    background:var(--surface);box-shadow:var(--shadow);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:46px 24px;cursor:pointer;transition:border-color .18s,background .18s,transform .18s}
+  .drop:hover,.drop:focus-within{border-color:var(--accent)}
+  .drop.over{border-color:var(--accent);background:var(--surface-2);border-style:solid}
+  .drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .glyph{width:46px;height:46px;border:2px solid var(--accent);border-radius:8px;
+    display:grid;place-items:center;margin-bottom:14px;color:var(--accent)}
+  .glyph::after{content:"";width:16px;height:16px;border:2px solid currentColor;border-radius:3px}
+  .drop h2{margin:0 0 4px;font-size:18px;letter-spacing:-.01em}
+  .drop p{margin:0;color:var(--muted);font-size:13.5px}
+  .drop .formats{margin-top:12px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+  .results{margin-top:26px;display:none;animation:rise .35s ease both}
+  .results.show{display:block}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.results,.drop{animation:none;transition:none}}
+
+  .verdict{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:13px;
+    border:1px solid var(--line);margin-bottom:18px;background:var(--surface)}
+  .verdict .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .verdict h3{margin:0;font-size:16px;letter-spacing:-.01em}
+  .verdict p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+
+  .grid{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:18px}
+  @media (max-width:680px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:13px;
+    box-shadow:var(--shadow);overflow:hidden}
+  .card h4{margin:0;padding:12px 15px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);border-bottom:1px solid var(--line)}
+  .thumb{aspect-ratio:1/1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:contain;display:block}
+  dl.specs{margin:0;padding:6px 15px 14px}
+  dl.specs div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+  dl.specs div:last-child{border-bottom:0}
+  dl.specs dt{color:var(--muted);font-size:13px}
+  dl.specs dd{margin:0;font-size:13.5px;font-variant-numeric:tabular-nums;text-align:right}
+
+  ul.checks{list-style:none;margin:0;padding:8px 15px 14px}
+  ul.checks li{display:grid;grid-template-columns:auto 1fr;gap:11px;align-items:start;
+    padding:10px 0;border-bottom:1px solid var(--line)}
+  ul.checks li:last-child{border-bottom:0}
+  .pill{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;font-weight:700;
+    letter-spacing:.06em;padding:3px 7px;border-radius:6px;line-height:1.3;white-space:nowrap;margin-top:1px}
+  .pill.pass{color:var(--pass);background:var(--pass-bg)}
+  .pill.warn{color:var(--warn);background:var(--warn-bg)}
+  .pill.fail{color:var(--fail);background:var(--fail-bg)}
+  .checks .name{font-size:14px}
+  .checks .msg{color:var(--muted);font-size:12.5px;display:block;margin-top:1px}
+
+  .platforms{margin-top:18px}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:14px 15px 16px}
+  .plat{border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:var(--surface-2)}
+  .plat .n{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600}
+  .plat .s{color:var(--muted);font-size:12px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .tick{width:9px;height:9px;border-radius:50%;flex:none}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  footer a:hover{text-decoration:underline}
+  .cta{margin-left:auto}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="brand">COVER<b>FORGE</b></span>
+    <span class="tag">album art preflight</span>
+    <span class="priv">runs in your browser · nothing uploaded</span>
+  </header>
+
+  <h1>Will your cover art pass?</h1>
+  <p class="lede">Drop your artwork below. Coverforge checks size, shape, format and colour against what
+    Spotify, Bandcamp, Apple Music, Beatport and the rest actually require, before a wrong file gets your
+    release bounced.</p>
+
+  <label class="drop" id="drop" tabindex="0" aria-label="Choose or drop a cover image">
+    <input type="file" id="file" accept="image/*">
+    <span class="glyph" aria-hidden="true"></span>
+    <h2>Drop a cover image here</h2>
+    <p>or click to choose a file — it never leaves your device</p>
+    <span class="formats">png · jpg · and others</span>
+  </label>
+
+  <section class="results" id="results" aria-live="polite">
+    <div class="verdict" id="verdict">
+      <span class="dot"></span>
+      <div><h3 id="vtitle"></h3><p id="vsub"></p></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h4>File</h4>
+        <div class="thumb"><img id="thumb" alt="Your cover preview"></div>
+        <dl class="specs" id="specs"></dl>
+      </div>
+      <div class="card">
+        <h4>Checks</h4>
+        <ul class="checks" id="checks"></ul>
+      </div>
+    </div>
+
+    <div class="card platforms">
+      <h4>Platform readiness</h4>
+      <div class="pgrid" id="platforms"></div>
+    </div>
+  </section>
+
+  <footer>
+    <a href="index.html">← all tools</a>
+    <span>Coverforge — a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need your tracks finished? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var PLATFORMS=[
+    {name:"Bandcamp",min:1400,rec:3000},
+    {name:"Spotify",min:640,rec:3000},
+    {name:"Apple Music",min:3000,rec:3000},
+    {name:"Beatport",min:1400,rec:1400},
+    {name:"SoundCloud",min:800,rec:3000},
+    {name:"Instagram",min:1080,rec:1080}
+  ];
+  var sev={pass:0,warn:1,fail:2};
+  var $=function(id){return document.getElementById(id)};
+  var drop=$("drop"), fileIn=$("file");
+
+  ["dragenter","dragover"].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add("over")})});
+  ["dragleave","drop"].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove("over")})});
+  drop.addEventListener("drop",function(ev){var f=ev.dataTransfer.files[0];if(f)handle(f)});
+  fileIn.addEventListener("change",function(){if(fileIn.files[0])handle(fileIn.files[0])});
+  drop.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();fileIn.click()}});
+
+  function fmtBytes(n){var u=["B","KB","MB","GB"],i=0,v=n;while(v>=1024&&i<3){v/=1024;i++}return (i?v.toFixed(1):v)+" "+u[i]}
+
+  function parseHeader(buf){
+    var d=new DataView(buf), out={format:"unknown",width:0,height:0,mode:"unknown"};
+    // PNG
+    if(d.byteLength>24&&d.getUint32(0)===0x89504E47){
+      out.format="PNG"; out.width=d.getUint32(16); out.height=d.getUint32(20);
+      var ct=d.getUint8(25);
+      out.mode={0:"Grayscale",2:"RGB",3:"Palette",4:"Grayscale+A",6:"RGBA"}[ct]||"unknown";
+      return out;
+    }
+    // JPEG
+    if(d.byteLength>4&&d.getUint16(0)===0xFFD8){
+      out.format="JPEG"; var o=2;
+      while(o<d.byteLength){
+        if(d.getUint8(o)!==0xFF){o++;continue}
+        var m=d.getUint8(o+1);
+        if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){
+          out.height=d.getUint16(o+5); out.width=d.getUint16(o+7);
+          var comp=d.getUint8(o+9);
+          out.mode=comp===4?"CMYK":comp===1?"Grayscale":"RGB";
+          return out;
+        }
+        if(m===0xD8||m===0xD9||(m>=0xD0&&m<=0xD7)){o+=2;continue}
+        o+=2+d.getUint16(o+2);
+      }
+      return out;
+    }
+    if(d.byteLength>12&&d.getUint32(0)===0x52494646&&d.getUint32(8)===0x57454250) out.format="WEBP";
+    else if(d.byteLength>3&&d.getUint16(0)===0x4749) out.format="GIF";
+    else if(d.byteLength>2&&d.getUint16(0)===0x424D) out.format="BMP";
+    else if(d.byteLength>4&&(d.getUint32(0)===0x49492A00||d.getUint32(0)===0x4D4D002A)) out.format="TIFF";
+    return out;
+  }
+
+  function handle(file){
+    var reader=new FileReader();
+    reader.onload=function(){
+      var info=parseHeader(reader.result); info.bytes=file.size;
+      var url=URL.createObjectURL(file), img=new Image();
+      img.onload=function(){ if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight} render(info,url) };
+      img.onerror=function(){ render(info,url) };
+      img.src=url;
+    };
+    reader.readAsArrayBuffer(file.slice(0,64*1024));
+  }
+
+  function render(info,url){
+    $("thumb").src=url;
+    var w=info.width,h=info.height,small=Math.min(w,h),large=Math.max(w,h);
+    var checks=[];
+
+    // format
+    if(info.format==="JPEG"||info.format==="PNG") checks.push(["format","pass",info.format]);
+    else checks.push(["format","fail",(info.format==="unknown"?"Unrecognised file":info.format)+" is not accepted — export a JPG or PNG"]);
+    // square
+    if(w&&h){ if(w===h) checks.push(["square","pass",w+" x "+h]);
+      else checks.push(["square","fail",w+" x "+h+" is not square — crop it to 1:1"]); }
+    // resolution
+    if(small){
+      if(small<1400) checks.push(["resolution","fail",small+"px is below the 1400px minimum most stores enforce"]);
+      else if(small<3000) checks.push(["resolution","warn",small+"px works, but 3000px is the safe target"]);
+      else if(large>6000) checks.push(["resolution","warn",large+"px is very large — some uploaders reject oversized art"]);
+      else checks.push(["resolution","pass",w+" x "+h]);
+    }
+    // colour
+    var m=info.mode;
+    if(m==="RGB") checks.push(["colour","pass","RGB"]);
+    else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by stores — convert to RGB / sRGB"]);
+    else if(m==="RGBA") checks.push(["colour","warn","Has an alpha channel — flatten onto a solid background"]);
+    else if(m&&m.indexOf("Grayscale")===0) checks.push(["colour","warn","Grayscale — convert to RGB to be safe"]);
+    else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG — re-export as RGB"]);
+    else checks.push(["colour","warn","Colour mode unread — make sure it is RGB / sRGB"]);
+    // filesize
+    if(info.bytes>20*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is large — some platforms cap uploads around 10-20 MB"]);
+    else checks.push(["filesize","pass",fmtBytes(info.bytes)]);
+
+    // specs
+    $("specs").innerHTML="";
+    [["Format",info.format],["Dimensions",w&&h?(w+" x "+h+" px"):"unknown"],
+     ["Aspect",w&&h?(w===h?"1:1 square":(w/h).toFixed(2)+":1"):"—"],
+     ["Colour",m],["Size",fmtBytes(info.bytes)]].forEach(function(r){
+      var row=document.createElement("div");
+      row.innerHTML="<dt>"+r[0]+"</dt><dd class='mono'>"+r[1]+"</dd>"; $("specs").appendChild(row);
+    });
+
+    // checks list
+    var worst="pass";
+    $("checks").innerHTML="";
+    checks.forEach(function(c){
+      if(sev[c[1]]>sev[worst]) worst=c[1];
+      var li=document.createElement("li");
+      li.innerHTML="<span class='pill "+c[1]+"'>"+c[1].toUpperCase()+"</span>"+
+        "<span><span class='name'>"+c[0].charAt(0).toUpperCase()+c[0].slice(1)+"</span>"+
+        "<span class='msg'>"+c[2]+"</span></span>";
+      $("checks").appendChild(li);
+    });
+
+    // verdict
+    var vt=$("vtitle"),vs=$("vsub"),dot=document.querySelector("#verdict .dot");
+    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
+    dot.style.background=col; vt.style.color=col;
+    if(worst==="fail"){vt.textContent="Not ready to upload";vs.textContent="Fix the red items below before you send this to a distributor.";}
+    else if(worst==="warn"){vt.textContent="Good to go, with notes";vs.textContent="No blockers. The amber items are worth tightening for the best result.";}
+    else{vt.textContent="Ready to ship";vs.textContent="This cover clears the common store and distributor requirements.";}
+
+    // platforms
+    $("platforms").innerHTML="";
+    var isSquare=(w===h);
+    PLATFORMS.forEach(function(p){
+      var st,label;
+      if(!small||!isSquare){st="fail";label=!isSquare?"needs 1:1 square":"unknown size";}
+      else if(small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
+      else if(small<p.rec){st="warn";label=small+"px ok · "+p.rec+" ideal";}
+      else{st="pass";label=small+"px — clears "+p.min+"px";}
+      var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[st];
+      var el=document.createElement("div"); el.className="plat";
+      el.innerHTML="<div class='n'>"+p.name+"<span class='tick' style='background:"+col2+"'></span></div>"+
+        "<div class='s'>"+label+"</div>";
+      $("platforms").appendChild(el);
+    });
+
+    var r=$("results"); r.classList.add("show"); r.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+})();
+</script>

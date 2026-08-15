@@ -1,0 +1,126 @@
+<title>Studio Shop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --faint:#878d9b; --accent:#5a46e0; --accent-2:#7d5cf0;
+    --shadow:0 1px 2px rgba(20,22,28,.05),0 10px 30px rgba(20,22,28,.07);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
+    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{
+    --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
+    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+  a{color:inherit}
+  .top{display:flex;align-items:baseline;gap:16px;padding:22px 0;flex-wrap:wrap}
+  .brand{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:.34em;font-size:14px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .nav{margin-left:auto;display:flex;gap:18px;font-size:13.5px}
+  .nav a{color:var(--muted);text-decoration:none}
+  .nav a:hover{color:var(--accent)}
+  .hero{padding:30px 0 18px;border-top:1px solid var(--line)}
+  .eyebrow{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+  .hero h1{font-size:clamp(30px,5.5vw,52px);line-height:1.04;letter-spacing:-.03em;margin:.28em 0 .3em;text-wrap:balance;max-width:16ch}
+  .hero p{font-size:17px;color:var(--muted);max-width:58ch;margin:0}
+  section{padding:30px 0}
+  .label{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 16px;display:flex;align-items:center;gap:12px}
+  .label::after{content:"";flex:1;height:1px;background:var(--line)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:20px;box-shadow:var(--shadow)}
+  .card .kh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card h3{margin:0 0 4px;font-size:18px;letter-spacing:-.01em}
+  .price{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--accent);font-size:16px;white-space:nowrap}
+  .card p{margin:6px 0 16px;color:var(--muted);font-size:13.5px;flex:1}
+  .buy{display:inline-block;text-align:center;font-weight:600;font-size:14px;color:#fff;background:var(--accent);
+    border-radius:10px;padding:10px 16px;text-decoration:none}
+  .buy:hover{background:var(--accent-2)}
+  .buy.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  .buy.ghost:hover{border-color:var(--accent)}
+  .soon{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.06em;color:var(--faint);
+    border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .svc{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{padding:12px 16px;border-bottom:1px solid var(--line);text-align:left}
+  th{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  td.n{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:700}
+  td .book{font-size:12.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
+  td .book:hover{text-decoration:underline}
+  tr:last-child td{border-bottom:0}
+  footer{padding:32px 0 50px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+  footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  footer .proj{margin-left:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.05em;color:var(--faint)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <span class="brand">STUDIO<b>·</b>SHOP</span>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="index.html#tools">Tools</a>
+      <a href="mailto:hologrampeoplemusic@gmail.com">Contact</a>
+    </nav>
+  </div>
+
+  <div class="hero">
+    <span class="eyebrow">Mixing, mastering &amp; sounds</span>
+    <h1>Get your music finished, or grab the tools I use.</h1>
+    <p>Book mixing and mastering, or buy production resources you keep forever. Everything here is made by
+      someone who releases techno, not a content mill.</p>
+  </div>
+
+  <section>
+    <p class="label">Mixing &amp; mastering</p>
+    <div class="svc">
+      <table>
+        <thead><tr><th>Service</th><th style="text-align:right">Per track</th><th style="text-align:right">4-track EP</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Mastering</td><td class="n">€25</td><td class="n">€75</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mastering%20booking">Book &#8594;</a></td></tr>
+          <tr><td>Mixing</td><td class="n">€90</td><td class="n">€270</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mixing%20booking">Book &#8594;</a></td></tr>
+          <tr><td>Mix + master</td><td class="n">€110</td><td class="n">€330</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mix%20%2B%20master%20booking">Book &#8594;</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mono" style="color:var(--faint);font-size:12.5px;margin:12px 2px 0">Booking starts by email and a short brief. A 50% deposit confirms the slot.</p>
+  </section>
+
+  <section>
+    <p class="label">Production resources</p>
+    <div class="cards">
+      <div class="card">
+        <div class="kh"><h3>Duress — Vol. 1</h3><span class="soon">soon</span></div>
+        <p>Techno sample pack: raw kicks, metallic percussion, textured hats, sub and rumble, plus loops at 130 and 134 bpm.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Duress%20Vol.%201">Email me when it drops</a>
+      </div>
+      <div class="card">
+        <div class="kh"><h3>Techno Mastering Chain</h3><span class="soon">soon</span></div>
+        <p>My Bitwig master-bus template: gain staging, tone, glue and true-peak safe limiting, ready to drop on your master.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Mastering%20Chain">Email me when it drops</a>
+      </div>
+      <div class="card">
+        <div class="kh"><h3>Preset Pack</h3><span class="soon">soon</span></div>
+        <p>Signature synth and FX patches from the Lack of Fate and Hologram People sessions.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Preset%20Pack">Email me when it drops</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Studio Shop — Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <span class="proj">Fate Through · Lack of Fate · Hologram People</span>
+  </footer>
+</div>
