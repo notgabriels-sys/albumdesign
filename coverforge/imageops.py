@@ -91,11 +91,23 @@ def _icc_description(icc: bytes | None) -> str | None:
         return "unreadable ICC profile"
 
 
+# ICC header bytes 24..35 hold the profile's creation date and time. littlecms
+# stamps that with the current clock, so a freshly built sRGB profile differs
+# between runs by a byte or two. That profile is embedded in every file we
+# write, which would make identical builds produce different bytes, different
+# output hashes, and a different manifest capture_id one second apart. The
+# field is informational, so zero it and keep builds reproducible.
+_ICC_DATETIME = slice(24, 36)
+
+
 def _srgb_profile_bytes() -> bytes | None:
     try:
-        return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        raw = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
     except Exception:
         return None
+    if len(raw) >= _ICC_DATETIME.stop:
+        raw[_ICC_DATETIME] = b"\x00" * 12
+    return bytes(raw)
 
 
 SRGB_BYTES = _srgb_profile_bytes()

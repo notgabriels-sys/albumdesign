@@ -1,6 +1,8 @@
+import hashlib
 import json
 
 from PIL import Image
+import pytest
 
 from coverforge.build import build, output_name
 from coverforge.cli import main
@@ -75,6 +77,54 @@ def test_build_writes_manifest_and_delivery_note(master, tmp_path):
     assert "Bandcamp" in note
 
 
+def test_written_manifest_is_portable_while_build_result_remains_owner_local(master, tmp_path):
+    out = tmp_path / "delivery"
+    source = inspect(master)
+    result = build(source, ALL_TARGETS, out_dir=out, slug="lof001")
+
+    raw = (out / "manifest.json").read_text(encoding="utf-8")
+    manifest = json.loads(raw)
+
+    assert manifest.get("schema_version") == 1
+    assert manifest["generated_by"] == "coverforge"
+    assert manifest["slug"] == "lof001"
+    assert str(tmp_path) not in raw
+    assert str(master) not in raw
+    assert master.name not in raw
+    assert "master" not in manifest
+    assert "out_dir" not in manifest
+    assert set(manifest["source"]) == {"sha256", "bytes", "dimensions", "mode", "format"}
+    assert manifest["source"] == {
+        "sha256": hashlib.sha256(master.read_bytes()).hexdigest(),
+        "bytes": master.stat().st_size,
+        "dimensions": source.dimensions,
+        "mode": source.mode,
+        "format": source.file_format,
+    }
+    for output in manifest["outputs"]:
+        rendered = out / output["file"]
+        assert output["sha256"] == hashlib.sha256(rendered.read_bytes()).hexdigest()
+
+    capture_payload = {key: value for key, value in manifest.items() if key != "capture_id"}
+    canonical = json.dumps(
+        capture_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    assert manifest["capture_id"] == f"cfp_{hashlib.sha256(canonical).hexdigest()[:20]}"
+
+    owner_local = result.as_dict()
+    assert owner_local["master"] == str(master)
+    assert owner_local["out_dir"] == str(out)
+
+
+def test_build_rejects_path_bearing_programmatic_slug_before_writing(master, tmp_path):
+    out = tmp_path / "delivery"
+
+    with pytest.raises(ValueError, match="slug"):
+        build(inspect(master), [ALL_TARGETS[0]], out_dir=out, slug=str(master))
+
+    assert not out.exists()
+
+
 def test_cli_targets_json(capsys):
     assert main(["targets", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -125,6 +175,71 @@ def test_cli_build_batch_of_variants_gets_one_folder_each(tmp_path, art_factory,
     assert (out / "cover-v0" / "cover-v0--bandcamp--3000x3000.jpg").exists()
 
 
+def test_cli_contact_sheet_writes_an_offline_variant_review(tmp_path, art_factory, capsys):
+    variants = tmp_path / "variants"
+    variants.mkdir()
+    for index in range(3):
+        Image.open(art_factory(size=(3000, 3000))).save(variants / f"cover-v{index}.png")
+
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+    code = main(
+        [
+            "contact-sheet",
+            str(variants),
+            "-o",
+            str(output),
+            "--title",
+            "Lack of Fate review",
+            "--columns",
+            "2",
+            "--cell-size",
+            "120",
+        ]
+    )
+
+    assert code == 0
+    assert sorted(path.name for path in output.iterdir()) == [
+        "CONTACT_SHEET.html",
+        "CONTACT_SHEET.jpg",
+    ]
+    assert "Wrote offline contact-sheet review" in capsys.readouterr().out
+
+
+def test_cli_contact_sheet_dry_run_validates_without_creating_output(art_factory, tmp_path, capsys):
+    source = art_factory(size=(3000, 3000))
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+
+    code = main(
+        [
+            "contact-sheet",
+            str(source),
+            "-o",
+            str(output),
+            "--dry-run",
+            "--columns",
+            "2",
+            "--cell-size",
+            "120",
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["dry_run"] is True
+    assert payload["contact_sheet"]["dimensions"] == "324x304"
+    assert not output.exists()
+
+
+def test_cli_contact_sheet_rejects_nonpositive_column_count(art_factory, tmp_path, capsys):
+    source = art_factory(size=(3000, 3000))
+    output = tmp_path.parent / f"{tmp_path.name}-review"
+
+    assert main(["contact-sheet", str(source), "-o", str(output), "--columns", "0"]) == 2
+    assert "columns must be a positive integer" in capsys.readouterr().err
+    assert not output.exists()
+
+
 def test_cli_build_rejects_name_with_multiple_masters(tmp_path, art_factory, capsys):
     a, b = art_factory(), art_factory()
     code = main(["build", str(a), str(b), "-o", str(tmp_path / "o"), "--name", "one"])
@@ -142,3 +257,34 @@ def test_cli_handles_unreadable_file(tmp_path, capsys):
     junk.write_text("not actually a png")
     assert main(["check", str(junk)]) == 2
     assert "not a readable image" in capsys.readouterr().err
+
+
+def test_builds_are_byte_reproducible(master, tmp_path):
+    """Two identical builds must produce identical bytes and the same capture_id.
+
+    The sRGB ICC profile embedded in every output carries a creation timestamp
+    in its header. Left as littlecms writes it, that made every rebuild produce
+    different files, different output hashes, and a different capture_id, which
+    would make the manifest useless for confirming a pack is unchanged.
+    """
+    source = inspect(master)
+    first = build(source, ALL_TARGETS, out_dir=tmp_path / "one", slug="lof001")
+    second = build(source, ALL_TARGETS, out_dir=tmp_path / "two", slug="lof001")
+
+    assert [o.sha256 for o in first.outputs] == [o.sha256 for o in second.outputs]
+
+    one = json.loads((tmp_path / "one" / "manifest.json").read_text())
+    two = json.loads((tmp_path / "two" / "manifest.json").read_text())
+    assert one == two
+    assert one["capture_id"] == two["capture_id"]
+
+    # And the bytes on disk really are identical, not just the recorded hashes.
+    for a, b in zip(first.outputs, second.outputs):
+        assert a.path.read_bytes() == b.path.read_bytes()
+
+
+def test_srgb_profile_has_no_embedded_timestamp():
+    from coverforge.imageops import SRGB_BYTES
+
+    assert SRGB_BYTES is not None
+    assert SRGB_BYTES[24:36] == b"\x00" * 12
