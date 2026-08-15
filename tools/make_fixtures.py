@@ -32,4 +32,25 @@ with wave.open(str(d / "sine_-23dBFS.wav"), "w") as w:
         frames += struct.pack("<hh", v, v)
     w.writeframes(bytes(frames))
 
+# Edge cases: silence and a clip shorter than the 400 ms BS.1770 block. Both
+# used to render "+Infinity dB" in the platform table.
+for name, secs in (("silence.wav", 4), ("tiny_200ms.wav", 0.2)):
+    with wave.open(str(d / name), "w") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(struct.pack("<hh", 0, 0) * int(rate * secs))
+
+# Inter-sample peak case: sine at fs/4 phased so every sample lands at +-0.707.
+# Sample peak reads -3.01 dBFS; a real true-peak meter must report about 0 dBTP.
+with wave.open(str(d / "intersample_peak.wav"), "w") as w:
+    w.setnchannels(2)
+    w.setsampwidth(2)
+    w.setframerate(rate)
+    fr = bytearray()
+    for i in range(rate * 6):
+        v = int(0.999 * math.sin(2 * math.pi * (rate / 4) * i / rate + math.pi / 4) * 32767)
+        fr += struct.pack("<hh", v, v)
+    w.writeframes(bytes(fr))
+
 print("fixtures written to", d)

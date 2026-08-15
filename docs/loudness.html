@@ -178,13 +178,21 @@
   fileIn.addEventListener("change",function(){if(fileIn.files[0])go(fileIn.files[0])});
   drop.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();fileIn.click()}});
 
-  function say(t){status.textContent=t;status.classList.add("show")}
+  function say(t){busy=false;status.textContent=t;status.classList.add("show")}
 
+  var busy=false;
   function go(file){
+    if(busy){ say("Still working on the last file, give it a moment."); return }
+    // A 10-minute master is already hundreds of MB decoded; refuse politely
+    // rather than letting the tab run out of memory mid-measurement.
+    if(file.size>400*1024*1024){ say("That file is over 400 MB, too large to measure in a browser."); return }
+    busy=true;
+    $("results").classList.remove("show");   // don't leave stale numbers on screen
     say("Reading "+file.name+" …");
     var fr=new FileReader();
     fr.onload=function(){decode(fr.result)};
-    fr.onerror=function(){say("Could not read that file.")};
+    fr.onerror=function(){busy=false;say("Could not read that file.")};
+    fr.onabort=function(){busy=false;say("Reading was cancelled.")};
     fr.readAsArrayBuffer(file);
   }
 
@@ -224,16 +232,20 @@
     return biquad(s1,1.0,-2.0,1.0,-1.99004745483398,0.99007225036621);
   }
 
-  function meanSquareBlocks(chans,rate,winSec,hopSec){
+  // BS.1770-4 channel weights. Surrounds count +1.5 dB, the LFE is excluded.
+  var CH_WEIGHTS={1:[1],2:[1,1],4:[1,1,1.41,1.41],6:[1,1,1,0,1.41,1.41]};
+
+  function meanSquareBlocks(chans,rate,winSec,hopSec,G){
     // returns array of block loudness (LUFS) using channel-summed weighted mean square
     var win=Math.round(winSec*rate),hop=Math.round(hopSec*rate);
     var n=chans[0].length,out=[];
     for(var start=0;start+win<=n;start+=hop){
       var z=0;
       for(var c=0;c<chans.length;c++){
+        if(!G[c]) continue;                    // LFE contributes nothing
         var ch=chans[c],s=0;
         for(var i=start;i<start+win;i++){var v=ch[i];s+=v*v}
-        z+=(s/win); // stereo weights = 1.0
+        z+=G[c]*(s/win);
       }
       out.push({z:z,l:-0.691+10*Math.log10(z+1e-12)});
     }
@@ -254,32 +266,44 @@
 
   function lra(short){
     var g=short.filter(function(b){return b.l>-70});
-    if(g.length<2) return 0;
+    if(g.length<2) return null;
     var mz=g.reduce(function(a,b){return a+b.z},0)/g.length;
     var rel=-0.691+10*Math.log10(mz)-20;
     var v=g.filter(function(b){return b.l>rel}).map(function(b){return b.l}).sort(function(a,b){return a-b});
-    if(v.length<2) return 0;
+    if(v.length<2) return null;
     var pct=function(p){var idx=(v.length-1)*p;var lo=Math.floor(idx),hi=Math.ceil(idx);return v[lo]+(v[hi]-v[lo])*(idx-lo)};
     return pct(0.95)-pct(0.10);
   }
 
   function analyse(ab){
     resample(ab,48000).then(function(rb){
+      var G=CH_WEIGHTS[rb.numberOfChannels];
+      if(!G) return say("Only mono, stereo, quad and 5.1 files can be measured.");
       var chans=[];
       for(var c=0;c<rb.numberOfChannels;c++) chans.push(kWeight(rb.getChannelData(c)));
-      var mom=meanSquareBlocks(chans,48000,0.4,0.1);     // momentary 400ms / 100ms hop
-      var sh=meanSquareBlocks(chans,48000,3.0,1.0);      // short-term 3s / 1s hop
+      var mom=meanSquareBlocks(chans,48000,0.4,0.1,G);   // momentary 400ms / 100ms hop
+      var sh=meanSquareBlocks(chans,48000,3.0,1.0,G);    // short-term 3s / 1s hop
       var LUFS=integrated(mom);
       var momMax=mom.reduce(function(a,b){return Math.max(a,b.l)},-Infinity);
       var shMax=sh.reduce(function(a,b){return Math.max(a,b.l)},-Infinity);
       var LRA=lra(sh);
-      truePeak(ab).then(function(tp){ render(ab,LUFS,tp,momMax,shMax,LRA); });
+      if(!isFinite(LUFS)){
+        return say(ab.duration<0.4
+          ? "Too short to measure. BS.1770 needs at least 400 ms of audio."
+          : "No audio above -70 LUFS in this file, so there is nothing to measure.");
+      }
+      // A true-peak failure must not throw away loudness numbers we already have.
+      return truePeak(ab).catch(function(){return NaN})
+        .then(function(tp){ render(ab,LUFS,tp,momMax,shMax,LRA); });
     }).catch(function(){ say("Analysis failed on this file. A stereo WAV works best."); });
   }
 
   // True peak estimate via 4x oversample
   function truePeak(ab){
-    return resample(ab,ab.sampleRate*4).then(function(ob){
+    // Oversample for inter-sample peaks, but keep the target rate inside what
+    // engines reliably accept (4x96k = 384k is at or past several limits).
+    var factor=Math.max(1,Math.min(4,Math.floor(192000/ab.sampleRate)));
+    return resample(ab,ab.sampleRate*factor).then(function(ob){
       var peak=0;
       for(var c=0;c<ob.numberOfChannels;c++){
         var d=ob.getChannelData(c);
@@ -289,7 +313,7 @@
     });
   }
 
-  function fmt(x,d){return (x<=-1000||!isFinite(x))?"—":x.toFixed(d===undefined?1:d)}
+  function fmt(x,d){return (x==null||x<=-1000||!isFinite(x))?"—":x.toFixed(d===undefined?1:d)}
   function mmss(s){var m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+(ss<10?"0":"")+ss}
 
   function render(ab,LUFS,tp,momMax,shMax,LRA){
@@ -300,7 +324,7 @@
       {k:"True peak",v:fmt(tp),u:"dBTP"+(tpFlag?" · over -1":""),flag:tpFlag},
       {k:"Loudness range",v:fmt(LRA),u:"LU"},
       {k:"Short-term max",v:fmt(shMax),u:"LUFS"},
-      {k:"Duration",v:mmss(ab.duration),u:(ab.numberOfChannels>1?"stereo":"mono")+" · "+ab.sampleRate/1000+"k"}
+      {k:"Duration",v:mmss(ab.duration),u:(ab.numberOfChannels===1?"mono":ab.numberOfChannels===2?"stereo":ab.numberOfChannels+" ch")+" · "+ab.sampleRate/1000+"k"}
     ];
     $("metrics").innerHTML=metrics.map(function(m){
       return "<div class='metric"+(m.flag?" flag":"")+"'><div class='k'>"+m.k+"</div><div class='v'>"+m.v+"</div><div class='u'>"+m.u+"</div></div>";
@@ -312,6 +336,7 @@
     else if(LUFS>-13) msg="At <b>"+fmt(LUFS)+" LUFS</b> this sits between streaming and club loud. Every service below will still pull it down toward its reference.";
     else if(LUFS>-16) msg="At <b>"+fmt(LUFS)+" LUFS</b> this is close to streaming reference, a sensible target for a modern master.";
     else msg="At <b>"+fmt(LUFS)+" LUFS</b> this is on the quiet side for streaming. It will keep all its dynamics, and some services will turn it up.";
+    if(ab.numberOfChannels===1) msg+=" This is a <b>mono</b> file. BS.1770 sums the channels, so identical material in stereo reads 3.0 LU louder. The platforms measure it the same way, so the gain figures below are still right.";
     if(tpFlag) msg+=" Your true peak is <b>"+fmt(tp)+" dBTP</b>, above the -1 dBTP ceiling, which can distort after lossy encoding. Pull the ceiling down.";
     $("read").innerHTML=msg;
 
