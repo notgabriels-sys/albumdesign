@@ -49,6 +49,9 @@
   .buy.ghost:hover{border-color:var(--accent)}
   .soon{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.06em;color:var(--faint);
     border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .payrow{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:14px}
+  .payrow .buy{flex:none}
+  .paynote{margin:0;color:var(--faint);font-size:12.5px;line-height:1.5;flex:1;min-width:240px}
   .svc{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
   table{width:100%;border-collapse:collapse;font-size:14.5px}
   th,td{padding:12px 16px;border-bottom:1px solid var(--line);text-align:left}
@@ -95,7 +98,12 @@
         </tbody>
       </table>
     </div>
-    <p class="mono" style="color:var(--faint);font-size:12.5px;margin:12px 2px 0">Booking starts by email and a short brief. A 50% deposit confirms the slot.</p>
+    <div class="payrow">
+      <a class="buy" href="https://buy.stripe.com/fZu00icvwaw29Eec09abK01" target="_blank" rel="noopener">Pay by card</a>
+      <p class="paynote">Booking starts by email and a short brief, so we agree the work before any money moves.
+        Once the scope is set you can pay by card on a secure Stripe page, which shows the exact amount before
+        you confirm. Bank transfer also works if you prefer.</p>
+    </div>
   </section>
 
   <section>
