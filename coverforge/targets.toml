@@ -19,6 +19,14 @@
 #   notes      shown in `coverforge targets`
 #   source     where the spec came from, so it can be re-checked
 
+# Two constraints worth knowing, because they bite in opposite directions:
+#   * CD Baby and TuneCore REJECT cover art larger than 3000x3000. Bigger is not
+#     safer. Every dsp target here therefore tops out at 3000.
+#   * TuneCore enforces the highest floor at 1600; other distributors sit at
+#     1000-1400. Apple's artist-facing page now asks for 4000 while its delivery
+#     spec says 1400 minimum and 3000 recommended, so master at 4000 and deliver
+#     3000.
+
 [meta]
 reviewed = "2026-08"
 
@@ -45,8 +53,8 @@ quality = 92
 min_source = 1600
 max_bytes = 10_000_000
 fit = "cover"
-notes = "Most distributors reject anything under 3000x3000 even though Spotify itself renders far smaller."
-source = "https://artists.spotify.com/help/article/image-guidelines"
+notes = "Spotify itself accepts 640 to 10000 and wants the highest you have. 1600 is the floor because TuneCore enforces it; other distributors sit at 1000-1400."
+source = "https://support.spotify.com/us/artists/article/cover-art-requirements/"
 
 [targets.apple_music]
 name = "Apple Music"
@@ -64,18 +72,18 @@ source = "https://help.apple.com/itc/musicspec/"
 [targets.beatport]
 name = "Beatport"
 group = "dsp"
-width = 1400
-height = 1400
+width = 3000
+height = 3000
 format = "jpeg"
 quality = 92
 min_source = 1400
 max_bytes = 10_000_000
 fit = "cover"
-notes = "1400x1400 is both the minimum and what the store actually serves."
-source = "https://support.beatport.com/"
+notes = "Beatport publishes no minimum, only a preferred 3000x3000. It can reject art tagged above 72 DPI."
+source = "https://greenroomsupport.beatport.com/hc/en-us/articles/19096342438164-What-size-release-cover-artwork-do-you-accept"
 
 [targets.soundcloud]
-name = "SoundCloud"
+name = "SoundCloud (on-platform upload)"
 group = "dsp"
 width = 1400
 height = 1400
@@ -84,8 +92,21 @@ quality = 90
 min_source = 800
 max_bytes = 2_000_000
 fit = "cover"
-notes = "Hard 2MB upload cap - this is the target most likely to need quality walked down."
-source = "https://help.soundcloud.com/"
+notes = "The upload form takes 800px minimum but caps the file under 2MB, so this is the target most likely to need quality walked down. Distributing THROUGH SoundCloud is a different spec, see soundcloud_distro."
+source = "https://help.soundcloud.com/hc/en-us/articles/46022345620123-Edit-and-customize-your-tracks"
+
+[targets.soundcloud_distro]
+name = "SoundCloud (digital distribution)"
+group = "dsp"
+width = 3000
+height = 3000
+format = "jpeg"
+quality = 92
+min_source = 3000
+max_bytes = 10_000_000
+fit = "cover"
+notes = "SoundCloud for Artists distribution requires 3000x3000 and a perfect square, which is a different and stricter spec than the on-platform upload."
+source = "https://help.soundcloud.com/hc/en-us/articles/40259650089243-Artwork-Guidelines-for-Digital-Distribution"
 
 [targets.instagram_post]
 name = "Instagram post (1:1)"

@@ -135,7 +135,12 @@
         </div>
         <p class="note">Streaming services normalise loudness: a master louder than their reference is turned
           down, so extra loudness buys nothing but lost dynamics. Clubs and DJ media are not normalised, so a
-          separate louder master makes sense there.</p>
+          separate louder master makes sense there. Apple's Sound Check only turns tracks down, never up.</p>
+        <p class="note">Only Spotify's -14 LUFS is published by the platform. Figures marked * are measured
+          consistently by third parties but are not documented by the platform, so treat them as observed
+          rather than spec. Spotify's own guidance: keep true peak below -1 dBTP, and below -2 dBTP if your
+          master is louder than -14 LUFS. Their -14 is a playback reference, not a mastering target they
+          ask you to hit.</p>
         <p class="note">Measurement is ITU-R BS.1770 (K-weighting, absolute and relative gating), checked
           against the EBU Tech 3341 test signals: a stereo 1 kHz sine at -23.0 dBFS reads -22.99 LUFS here,
           inside the ±0.1 tolerance. Use it to make decisions, and confirm on your own metering before
@@ -155,9 +160,17 @@
 (function(){
   var $=function(i){return document.getElementById(i)};
   var drop=$("drop"),fileIn=$("file"),status=$("status");
+  // `official` marks figures the platform actually publishes. The rest are
+  // consistently measured by third parties but not documented by the platform,
+  // so they are shown as observed rather than stated as spec.
+  // Apple's Sound Check only attenuates: it never turns a quiet track up.
   var PLAT=[
-    {n:"Spotify",t:-14},{n:"Apple Music",t:-16},{n:"YouTube",t:-14},
-    {n:"Tidal",t:-14},{n:"Amazon Music",t:-14},{n:"Deezer",t:-15}
+    {n:"Spotify",t:-14,official:true},
+    {n:"Apple Music",t:-16,attenuateOnly:true},
+    {n:"YouTube",t:-14},
+    {n:"Tidal",t:-14},
+    {n:"Amazon Music",t:-14},
+    {n:"Deezer",t:-15}
   ];
   ["dragenter","dragover"].forEach(function(e){drop.addEventListener(e,function(v){v.preventDefault();drop.classList.add("over")})});
   ["dragleave","drop"].forEach(function(e){drop.addEventListener(e,function(v){v.preventDefault();drop.classList.remove("over")})});
@@ -305,10 +318,14 @@
     // platform table
     $("ptable").innerHTML=PLAT.map(function(p){
       var gain=p.t-LUFS; // negative = turned down
+      // Sound Check attenuates only, so a quieter-than-reference master is left alone.
+      if(p.attenuateOnly&&gain>0) gain=0;
       var st = Math.abs(gain)<=1 ? "pass" : (gain<0?"warn":"pass");
       var g = (gain>=0?"+":"")+gain.toFixed(1)+" dB";
       var lab = Math.abs(gain)<=0.5?"as-is":(gain<0?"turned down":"turned up");
-      return "<tr><td>"+p.n+"</td><td class='num'>"+p.t+" LUFS</td>"+
+      if(p.attenuateOnly&&p.t-LUFS>0.5) lab="as-is, never boosted";
+      var ref=p.t+" LUFS"+(p.official?"":" *");
+      return "<tr><td>"+p.n+"</td><td class='num'>"+ref+"</td>"+
         "<td class='num'>"+g+"</td>"+
         "<td class='num'><span class='pill "+st+"'>"+lab+"</span></td></tr>";
     }).join("");
