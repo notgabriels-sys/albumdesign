@@ -15,9 +15,16 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   // Use a preinstalled Chromium when one is present (this repo's dev sandbox),
   // otherwise let Playwright resolve its own download (CI).
   const fs = require('fs');
-  const local = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-                 '/opt/pw-browsers/chromium/chrome-linux/chrome']
-                 .find(p => { try { return fs.existsSync(p); } catch { return false; } });
+  // Scan rather than pin a build number, which changes when the image updates.
+  const local = (() => {
+    const base = '/opt/pw-browsers';
+    if (!fs.existsSync(base)) return undefined;
+    for (const d of fs.readdirSync(base)) {
+      const p = require('path').join(base, d, 'chrome-linux', 'chrome');
+      if (d.startsWith('chromium') && fs.existsSync(p)) return p;
+    }
+    return undefined;
+  })();
   const browser = await chromium.launch(local ? { executablePath: local } : {});
 
   for (const scheme of ['light', 'dark']) {
