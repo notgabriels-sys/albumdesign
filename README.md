@@ -45,6 +45,24 @@ master.png -> delivery
 9 files written, worst finding: info
 ```
 
+## Shipping a sample pack
+
+`tools/packcheck.py` is `coverforge check` for audio: the things a buyer judges
+you on are mechanical and easy to get wrong across 130 files by hand.
+
+```bash
+python tools/packcheck.py path/to/Duress_Vol1
+python tools/packcheck.py path/to/Duress_Vol1 --write-readme --title "Duress - Vol. 1"
+```
+
+It checks WAV 24-bit / 44.1 kHz, catches clipped and silent files, junk like
+`.DS_Store`, untrimmed one-shots, tonal material missing its key, loops without
+a BPM in the filename, and loops whose length is not a whole number of bars at
+their stated BPM. `--write-readme` generates the pack README with real file
+counts, and refuses while there are errors. `--quick` skips decoding audio.
+
+Exit codes match the rest of the repo: `0` clean, `1` findings, `2` bad usage.
+
 ## Install
 
 Needs Python 3.11+ (it uses the stdlib TOML reader). Pillow is the only
