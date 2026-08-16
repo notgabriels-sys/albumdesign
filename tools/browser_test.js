@@ -35,7 +35,9 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     page.on('pageerror', e => errs.push('pageerror: ' + e.message));
 
     console.log(`\n=== ${scheme} theme, 360px wide ===`);
-    for (const f of ['index', 'cover', 'loudness', 'release', 'shop']) {
+    // Discovered from docs/, so a new page cannot ship without these checks.
+    for (const f of fs.readdirSync(DOCS).filter(n => n.endsWith('.html')).sort()
+                      .map(n => n.replace(/\.html$/, ''))) {
       await page.goto('file://' + path.join(DOCS, f + '.html'));
       await page.waitForTimeout(150);
       // horizontal overflow check at phone width

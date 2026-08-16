@@ -8,7 +8,9 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const ROOT = path.join(__dirname, "..", "docs");
-const PAGES = ["index.html", "cover.html", "loudness.html", "release.html", "shop.html"];
+// Discovered, not listed. A hardcoded list let splits.html ship untested,
+// which is exactly the failure a new page should not be able to have.
+const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith(".html")).sort();
 
 function chromePath() {
   const base = "/opt/pw-browsers";
