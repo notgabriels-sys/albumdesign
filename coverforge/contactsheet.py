@@ -198,7 +198,7 @@ def render_html_index(result: ContactSheetResult) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(result.title)} — Coverforge contact sheet</title>
+  <title>{escape(result.title)}: Coverforge contact sheet</title>
   <style>
     :root {{ color-scheme: dark; --ink: #101116; --surface: #181a21; --bone: #f1ede3; --muted: #aaa79f; --line: #343844; --accent: #bf9a63; }}
     * {{ box-sizing: border-box; }}

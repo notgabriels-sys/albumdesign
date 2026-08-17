@@ -28,6 +28,20 @@ DOCS = Path(__file__).resolve().parent.parent / "docs"
 # is deliberate: the last link here was never verified and was wrong.
 VERIFIED_PAYMENT_HOSTS: set[str] = set()
 
+# An em dash is never used in prose written for Gabriel. Two uses are not prose
+# and stay: the glyph standing in for a value that has not been measured yet,
+# and a release title that genuinely contains one. Anything else is a typo
+# against the house style, so name the exceptions rather than allow the glyph.
+_EM_DASH_OK = (
+    '"—"',  # placeholder for an unmeasured value
+    "Duress — Vol. 1",  # a release title, not our prose
+)
+
+
+def _em_dash_allowed(line: str) -> bool:
+    return line.count("—") == sum(line.count(ok) * ok.count("—") for ok in _EM_DASH_OK)
+
+
 failures: list[str] = []
 checks = 0
 
@@ -152,6 +166,15 @@ def main() -> int:
     print("\n=== one contact address, spelled one way ===")
     addrs = Counter(a for b in src.values() for a in re.findall(r"mailto:([^\"?]+)", b))
     check("a single contact address is used everywhere", len(addrs) <= 1, f"{dict(addrs)}")
+
+    print("\n=== no em dashes in prose, which is a house rule ===")
+    for name, body in src.items():
+        stray = [
+            line.strip()
+            for line in body.split("\n")
+            if "—" in line and not _em_dash_allowed(line)
+        ]
+        check(f"{name} has no em dash in prose", not stray, f"{stray[:2]}")
 
     print("\n=== internal links resolve ===")
     for name, body in src.items():
