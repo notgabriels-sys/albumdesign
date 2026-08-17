@@ -9,6 +9,7 @@ pack.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -107,3 +108,35 @@ def test_palette_transparency_is_flattened_onto_the_chosen_colour(tmp_path, colo
     with Image.open(out / output_name("pal", WEB_THUMB[0])) as delivered:
         pixel = delivered.convert("RGB").getpixel((100, 100))
     assert all(abs(a - b) <= 2 for a, b in zip(pixel, expected)), pixel
+
+
+def test_the_readme_example_matches_the_real_target_list():
+    """The worked example in the README drifted from targets.toml.
+
+    It showed 9 targets where a real run prints 10 (soundcloud_distro was
+    missing) and rendered Beatport at 1400x1400 where the spec says 3000. The
+    README is the first thing a stranger reads, so it is worth pinning.
+    """
+    import re
+
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    keys = [t.key for t in load_targets().select()]
+
+    counts = re.findall(r"vs (\d+) target\(s\)", readme)
+    assert counts, "the README example no longer shows a target count"
+    assert all(int(c) == len(keys) for c in counts), f"README says {counts}, there are {len(keys)}"
+
+    listed = re.search(r"ok \d+/\d+ targets clear: ([^\n]*(?:\n\s{5}[^\n]*)*)", readme)
+    assert listed, "the README example no longer lists the clear targets"
+    named = [k.strip() for k in listed.group(1).replace("\n", " ").split(",") if k.strip()]
+    assert named == keys, f"README lists {named}, targets.toml has {keys}"
+
+
+def test_the_readme_does_not_call_min_source_a_platform_floor():
+    """targets.toml says several floors are coverforge's own, not the store's.
+
+    The README said the opposite ("the store would reject it anyway"), which
+    contradicted the file it was describing.
+    """
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    assert "because the store would reject it anyway" not in readme

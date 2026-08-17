@@ -13,7 +13,7 @@ They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
 
 You finish a cover, and then comes the boring half: 3000×3000 for the
-distributor, 1400×1400 for Beatport, something under 2 MB for SoundCloud, a 9:16
+distributor, 3000×3000 for Beatport, something under 2 MB for SoundCloud, a 9:16
 crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG,
 because one wrong file gets the release bounced a week before it drops.
 `coverforge` does that pass for you and tells you up front which targets your
@@ -22,22 +22,23 @@ master can't legitimately reach.
 ```
 $ coverforge check master.png
 master.png
-  3200x3200  RGBA  PNG  4.1 MB  vs 9 target(s)
+  3200x3200  RGBA  PNG  4.1 MB  vs 10 target(s)
 
   ! has transparency; it will be flattened onto #ffffff. Most stores reject alpha
     outright, so check the result looks right
   - no ICC profile embedded; assuming sRGB
 
-  ok 9/9 targets clear: bandcamp, spotify, apple_music, beatport, soundcloud,
-     instagram_post, instagram_story, web_thumb, archive
+  ok 10/10 targets clear: bandcamp, spotify, apple_music, beatport, soundcloud,
+     soundcloud_distro, instagram_post, instagram_story, web_thumb, archive
 
 $ coverforge build master.png -o delivery/ --name "Lack of Fate - Drift Protocol"
 master.png -> delivery
   bandcamp          3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--bandcamp--3000x3000.jpg
   spotify           3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--spotify--3000x3000.jpg
   apple_music       3000x3000  jpeg q95   994 KB  lack-of-fate-drift-protocol--apple_music--3000x3000.jpg
-  beatport          1400x1400  jpeg q92   286 KB  lack-of-fate-drift-protocol--beatport--1400x1400.jpg
+  beatport          3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--beatport--3000x3000.jpg
   soundcloud        1400x1400  jpeg q90   264 KB  lack-of-fate-drift-protocol--soundcloud--1400x1400.jpg
+  soundcloud_distro 3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--soundcloud_distro--3000x3000.jpg
   instagram_post    1080x1080  jpeg q90   183 KB  lack-of-fate-drift-protocol--instagram_post--1080x1080.jpg
   instagram_story   1080x1920  jpeg q90   202 KB  lack-of-fate-drift-protocol--instagram_story--1080x1920.jpg
   web_thumb           600x600  jpeg q85    75 KB  lack-of-fate-drift-protocol--web_thumb--600x600.jpg
@@ -102,9 +103,12 @@ It will not upscale your master to fake a spec. If a 1600px master is fed to a
 3000px target, that target is **skipped** with the reason printed. `--allow-upscale`
 overrides it when you've decided you don't care.
 
-Targets with a hard platform floor (`min_source`) are a harder no: below that, the
-target is skipped even with `--allow-upscale`, because the store would reject it
-anyway.
+Targets with a floor (`min_source`) are a harder no: below that, the target is
+skipped even with `--allow-upscale`, because the render would be upscaled or
+soft. Some of those floors are stricter than what the store documents, and one
+or two are ours entirely, so each target's note in `targets.toml` says whose
+number it is and why. The web checker at `docs/cover.html` reports the
+platform's published minimum instead, which is why the two do not always agree.
 
 ## Commands
 
