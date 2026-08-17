@@ -6,15 +6,16 @@ in one command.
 **Free browser tools, nothing to install:**
 [cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
 [LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
-[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html)
+[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
+[split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
 
 You finish a cover, and then comes the boring half: 3000×3000 for the
 distributor, 1400×1400 for Beatport, something under 2 MB for SoundCloud, a 9:16
-crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG
-— because one wrong file gets the release bounced a week before it drops.
+crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG,
+because one wrong file gets the release bounced a week before it drops.
 `coverforge` does that pass for you and tells you up front which targets your
 master can't legitimately reach.
 
@@ -82,7 +83,7 @@ Every export goes through the same normalisation, once per master:
 - **EXIF rotation is baked in**, so a phone-shot or scanned element can't flip
   later in someone else's renderer.
 - **Converted to sRGB** through the embedded ICC profile if there is one. CMYK
-  masters are converted too — with a warning, because the colour *will* shift and
+  masters are converted too, with a warning, because the colour *will* shift and
   you want to see that before a store does.
 - **Alpha is flattened** onto a colour you choose (`--flatten '#000000'`), never
   silently dropped.
@@ -144,7 +145,7 @@ coverforge check final-master.tif --strict || exit 1
 ```
 
 Every build also drops a `manifest.json` and a `DELIVERY.md` table next to the
-files — the second one is handy to paste into a mail to a label or distributor.
+files. The second one is handy to paste into a mail to a label or distributor.
 
 ## Picking between variants
 
@@ -159,8 +160,8 @@ coverforge contact-sheet ~/art/ft011-variants/ \
 It writes exactly two files, into a **new** directory that must sit outside
 every source image's own folder:
 
-- `CONTACT_SHEET.jpg` — a numbered, letterboxed preview grid
-- `CONTACT_SHEET.html` — an offline index mapping each number to its filename,
+- `CONTACT_SHEET.jpg`: a numbered, letterboxed preview grid
+- `CONTACT_SHEET.html`: an offline index mapping each number to its filename,
   dimensions and colour mode
 
 `--dry-run` validates the images, layout and output location without writing
@@ -181,7 +182,7 @@ it says nothing about whether a platform will accept the files.
 ## The specs are yours to edit
 
 `coverforge/targets.toml` holds every target. **The numbers in it are a best-effort
-snapshot, and platforms change requirements without announcing it** — check them
+snapshot, and platforms change requirements without announcing it**, so check them
 against whatever your distributor currently demands before you rely on them.
 
 Adding a target is a few lines:

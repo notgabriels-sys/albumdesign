@@ -38,11 +38,11 @@ These come from his operating profile and apply to anything leaving this repo:
 
 ## Repo layout
 
-- `coverforge/` — the Python CLI. `targets.toml` holds the platform specs and
+- `coverforge/`: the Python CLI. `targets.toml` holds the platform specs and
   is meant to be edited; the numbers are a best-effort snapshot.
-- `docs/` — **this is the GitHub Pages web root.** Anything committed here is
+- `docs/`: **this is the GitHub Pages web root.** Anything committed here is
   published. Do not put planning notes, specs, or scratch files in it.
-- `tools/` — the test suites. Fixtures are generated, not committed.
+- `tools/`: the test suites. Fixtures are generated, not committed.
 
 ## Testing
 
