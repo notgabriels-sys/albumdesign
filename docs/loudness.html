@@ -121,7 +121,7 @@
   <main id="main">
   <h1>Is your master the right loudness?</h1>
   <p class="lede">Drop a bounce and see its integrated LUFS and true peak, measured the way the platforms
-    measure it (ITU-R BS.1770), then exactly how Spotify, Apple Music and the clubs will turn it up or down.</p>
+    measure it (ITU-R BS.1770), then how Spotify, Apple Music and the rest are likely to turn it up or down.</p>
 
   <label class="drop" id="drop">
     <input type="file" id="file" accept="audio/*,.wav,.aiff,.flac,.mp3,.m4a" aria-label="Choose or drop an audio file">
@@ -146,11 +146,11 @@
         </div>
         <p class="note">Streaming services normalise loudness: a master louder than their reference is turned
           down, so extra loudness buys nothing but lost dynamics. Clubs and DJ media are not normalised, so a
-          separate louder master makes sense there. Apple's Sound Check only turns tracks down, never up.</p>
+          separate louder master makes sense there. Apple's Sound Check and YouTube are both reported to turn tracks down only, never up, which is why they are shown as never boosted below. That behaviour is observed rather than published, the same as the figures marked *.</p>
         <p class="note">Spotify is the only one of these we could confirm publishes a number in its own
           artist documentation. Figures marked * are measured consistently by third parties but are not
           documented by the platform, so treat them as observed rather than spec. Spotify's guidance is to
-          keep true peak below -1 dBTP, and below -2 dBTP if your master is louder than -14 LUFS.</p>
+          keep true peak below -1 dBTP, and below -2 dBTP if your master is louder than -14 LUFS. This tool flags anything above that ceiling, so a master sitting exactly on -1.0 dBTP is not flagged; the release checklist states the same rule as "at or below".</p>
         <p class="note">Spotify does say to target -14 LUFS. The reason to ignore that as a mastering goal
           is not that they never asked, it is that normalisation makes hitting it pointless: everything
           louder is turned down to the same place anyway, so chasing the number costs dynamics and buys
@@ -214,14 +214,69 @@
     fr.readAsArrayBuffer(file);
   }
 
+  // decodeAudioData resamples to the AudioContext's rate, which is the
+  // listener's audio device, not the file. Reporting ab.sampleRate told a user
+  // with a 48k interface that their 44.1k master was 48k, and told everyone
+  // else the opposite. Read the rate out of the container instead, and show
+  // nothing when the container is not one we can read rather than guess.
+  function fileSampleRate(buf){
+    var b=new Uint8Array(buf), dv=new DataView(buf);
+    function tag(o){return String.fromCharCode(b[o],b[o+1],b[o+2],b[o+3])}
+    if(b.length<16) return null;
+    try{
+      if(tag(0)==="RIFF"&&tag(8)==="WAVE"){
+        for(var o=12;o+8<=b.length;){
+          var id=tag(o), size=dv.getUint32(o+4,true);
+          if(id==="fmt ") return dv.getUint32(o+12,true);
+          o+=8+size+(size&1);
+        }
+        return null;
+      }
+      if(tag(0)==="FORM"&&(tag(8)==="AIFF"||tag(8)==="AIFC")){
+        for(var p=12;p+8<=b.length;){
+          var cid=tag(p), csz=dv.getUint32(p+4,false);
+          if(cid==="COMM"){
+            // Sample rate is an 80-bit IEEE 754 extended float.
+            var ex=dv.getUint16(p+16,false), hi=dv.getUint32(p+18,false), lo=dv.getUint32(p+22,false);
+            var sign=ex&0x8000?-1:1, e=(ex&0x7fff)-16383;
+            var mant=hi*4294967296+lo;
+            return Math.round(sign*mant*Math.pow(2,e-63))||null;
+          }
+          p+=8+csz+(csz&1);
+        }
+        return null;
+      }
+      if(tag(0)==="fLaC"){
+        // First metadata block is STREAMINFO; rate is 20 bits at byte 10.
+        var s=8;
+        return ((b[s+10]<<12)|(b[s+11]<<4)|(b[s+12]>>4))||null;
+      }
+      // MP3: first frame header after any ID3v2 tag.
+      var start=0;
+      if(tag(0).slice(0,3)==="ID3") start=10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]);
+      for(var i=start;i<Math.min(b.length-4,start+200000);i++){
+        if(b[i]===0xff&&(b[i+1]&0xe0)===0xe0){
+          var ver=(b[i+1]>>3)&3, idx=(b[i+2]>>2)&3;
+          var base=[44100,48000,32000][idx];
+          if(base===undefined) continue;
+          if(ver===3) return base;          // MPEG 1
+          if(ver===2) return base/2;        // MPEG 2
+          if(ver===0) return base/4;        // MPEG 2.5
+        }
+      }
+    }catch(e){ return null; }
+    return null;
+  }
+
   function decode(buf){
     say("Decoding audio …");
+    var declared=fileSampleRate(buf);
     var AC=window.AudioContext||window.webkitAudioContext;
     var ctx=new AC();
     ctx.decodeAudioData(buf.slice(0)).then(function(ab){
       ctx.close();
       say("Measuring loudness …");
-      setTimeout(function(){analyse(ab)},30);
+      setTimeout(function(){analyse(ab,declared)},30);
     }).catch(function(){ ctx.close(); say("That audio format could not be decoded. Try a WAV or AIFF export."); });
   }
 
@@ -293,7 +348,7 @@
     return pct(0.95)-pct(0.10);
   }
 
-  function analyse(ab){
+  function analyse(ab,declaredRate){
     resample(ab,48000).then(function(rb){
       var G=CH_WEIGHTS[rb.numberOfChannels];
       if(!G) return say("Only mono, stereo, quad and 5.1 files can be measured.");
@@ -312,7 +367,7 @@
       }
       // A true-peak failure must not throw away loudness numbers we already have.
       return truePeak(ab).catch(function(){return NaN})
-        .then(function(tp){ render(ab,LUFS,tp,momMax,shMax,LRA); });
+        .then(function(tp){ render(ab,LUFS,tp,momMax,shMax,LRA,declaredRate); });
     }).catch(function(){ say("Analysis failed on this file. A stereo WAV works best."); });
   }
 
@@ -334,15 +389,20 @@
   function fmt(x,d){return (x==null||x<=-1000||!isFinite(x))?"—":x.toFixed(d===undefined?1:d)}
   function mmss(s){var m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+(ss<10?"0":"")+ss}
 
-  function render(ab,LUFS,tp,momMax,shMax,LRA){
+  function render(ab,LUFS,tp,momMax,shMax,LRA,declaredRate){
     status.classList.remove("show");
-    var tpFlag=tp>-1;
+    // The page states Spotify's rule as -1 dBTP, and -2 if the master is louder
+    // than -14 LUFS. The flag was a flat tp>-1 with no loudness term, so the
+    // stricter half was advice the tool never applied: a club master at -1.5
+    // LUFS and -1.5 dBTP passed silently, in exactly the case the rule targets.
+    var tpCeiling = LUFS>-14 ? -2 : -1;
+    var tpFlag = tp > tpCeiling;
     var metrics=[
       {k:"Integrated",v:fmt(LUFS),u:"LUFS",flag:false},
-      {k:"True peak",v:fmt(tp),u:"dBTP"+(tpFlag?" · over -1":""),flag:tpFlag},
+      {k:"True peak",v:fmt(tp),u:"dBTP"+(tpFlag?" · over "+tpCeiling:""),flag:tpFlag},
       {k:"Loudness range",v:fmt(LRA),u:"LU"},
       {k:"Short-term max",v:fmt(shMax),u:"LUFS"},
-      {k:"Duration",v:mmss(ab.duration),u:(ab.numberOfChannels===1?"mono":ab.numberOfChannels===2?"stereo":ab.numberOfChannels+" ch")+" · "+ab.sampleRate/1000+"k"}
+      {k:"Duration",v:mmss(ab.duration),u:(ab.numberOfChannels===1?"mono":ab.numberOfChannels===2?"stereo":ab.numberOfChannels+" ch")+(declaredRate?" · "+(declaredRate/1000)+"k":"")}
     ];
     $("metrics").innerHTML=metrics.map(function(m){
       return "<div class='metric"+(m.flag?" flag":"")+"'><div class='k'>"+m.k+"</div><div class='v'>"+m.v+"</div><div class='u'>"+m.u+"</div></div>";
@@ -355,7 +415,7 @@
     else if(LUFS>-16) msg="At <b>"+fmt(LUFS)+" LUFS</b> this is close to streaming reference, a sensible target for a modern master.";
     else msg="At <b>"+fmt(LUFS)+" LUFS</b> this is on the quiet side for streaming. It will keep all its dynamics, and some services will turn it up.";
     if(ab.numberOfChannels===1) msg+=" This is a <b>mono</b> file. BS.1770 sums the channels, so identical material in stereo reads 3.0 LU louder. The platforms measure it the same way, so the gain figures below are still right.";
-    if(tpFlag) msg+=" Your true peak is <b>"+fmt(tp)+" dBTP</b>, above the -1 dBTP ceiling, which can distort after lossy encoding. Pull the ceiling down.";
+    if(tpFlag) msg+=" Your true peak is <b>"+fmt(tp)+" dBTP</b>, above the "+tpCeiling+" dBTP ceiling"+(tpCeiling===-2?" that applies because this master is louder than -14 LUFS":"")+", which can distort after lossy encoding. Pull the ceiling down.";
     $("read").innerHTML=msg;
 
     // platform table
@@ -368,8 +428,10 @@
       var lab = Math.abs(gain)<=0.5?"as-is":(gain<0?"turned down":"turned up");
       if(p.attenuateOnly&&p.t-LUFS>0.5) lab="as-is, never boosted";
       // Sources disagree on whether this one raises quiet material, so say so
-      // rather than assert a lift that may never happen.
-      if(p.disputed&&p.t-LUFS>0.5){lab="may not be raised";st="warn"}
+      // rather than assert a lift that may never happen. The gain column has to
+      // stay quiet too: printing "+9.0 dB" next to "may not be raised" asserted
+      // in numbers exactly the lift the label refuses to claim.
+      if(p.disputed&&p.t-LUFS>0.5){lab="may not be raised";st="warn";g="not stated"}
       var ref=p.t+" LUFS"+(p.official?"":" *");
       return "<tr><th scope='row'>"+p.n+"</th><td class='num'>"+ref+"</td>"+
         "<td class='num'>"+g+"</td>"+

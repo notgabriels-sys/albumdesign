@@ -269,21 +269,35 @@ def test_builds_are_byte_reproducible(master, tmp_path):
     in its header. Left as littlecms writes it, that made every rebuild produce
     different files, different output hashes, and a different capture_id, which
     would make the manifest useless for confirming a pack is unchanged.
+
+    Run in two separate processes on purpose. Both builds in one process share
+    a module-level SRGB_BYTES computed once at import, so any nondeterminism
+    that varies per process rather than per call was invisible: setting that
+    constant to a profile with a live timestamp left this test passing.
     """
-    source = inspect(master)
-    first = build(source, ALL_TARGETS, out_dir=tmp_path / "one", slug="lof001")
-    second = build(source, ALL_TARGETS, out_dir=tmp_path / "two", slug="lof001")
+    import subprocess
+    import sys
 
-    assert [o.sha256 for o in first.outputs] == [o.sha256 for o in second.outputs]
+    def build_in_a_fresh_process(out):
+        done = subprocess.run(
+            [sys.executable, "-m", "coverforge", "build", str(master),
+             "-o", str(out), "--name", "lof001"],
+            capture_output=True, text=True, cwd=Path(__file__).resolve().parent.parent,
+        )
+        assert done.returncode in (0, 1), done.stderr
+        return json.loads((out / "manifest.json").read_text())
 
-    one = json.loads((tmp_path / "one" / "manifest.json").read_text())
-    two = json.loads((tmp_path / "two" / "manifest.json").read_text())
+    one = build_in_a_fresh_process(tmp_path / "one")
+    two = build_in_a_fresh_process(tmp_path / "two")
+
     assert one == two
     assert one["capture_id"] == two["capture_id"]
 
     # And the bytes on disk really are identical, not just the recorded hashes.
-    for a, b in zip(first.outputs, second.outputs):
-        assert a.path.read_bytes() == b.path.read_bytes()
+    for entry in one["outputs"]:
+        a = (tmp_path / "one" / entry["file"]).read_bytes()
+        b = (tmp_path / "two" / entry["file"]).read_bytes()
+        assert a == b, f"{entry['file']} differs between two separate build processes"
 
 
 def test_srgb_profile_has_no_embedded_timestamp():
@@ -309,15 +323,37 @@ def test_manifest_hashes_the_bytes_it_actually_rendered(master, tmp_path, monkey
         Path(path).write_bytes(replacement.getvalue())
         return original(path, flatten_colour, data=data)
 
+    # Captured before the swap: this is what the manifest must certify, because
+    # these are the bytes the build read and decoded.
+    original_digest = hashlib.sha256(master.read_bytes()).hexdigest()
+
     monkeypatch.setattr(imageops_module, "normalise", swap_then_decode)
     targets = [t for t in ALL_TARGETS if t.key == "spotify"]
     result = build(inspect(master), targets, out_dir=tmp_path / "d", slug="probe")
 
     manifest = json.loads((tmp_path / "d" / "manifest.json").read_text())
-    # The file on disk is now the replacement, so a digest matching it would
-    # mean we hashed bytes we never rendered.
-    assert manifest["source"]["sha256"] != hashlib.sha256(master.read_bytes()).hexdigest()
+    assert manifest["source"]["sha256"] == original_digest
     assert manifest["source"]["sha256"] == result.source_sha256
+
+    # The assertion that actually bites. Comparing digests alone passed even
+    # with the double-read bug reintroduced, because the two digests differ
+    # either way. What distinguishes the two is the pixels: if normalise had
+    # re-read from disk it would have decoded the flat green replacement, and
+    # the manifest would be certifying a digest for art nobody rendered.
+    with Image.open(result.outputs[0].path) as delivered:
+        small = delivered.convert("RGB").resize((8, 8))
+        raw = small.tobytes()
+    pixels = [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
+    avg = tuple(sum(c) / len(c) for c in zip(*pixels))
+    # JPEG will not return exactly (0,255,0), so judge it by tolerance: if
+    # normalise had re-read from disk it would have decoded the flat green
+    # replacement and this average would sit on green. The real master is a
+    # red-to-blue gradient, which cannot.
+    looks_like_the_replacement = avg[0] < 60 and avg[1] > 190 and avg[2] < 60
+    assert not looks_like_the_replacement, (
+        f"delivered file averages {avg}, which is the replacement image, so the "
+        "render used a second read while the manifest hashed the first"
+    )
 
 
 def test_masters_sharing_a_name_do_not_overwrite_each_others_packs(tmp_path, capsys):

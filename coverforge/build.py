@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
@@ -144,6 +146,32 @@ def output_name(slug: str, target: Target) -> str:
     return f"{slug}--{target.key}--{target.dimensions}.{target.extension}"
 
 
+def write_new_bytes(path: Path, data: bytes) -> None:
+    """Write a delivery file, refusing to follow a symlink that is already there.
+
+    Building into an existing directory is a supported flow, so the directory
+    can hold entries this build did not create. A plain write follows a symlink,
+    which let a planted link redirect a delivery file anywhere the user could
+    write, while the manifest still recorded it as part of the pack. O_NOFOLLOW
+    fails on the link itself instead.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise imageops.ImageError(
+                f"{path} is a symlink; refusing to write through it. "
+                "Remove it or build into a clean directory."
+            ) from None
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except OSError as exc:
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
+
+
 def build(
     src: SourceImage,
     targets: list[Target],
@@ -184,7 +212,7 @@ def build(
         rendered = imageops.render(normalised, target)
         encoded: Encoded = imageops.encode(rendered, target)
         path = out_dir / output_name(slug, target)
-        path.write_bytes(encoded.data)
+        write_new_bytes(path, encoded.data)
         result.outputs.append(
             Output(
                 target=target,

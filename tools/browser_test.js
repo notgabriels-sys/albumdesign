@@ -65,6 +65,7 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     await page.waitForTimeout(250);
     return page.evaluate(() => ({
       verdict: document.getElementById('vtitle').textContent,
+      verdictSub: document.getElementById('vsub').textContent,
       checks: [...document.querySelectorAll('#checks li')].map(li => ({
         pill: li.querySelector('.pill').textContent.trim(),
         name: li.querySelector('.name').textContent.trim(),
@@ -114,6 +115,27 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(separated.length === r.platforms.length,
      `every platform row separates verdict from reason (${separated.length}/${r.platforms.length})`);
 
+  // An undecodable file must not be reported as clear. Chromium cannot decode
+  // TIFF, so this arrived with no dimensions and no colour mode, every check
+  // that needed them skipped itself, and the verdict said "No blockers" while
+  // all seven platform tiles read Fail.
+  r = await runCover('cmyk_nonsquare.tif');
+  ok(/Could not check/.test(r.verdict), `undecodable file -> verdict "${r.verdict}"`);
+  ok(!/No blockers/.test(r.verdictSub), `undecodable file does not claim no blockers -> "${r.verdictSub}"`);
+  ok(!!check(r, 'readable'), `undecodable file gets an explicit readable check`);
+
+  // Greyscale+alpha matched the grayscale branch first and lost the flatten
+  // advice an RGBA file gets.
+  r = await runCover('gray_alpha_3000.png');
+  ok(/[Ff]latten/.test(check(r, 'colour').msg), `grayscale+alpha still says flatten -> "${check(r,'colour').msg}"`);
+
+  // The verdict used to be computed from the checks alone, so it could call a
+  // file ready while a platform tile below it read Fail.
+  r = await runCover('good_3000.jpg');
+  const anyFail = r.platforms.some(t => /Fail/.test(t));
+  ok(!anyFail || /does not meet/.test(r.verdictSub),
+     `verdict admits a failing platform when there is one -> "${r.verdictSub}"`);
+
   // ---- functional: loudness tool with a known -23 dBFS sine ----
   console.log('\n=== loudness tool, known -23.0 dBFS stereo sine ===');
   await page.goto('file://' + path.join(DOCS, 'loudness.html'));
@@ -143,6 +165,43 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   // Tidal's boost behaviour is disputed, so it must not assert one either.
   const tidalRow = m.rows.find(t => /Tidal/.test(t));
   ok(!/turned up/.test(tidalRow), `Tidal does not assert a boost -> "${tidalRow}"`);
+
+  // A loud master must be judged against the stricter ceiling the page states.
+  // The flag used to be a flat tp > -1, so a -1.5 dBTP club master passed while
+  // both pages told the reader -2 applied above -14 LUFS. The declared sample
+  // rate must also come from the file header: decodeAudioData resamples to the
+  // audio device's rate, which reported 44.1k for every file on this machine
+  // and would report 48k for every file on a 48k interface.
+  console.log('\n=== loud master: stricter ceiling, and the file\'s own rate ===');
+  await page.goto('file://' + path.join(DOCS, 'loudness.html'));
+  await page.setInputFiles('#file', path.join(FIX, 'loud_44100.wav'));
+  await page.waitForSelector('#results.show', { timeout: 60000 });
+  await page.waitForTimeout(400);
+  const loud = await page.evaluate(() => {
+    const g = {};
+    document.querySelectorAll('.metric').forEach(el => {
+      g[el.querySelector('.k').textContent.trim()] = {
+        v: el.querySelector('.v').textContent.trim(),
+        u: el.querySelector('.u').textContent.trim(),
+        flag: el.classList.contains('flag'),
+      };
+    });
+    return { m: g, rows: [...document.querySelectorAll('#ptable tr')].map(t => t.textContent.replace(/\s+/g, ' ').trim()) };
+  });
+  ok(parseFloat(loud.m['Integrated'].v) > -14, `fixture is louder than -14 LUFS (${loud.m['Integrated'].v})`);
+  ok(loud.m['True peak'].flag, `true peak flagged against the -2 ceiling (${loud.m['True peak'].v} ${loud.m['True peak'].u})`);
+  ok(/over -2/.test(loud.m['True peak'].u), `the stricter ceiling is named -> "${loud.m['True peak'].u}"`);
+  ok(/44\.1k/.test(loud.m['Duration'].u), `sample rate read from the file, not the device -> "${loud.m['Duration'].u}"`);
+
+  // A disputed platform must not print a gain figure beside "may not be raised".
+  await page.goto('file://' + path.join(DOCS, 'loudness.html'));
+  await page.setInputFiles('#file', path.join(FIX, 'sine_-23dBFS.wav'));
+  await page.waitForSelector('#results.show', { timeout: 60000 });
+  await page.waitForTimeout(400);
+  const quietRows = await page.evaluate(() =>
+    [...document.querySelectorAll('#ptable tr')].map(t => t.textContent.replace(/\s+/g, ' ').trim()));
+  const tRow = quietRows.find(t => /Tidal/.test(t));
+  ok(!/[+-]?\d+\.\d+ dB/.test(tRow), `Tidal states no gain it will not commit to -> "${tRow}"`);
 
   // ---- audio edge cases: must not leak Infinity or hang ----
   console.log('\n=== loudness edge cases ===');
