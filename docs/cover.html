@@ -172,6 +172,11 @@
         art tagged above 72 DPI, and SoundCloud's own upload form caps images at 2 MB, so keep a
         compressed copy for that. Specs were checked against platform documentation in August 2026
         and do drift, so confirm against your own distributor before release.</p>
+      <p class="srcnote">The minimums above are what each platform publishes. The
+        <code>coverforge</code> command-line tool is deliberately stricter for some of them, because
+        it refuses to render a target from a master too small to fill it honestly. If the two
+        disagree about a platform, that is why, and the reason is written next to each target in
+        <code>coverforge/targets.toml</code>.</p>
     </div>
   </section>
 
