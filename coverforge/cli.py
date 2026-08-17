@@ -185,15 +185,24 @@ def cmd_build(args) -> int:
             used_slugs[slug] = path
         out_dir = out_root if len(masters) == 1 else out_root / slug
 
-        result = build(
-            src,
-            targets,
-            out_dir=out_dir,
-            slug=slug,
-            flatten_colour=args.flatten,
-            allow_upscale=args.allow_upscale,
-            dry_run=args.dry_run,
-        )
+        # A master that survives inspect() can still fail while rendering: a
+        # truncated file, or a symlink sitting where a delivery file goes. That
+        # used to escape as a traceback and abandon the rest of the batch, so
+        # one bad file cost every master queued behind it.
+        try:
+            result = build(
+                src,
+                targets,
+                out_dir=out_dir,
+                slug=slug,
+                flatten_colour=args.flatten,
+                allow_upscale=args.allow_upscale,
+                dry_run=args.dry_run,
+            )
+        except ImageError as exc:
+            failed_reads += 1
+            print(f"{path}: {exc}", file=sys.stderr)
+            continue
         results.append(result)
 
         # Building into an occupied directory overwrites silently and leaves

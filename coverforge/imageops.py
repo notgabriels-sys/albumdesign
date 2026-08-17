@@ -170,7 +170,15 @@ def normalise(
     source = io.BytesIO(data) if data is not None else path
     try:
         with Image.open(source) as opened:
-            im = opened.convert("RGBA") if opened.mode in ALPHA_MODES else opened.copy()
+            # Mode P carries its transparency in info, not in the mode, so
+            # testing the mode alone missed every transparent PNG-8 and GIF:
+            # they skipped the flatten below and had convert("RGB") paint the
+            # transparent pixels whatever colour sat at that palette index,
+            # while preflight had already promised the user a flatten onto
+            # their chosen background. inspect() reads transparency the same
+            # way, so the warning and the render now agree.
+            transparent = opened.mode in ALPHA_MODES or "transparency" in opened.info
+            im = opened.convert("RGBA") if transparent else opened.copy()
             icc = opened.info.get("icc_profile")
     except UnidentifiedImageError:
         raise ImageError(f"not a readable image: {path}") from None
