@@ -12,7 +12,14 @@
 #   height     output height in px
 #   format     jpeg | png
 #   quality    JPEG quality (ignored for png)
-#   min_source smallest master edge that may feed this target, in px
+#   min_source smallest master edge that may feed this target, in px.
+#              This is COVERFORGE'S floor, not necessarily the platform's. It is
+#              the point below which rendering the target would mean upscaling
+#              or shipping something soft, so the target is skipped instead.
+#              Several are deliberately stricter than what the store documents,
+#              and each note says why. The web cover checker at docs/cover.html
+#              reports the PLATFORM'S published minimum, so the two answer
+#              different questions and will not always agree.
 #   max_bytes  hard file-size ceiling; quality is walked down to fit
 #   fit        cover (scale + centre crop) | pad (scale to fit + fill)
 #   pad_style  blur | a #rrggbb colour. only used when fit = "pad"
@@ -66,7 +73,7 @@ quality = 95
 min_source = 3000
 max_bytes = 30_000_000
 fit = "cover"
-notes = "Strictest of the DSPs: flattened RGB, no alpha, baseline (non-progressive) JPEG."
+notes = "Apple documents 1400 minimum and 3000 recommended, and its artist page asks for 4000. 3000 here because delivering the recommended size is the point of this target. Strictest of the DSPs: flattened RGB, no alpha, baseline (non-progressive) JPEG."
 source = "https://help.apple.com/itc/musicspec/"
 
 [targets.beatport]
@@ -79,7 +86,7 @@ quality = 92
 min_source = 1400
 max_bytes = 10_000_000
 fit = "cover"
-notes = "Beatport publishes no minimum, only a preferred 3000x3000. It can reject art tagged above 72 DPI."
+notes = "Beatport publishes no minimum, only a preferred 3000x3000, so the 1400 floor here is ours: below that a 3000px render is mostly invented pixels. It can reject art tagged above 72 DPI."
 source = "https://greenroomsupport.beatport.com/hc/en-us/articles/19096342438164-What-size-release-cover-artwork-do-you-accept"
 
 [targets.soundcloud]
