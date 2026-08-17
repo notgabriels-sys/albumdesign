@@ -146,17 +146,38 @@ to correct a wrong attribution, not as grounds for a new hard claim.
   works. Do not accept a remembered figure as confirmation, including his: that
   is how this one survived two rounds of review.
 
-  Read again in August 2026, and the answer got firmer. The only Stripe account
-  reachable from here is **test mode**; there is no live account at all. All
-  three links are test links, none is for mixing or mastering, and every one
-  carries `blocked_on: steuernummer_not_yet_issued` with invoice footers still
-  holding the placeholder `VOR LIVEBETRIEB EINTRAGEN: Name, Anschrift,
-  Steuernummer`, which §14 UStG requires. So card is not merely unverified, it
-  is not set up, and it cannot be until the Finanzamt issues the number.
+  **Resolved on the Stripe side, 17 August 2026.** He activated live mode and
+  reconnected the connector, and the live account was then readable. What it
+  held: two live links, both €160 for a product called "Engineering", both
+  `tax_behavior: exclusive` with automatic tax on, and their URLs were the test
+  slugs with `test_` removed. One of them was character-for-character the URL
+  that had been on the shop. It had gone from resolving to nothing to being
+  live and chargeable. Both are now deactivated
+  (`plink_1U4bZUBKk5iV3TpTBUBzG6CX`, `plink_1U4bZHBKk5iV3TpTrwxQz0m8`).
 
-  Gabriel has said card payment is fine by him. That is a decision about what he
-  wants to accept, not evidence the mechanism exists, and the shop now says
-  invoices are settled by bank transfer with card arranged on request.
+  Three correct links replaced them, created and then read back through the API:
+
+  | service | amount | tax_behavior | automatic_tax |
+  |---|---|---|---|
+  | Mastering, one track | €45.00 | inclusive | off |
+  | Mixing, one track | €160.00 | inclusive | off |
+  | Mix + master, one track | €190.00 | inclusive | off |
+
+  All three report `amount_tax: 0`, matching the rate card and the "prices on
+  this page are the total" line. Account tax settings are now head office
+  Germany, prices tax-inclusive, tax collection not started, which is right for
+  a §19 Kleinunternehmer.
+
+  **The buttons are still not on the shop, and the reason has changed.** It is
+  no longer that the links are wrong. It is that taking card money creates an
+  obligation to issue an invoice, and §14 UStG wants a Steuernummer he does not
+  have yet: the number he has is the 11-digit Identifikationsnummer from the
+  BZSt, which is not valid for invoices. Put the buttons up once the Finanzamt
+  issues the Steuernummer, not before.
+
+  Gabriel saying card payment is fine by him was a decision about what he wants
+  to accept, never evidence the mechanism existed. Reading the objects is what
+  found both the €1,200 link and the €160-plus-VAT pair.
 - GVL catalogue table and the Förderantrag both have blanks only he can fill:
   real release dates, ISRCs, which tracks were actually released, real bio
   facts and real costs. Do not guess any of them.
