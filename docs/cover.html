@@ -300,15 +300,23 @@
     $("thumb").src=url;
     var w=info.width,h=info.height,small=Math.min(w,h),large=Math.max(w,h);
     var checks=[];
+    // Chromium cannot decode TIFF, so a CMYK TIFF, the exact file this tool
+    // exists to catch, arrived with no dimensions and no colour mode. The
+    // square, resolution and colour checks all silently skipped themselves and
+    // the verdict came out "No blockers" while every platform tile read Fail.
+    var unreadable=!w||!h;
+    if(unreadable){
+      checks.push(["readable","fail","This browser could not decode the file, so its size, shape and colour were not checked. Export a JPEG and run it again"]);
+    }
 
     // format
-    if(info.format==="JPEG") checks.push(["format","pass","JPEG, the one format every distributor documents"]);
+    if(info.format==="JPEG") checks.push(["format","pass","JPEG, the format every distributor checked here documents"]);
     else if(info.format==="PNG") checks.push(["format","warn","PNG is accepted by most, but DistroKid documents JPG only. Export a JPEG to be safe"]);
     // TIFF and GIF are not universally rejected: Spotify's provider spec lists
     // TIFF, and Bandcamp, CD Baby and TuneCore all document GIF. Warn rather
     // than fail, since "not accepted" would be wrong for those platforms.
     else if(info.format==="unknown") checks.push(["format","fail","Unrecognised file. Export a JPEG"]);
-    else checks.push(["format","warn",info.format+" is accepted by some stores but not all. Export a JPEG, which every distributor documents"]);
+    else checks.push(["format","warn",info.format+" is accepted by some stores but not all. Export a JPEG, which every distributor checked here documents"]);
     // square
     if(w&&h){ if(w===h) checks.push(["square","pass",w+" x "+h]);
       else checks.push(["square","fail",w+" x "+h+" is not square. Crop it to 1:1"]); }
@@ -333,8 +341,12 @@
     // colour
     var m=info.mode;
     if(m==="RGB") checks.push(["colour","pass","RGB"]);
-    else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by stores. Convert to RGB / sRGB"]);
+    else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by the stores checked here. Convert to RGB / sRGB"]);
     else if(m==="RGBA") checks.push(["colour","warn","Has an alpha channel. Flatten onto a solid background"]);
+    // Grayscale+A matched the grayscale branch first and lost the flatten
+    // advice, so a transparent greyscale PNG heard nothing about its alpha
+    // while an RGBA file was told to flatten.
+    else if(m&&m.indexOf("Grayscale")===0&&/\+A$/.test(m)) checks.push(["colour","warn","Grayscale with an alpha channel. Flatten onto a solid background and convert to RGB"]);
     else if(m&&m.indexOf("Grayscale")===0) checks.push(["colour","warn","Grayscale. Convert to RGB to be safe"]);
     else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG. Re-export as RGB"]);
     else checks.push(["colour","warn","Colour mode unread. Make sure it is RGB / sRGB"]);
@@ -363,18 +375,13 @@
       $("checks").appendChild(li);
     });
 
-    // verdict
-    var vt=$("vtitle"),vs=$("vsub"),dot=document.querySelector("#verdict .dot");
-    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
-    dot.style.background=col; vt.style.color=col;
-    if(worst==="fail"){vt.textContent="Not ready to upload";vs.textContent="Fix the red items below before you send this to a distributor.";}
-    else if(worst==="warn"){vt.textContent="Good to go, with notes";vs.textContent="No blockers. The amber items are worth tightening for the best result.";}
-    else{vt.textContent="Ready to ship";vs.textContent="This cover clears the common store and distributor requirements.";}
-
-    // platforms
-    $("platforms").innerHTML="";
+    // Platform results are worked out before the verdict, because the verdict
+    // used to be computed from `checks` alone and could not see them. A 3000px
+    // square JPEG at 5.8 MB read "Ready to ship: this cover clears the common
+    // store and distributor requirements" while the SoundCloud tile underneath
+    // it read Fail on that platform's 2 MB cap.
     var isSquare=(w===h);
-    PLATFORMS.forEach(function(p){
+    var plats=PLATFORMS.map(function(p){
       var st,label;
       if(!small||!isSquare){st="fail";label=!isSquare?"needs 1:1 square":"unknown size";}
       else if(p.min&&small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
@@ -382,14 +389,46 @@
       else if(p.name==="Instagram"&&small>p.rec){st="pass";label="downscaled to "+p.rec+"px on upload";}
       else if(small<p.rec){st="warn";label=small+"px ok · "+p.rec+" ideal";}
       else{st="pass";label=p.note;}
-      var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[st];
+      return {p:p,st:st,label:label};
+    });
+    var failedPlats=plats.filter(function(x){return x.st==="fail"}).map(function(x){return x.p.name});
+
+    // verdict
+    var vt=$("vtitle"),vs=$("vsub"),dot=document.querySelector("#verdict .dot");
+    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
+    dot.style.background=col; vt.style.color=col;
+    if(unreadable){
+      // Nothing below was measured, so saying "no blockers" would be a verdict
+      // on a file this browser never opened.
+      vt.textContent="Could not check this file";
+      vs.textContent="Your browser could not decode it, so its size, shape and colour were not checked. Export a JPEG and run it again.";
+    }
+    else if(worst==="fail"){vt.textContent="Not ready to upload";vs.textContent="Fix the red items below before you send this to a distributor.";}
+    else if(worst==="warn"){
+      vt.textContent="Good to go, with notes";
+      vs.textContent="Nothing above failed outright. The amber items name the platforms and limits they apply to, so read them before you deliver.";
+    }
+    else{
+      vt.textContent="Ready to ship";
+      vs.textContent="This cover clears every check above.";
+    }
+    // Whatever the checks said, a failing tile is a platform this file will not
+    // clear, and the verdict has to admit it.
+    if(!unreadable&&failedPlats.length){
+      vs.textContent+=" It does not meet "+failedPlats.join(", ")+"; see the platform grid.";
+    }
+
+    // platforms
+    $("platforms").innerHTML="";
+    plats.forEach(function(x){
+      var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[x.st];
       var el=document.createElement("div"); el.className="plat";
-      var word={pass:"Pass",warn:"Check",fail:"Fail"}[st];
-      el.innerHTML="<div class='n'>"+p.name+"<span class='tick' style='background:"+col2+"' aria-hidden='true'></span></div>"+
+      var word={pass:"Pass",warn:"Check",fail:"Fail"}[x.st];
+      el.innerHTML="<div class='n'>"+x.p.name+"<span class='tick' style='background:"+col2+"' aria-hidden='true'></span></div>"+
         // The label is a lowercase fragment written to follow a separator. Without
         // one, "Pass" runs into the number and reads as a threshold ("Pass 1400")
         // rather than a verdict plus the floor behind it.
-        "<div class='s'><b>"+word+"</b>: "+label+"</div>";
+        "<div class='s'><b>"+word+"</b>: "+x.label+"</div>";
       $("platforms").appendChild(el);
     });
 
