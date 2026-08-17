@@ -50,6 +50,17 @@ coverforge sheet path/to/variants -o review/lof-variants.jpg --columns 4 --title
 The command accepts a mix of image files and directories. It writes one JPEG
 file by default and is intended to support batch feedback loops before delivery.
 
+Validate completed delivery packs before sharing them with collaborators or labels:
+
+```bash
+coverforge audit build/my-release
+```
+
+If you generated only a subset (`--only` / `--group`), use the same flags in
+`audit` to check that same subset only. The command validates expected files are
+present, filenames are parseable, and file dimensions/formats match the selected
+target definitions.
+
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one

@@ -259,3 +259,37 @@ def test_cli_sheet_rejects_no_images(tmp_path, capsys):
     out = tmp_path / "sheet.jpg"
     assert main(["sheet", str(tmp_path), "-o", str(out)]) == 2
     assert "no images found" in capsys.readouterr().err
+
+
+def test_cli_audit_valid_delivery_bundle(master, tmp_path):
+    out = tmp_path / "bundle"
+    build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")
+
+    assert main(["audit", str(out)]) == 0
+
+
+def test_cli_audit_json_report(master, tmp_path, capsys):
+    out = tmp_path / "bundle"
+    build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")
+
+    assert main(["audit", str(out), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["bundles"][0]["ok"] is True
+    assert payload["bundles"][0]["bundle"] == str(out)
+
+
+def test_cli_audit_flags_missing_files_as_errors(master, tmp_path):
+    out = tmp_path / "bundle"
+    build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")
+
+    (out / "lof001--spotify--3000x3000.jpg").unlink()
+    assert main(["audit", str(out), "--only", "spotify"]) == 1
+
+
+def test_cli_audit_flags_bad_dimension(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    Image.new("RGB", (1400, 1400), "black").save(bundle / "bad--spotify--1400x1400.jpg")
+
+    # Keep selection tight to one target to make the report precise.
+    assert main(["audit", str(bundle), "--only", "spotify"]) == 1

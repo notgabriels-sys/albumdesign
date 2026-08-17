@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import report
+from .audit import run_audit
 from .build import build, summarise
 from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
 from .preflight import ERROR, WARN, check, worst_level
@@ -254,6 +255,56 @@ def cmd_sheet(args) -> int:
     return EXIT_OK if result else EXIT_USAGE
 
 
+def cmd_audit(args) -> int:
+    target_set = _load(args)
+    targets = _selected(args, target_set)
+    bundles = [Path(raw) for raw in args.deliveries]
+
+    try:
+        results = run_audit(bundles, targets)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"audit failed: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(
+            json.dumps({"bundles": [result.as_dict() for result in results]}, indent=2)
+        )
+        return EXIT_OK if all(result.ok for result in results) else EXIT_FINDINGS
+
+    exit_code = EXIT_OK
+    for result in results:
+        marker = "ok" if result.ok else "findings"
+        print(f"{marker}: {result.bundle} (slug={result.slug or 'unknown'})")
+        if result.missing_targets:
+            print(f"  missing: {', '.join(result.missing_targets)}")
+            exit_code = EXIT_FINDINGS
+        if result.malformed_files:
+            print(f"  malformed files: {', '.join(result.malformed_files)}")
+            exit_code = EXIT_FINDINGS
+        if result.missing_files:
+            print(f"  missing files: {', '.join(result.missing_files)}")
+            exit_code = EXIT_FINDINGS
+        if result.dimension_mismatches:
+            print(f"  dimension mismatches: {', '.join(result.dimension_mismatches)}")
+            exit_code = EXIT_FINDINGS
+        if result.format_mismatches:
+            print(f"  format mismatches: {', '.join(result.format_mismatches)}")
+            exit_code = EXIT_FINDINGS
+
+        if result.extra_targets:
+            print(f"  extra targets present: {', '.join(result.extra_targets)}")
+
+        if not result.ok:
+            continue
+
+    if not results:
+        print("no bundles found", file=sys.stderr)
+        return EXIT_USAGE
+
+    return exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="coverforge",
@@ -322,6 +373,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_sheet.add_argument("--json", action="store_true")
     p_sheet.set_defaults(func=cmd_sheet)
+
+    p_audit = sub.add_parser("audit", help="validate one or more delivery bundles")
+    p_audit.add_argument("deliveries", nargs="+", help="delivery folders")
+    p_audit.add_argument("--json", action="store_true")
+    _add_target_flags(p_audit)
+    p_audit.set_defaults(func=cmd_audit)
 
     return parser
 
