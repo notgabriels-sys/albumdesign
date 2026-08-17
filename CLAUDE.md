@@ -32,7 +32,13 @@ These come from his operating profile and apply to anything leaving this repo:
 - Never put invented dates, ISRCs, or budget numbers into royalty claims
   (GVL) or funding applications.
 - No em dashes in output written for him.
-- Legal name (Gabriel G Alonso) goes on invoices and formal documents.
+- Legal name is **Gabriel García Alonso**, with the accent, as it appears on his
+  Spanish DNI and European passport. That exact form goes on invoices and formal
+  documents, where §14 UStG wants the full legal name. German authorities drop
+  the accent (the BZSt letter reads "Gabriel Garcia Alonso"), so a document
+  spelling it that way is theirs, not an error to correct.
+  The site bylines say "Gabriel G Alonso", which is a professional shortening
+  and his to decide, so do not change them without asking.
   Public-facing artist identities are Hologram People, Lack of Fate,
   Fate Through. Contact address is hologrampeoplemusic@gmail.com.
 
