@@ -150,7 +150,7 @@
         <p class="note">Spotify is the only one of these we could confirm publishes a number in its own
           artist documentation. Figures marked * are measured consistently by third parties but are not
           documented by the platform, so treat them as observed rather than spec. Spotify's guidance is to
-          keep true peak below -1 dBTP, and below -2 dBTP if your master is louder than -14 LUFS.</p>
+          keep true peak below -1 dBTP, and below -2 dBTP if your master is louder than -14 LUFS. This tool flags anything above that ceiling, so a master sitting exactly on -1.0 dBTP is not flagged; the release checklist states the same rule as "at or below".</p>
         <p class="note">Spotify does say to target -14 LUFS. The reason to ignore that as a mastering goal
           is not that they never asked, it is that normalisation makes hitting it pointless: everything
           louder is turned down to the same place anyway, so chasing the number costs dynamics and buys
