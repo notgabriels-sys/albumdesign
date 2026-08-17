@@ -106,6 +106,14 @@ What that confirmed in August 2026, so it does not need redoing:
   TuneCore reject over 3000" line holds.
 - 10 MB is documented by Ditto and DistroKid. CD Baby's own limit is 25 MB, and
   TuneCore does not publish one, so do not attribute 10 MB to TuneCore.
+- Bandcamp: minimum 1400x1400, "bigger is better" with no stated ideal, jpg/gif
+  /png, 10 MB max. That matches the Bandcamp row exactly, and its accepting GIF
+  is part of why the format check warns rather than fails on GIF and TIFF.
+
+Still unverified, and not for want of trying: Beatport's own numbers and
+Spotify's cover-art dimensions. `labelsupport.beatport.com` is blocked by the
+proxy like the rest, and the one relevant article's contents do not come back in
+search. Both keep their hedged wording until someone can read the page.
 
 Search results are a summary of a page, not the page. Treat them as good enough
 to correct a wrong attribution, not as grounds for a new hard claim.
