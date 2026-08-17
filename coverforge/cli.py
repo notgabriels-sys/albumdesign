@@ -11,6 +11,7 @@ from . import report
 from .build import build, summarise
 from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
 from .preflight import ERROR, WARN, check, worst_level
+from .sheet import build_sheet
 from .specs import SpecError, TargetSet, load_targets
 
 EXIT_OK = 0
@@ -30,7 +31,9 @@ def collect_masters(paths: list[str]) -> list[Path]:
     for raw in paths:
         path = Path(raw)
         if path.is_dir():
-            found.extend(sorted(p for p in path.iterdir() if p.is_file() and is_image_path(p)))
+            found.extend(
+                sorted(p for p in path.iterdir() if p.is_file() and is_image_path(p))
+            )
         else:
             found.append(path)
     return found
@@ -103,7 +106,11 @@ def cmd_check(args) -> int:
             continue
 
         findings = check(src, targets, args.flatten, args.allow_upscale)
-        worst = max(worst, worst_level(findings), key=lambda lvl: {"info": 0, "warn": 1, "error": 2}[lvl])
+        worst = max(
+            worst,
+            worst_level(findings),
+            key=lambda lvl: {"info": 0, "warn": 1, "error": 2}[lvl],
+        )
 
         if args.json:
             payload.append(
@@ -182,16 +189,69 @@ def cmd_build(args) -> int:
 
     if failed_reads:
         return EXIT_USAGE
-    if any(r.skipped for r in results) or any(o.over_cap for r in results for o in r.outputs):
+    if any(r.skipped for r in results) or any(
+        o.over_cap for r in results for o in r.outputs
+    ):
         return EXIT_FINDINGS
     return EXIT_OK
 
 
 def _add_target_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--only", help="comma-separated target keys, e.g. spotify,bandcamp")
+    parser.add_argument(
+        "--only", help="comma-separated target keys, e.g. spotify,bandcamp"
+    )
     parser.add_argument("--group", help="comma-separated groups, e.g. dsp,social")
-    parser.add_argument("--targets-file", help="replace the built-in target definitions")
-    parser.add_argument("--extra-targets", help="merge extra/overriding target definitions on top")
+    parser.add_argument(
+        "--targets-file", help="replace the built-in target definitions"
+    )
+    parser.add_argument(
+        "--extra-targets", help="merge extra/overriding target definitions on top"
+    )
+
+
+def cmd_sheet(args) -> int:
+    masters = collect_masters(args.masters)
+    if not masters:
+        print("no images found", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.columns < 1:
+        print("--columns must be at least 1", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.thumb_size < 64:
+        print("--thumb-size is too small", file=sys.stderr)
+        return EXIT_USAGE
+
+    failures = 0
+    try:
+        result = build_sheet(
+            masters,
+            Path(args.out),
+            columns=args.columns,
+            thumb_size=args.thumb_size,
+            gap=args.gap,
+            show_labels=not args.no_labels,
+            title=args.title,
+        )
+    except ImageError as exc:
+        print(exc, file=sys.stderr)
+        failures += 1
+        result = None
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_USAGE
+
+    if failures:
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps({"sheet": result.as_dict() if result else {}}, indent=2))
+        return EXIT_OK if result else EXIT_USAGE
+
+    if result:
+        print(f"wrote {result.out} ({result.master_count} masters)")
+    return EXIT_OK if result else EXIT_USAGE
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -207,24 +267,61 @@ def build_parser() -> argparse.ArgumentParser:
     p_targets.set_defaults(func=cmd_targets)
 
     p_check = sub.add_parser("check", help="report problems without writing anything")
-    p_check.add_argument("masters", nargs="+", help="image files or directories of images")
-    p_check.add_argument("--flatten", default="#ffffff", help="colour used behind transparency")
+    p_check.add_argument(
+        "masters", nargs="+", help="image files or directories of images"
+    )
+    p_check.add_argument(
+        "--flatten", default="#ffffff", help="colour used behind transparency"
+    )
     p_check.add_argument("--allow-upscale", action="store_true")
-    p_check.add_argument("--strict", action="store_true", help="exit non-zero on warnings too")
+    p_check.add_argument(
+        "--strict", action="store_true", help="exit non-zero on warnings too"
+    )
     p_check.add_argument("--json", action="store_true")
     _add_target_flags(p_check)
     p_check.set_defaults(func=cmd_check)
 
     p_build = sub.add_parser("build", help="write the delivery pack")
-    p_build.add_argument("masters", nargs="+", help="image files or directories of images")
+    p_build.add_argument(
+        "masters", nargs="+", help="image files or directories of images"
+    )
     p_build.add_argument("-o", "--out", required=True, help="output directory")
     p_build.add_argument("--name", help="release name used for output filenames")
-    p_build.add_argument("--flatten", default="#ffffff", help="colour used behind transparency")
+    p_build.add_argument(
+        "--flatten", default="#ffffff", help="colour used behind transparency"
+    )
     p_build.add_argument("--allow-upscale", action="store_true")
-    p_build.add_argument("--dry-run", action="store_true", help="report what would be written")
+    p_build.add_argument(
+        "--dry-run", action="store_true", help="report what would be written"
+    )
     p_build.add_argument("--json", action="store_true")
     _add_target_flags(p_build)
     p_build.set_defaults(func=cmd_build)
+
+    p_sheet = sub.add_parser(
+        "sheet", help="build a contact sheet from one or more masters"
+    )
+    p_sheet.add_argument(
+        "masters", nargs="+", help="image files or directories of images"
+    )
+    p_sheet.add_argument(
+        "-o", "--out", required=True, help="output path for the contact sheet image"
+    )
+    p_sheet.add_argument("--columns", type=int, default=4, help="thumbnails per row")
+    p_sheet.add_argument(
+        "--thumb-size", type=int, default=580, help="square preview size in pixels"
+    )
+    p_sheet.add_argument(
+        "--gap", type=int, default=20, help="spacing around and between tiles in pixels"
+    )
+    p_sheet.add_argument("--title", help="header text shown at the top of the sheet")
+    p_sheet.add_argument(
+        "--no-labels",
+        action="store_true",
+        help="hide filename labels below each thumbnail",
+    )
+    p_sheet.add_argument("--json", action="store_true")
+    p_sheet.set_defaults(func=cmd_sheet)
 
     return parser
 

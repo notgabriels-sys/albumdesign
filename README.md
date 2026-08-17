@@ -41,6 +41,15 @@ coverforge build path/to/master.png --name my-release -o build/my-release --dry-
 The image argument can also be a directory. Use `--only` or `--group` to limit
 the selected targets.
 
+Build a review sheet to compare multiple master variants quickly:
+
+```bash
+coverforge sheet path/to/variants -o review/lof-variants.jpg --columns 4 --title "Lack of Fate — Drift"
+```
+
+The command accepts a mix of image files and directories. It writes one JPEG
+file by default and is intended to support batch feedback loops before delivery.
+
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one
