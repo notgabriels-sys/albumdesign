@@ -88,6 +88,28 @@ fetched from here. To check a deploy, read the `pages build and deployment` run
 and the `github-pages` deployment sha instead, and render `docs/` locally with
 Playwright to check appearance.
 
+## Checking platform specs from here
+
+WebFetch is blocked for every spec source worth reading: `support.spotify.com`,
+`artists.spotify.com`, `help.bandcamp.com`, `tech.ebu.ch`. **WebSearch is not**,
+and it does reach them. Use WebSearch, with `allowed_domains` set to the
+platform's own help domain when the claim needs to come from the platform rather
+than a blog.
+
+What that confirmed in August 2026, so it does not need redoing:
+
+- Spotify: -14 LUFS, true peak below -1 dBTP, and below -2 dBTP above -14 LUFS.
+  Spotify does apply positive gain to quiet masters, so it is not attenuate-only.
+- Apple (-16) and YouTube (-14) turn down only. Both corroborated by third
+  parties, neither documented by the platform, which is what the page says.
+- TuneCore: min 1600, max 3000. CD Baby: min 1400, max 3000. So the "CD Baby and
+  TuneCore reject over 3000" line holds.
+- 10 MB is documented by Ditto and DistroKid. CD Baby's own limit is 25 MB, and
+  TuneCore does not publish one, so do not attribute 10 MB to TuneCore.
+
+Search results are a summary of a page, not the page. Treat them as good enough
+to correct a wrong attribution, not as grounds for a new hard claim.
+
 ## Open, needs Gabriel
 
 - **There is no payment button on the shop, on purpose. Do not add one back
@@ -109,6 +131,18 @@ Playwright to check appearance.
   it and neither can curl. Reading the API object is the only verification that
   works. Do not accept a remembered figure as confirmation, including his: that
   is how this one survived two rounds of review.
+
+  Read again in August 2026, and the answer got firmer. The only Stripe account
+  reachable from here is **test mode**; there is no live account at all. All
+  three links are test links, none is for mixing or mastering, and every one
+  carries `blocked_on: steuernummer_not_yet_issued` with invoice footers still
+  holding the placeholder `VOR LIVEBETRIEB EINTRAGEN: Name, Anschrift,
+  Steuernummer`, which §14 UStG requires. So card is not merely unverified, it
+  is not set up, and it cannot be until the Finanzamt issues the number.
+
+  Gabriel has said card payment is fine by him. That is a decision about what he
+  wants to accept, not evidence the mechanism exists, and the shop now says
+  invoices are settled by bank transfer with card arranged on request.
 - GVL catalogue table and the Förderantrag both have blanks only he can fill:
   real release dates, ISRCs, which tracks were actually released, real bio
   facts and real costs. Do not guess any of them.
