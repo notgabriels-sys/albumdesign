@@ -103,6 +103,17 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   const scRow = r.platforms.find(t => /SoundCloud upload/.test(t));
   ok(!!scRow, `SoundCloud upload row present -> "${scRow}"`);
 
+  // The verdict word and the reason behind it must stay separated. Every reason
+  // is a lowercase fragment, so with no separator "Pass" ran straight into the
+  // number and read as a threshold ("Pass 1400 floor"). Nothing asserted this
+  // surface, so the regression shipped with the whole suite green.
+  const runTogether = r.platforms.filter(t => /(Pass|Check|Fail)\s*[0-9]/.test(t));
+  ok(runTogether.length === 0,
+     `no platform row runs its verdict into a number${runTogether.length ? ' -> ' + runTogether.slice(0,2).join(' | ') : ''}`);
+  const separated = r.platforms.filter(t => /(Pass|Check|Fail):\s*\S/.test(t));
+  ok(separated.length === r.platforms.length,
+     `every platform row separates verdict from reason (${separated.length}/${r.platforms.length})`);
+
   // ---- functional: loudness tool with a known -23 dBFS sine ----
   console.log('\n=== loudness tool, known -23.0 dBFS stereo sine ===');
   await page.goto('file://' + path.join(DOCS, 'loudness.html'));

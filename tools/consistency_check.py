@@ -21,25 +21,48 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-DOCS = Path(__file__).resolve().parent.parent / "docs"
+ROOT = Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs"
 
 # A card button may only point at a payment host whose amount and product have
 # been read through the provider's API. Nothing is on this list today, and that
 # is deliberate: the last link here was never verified and was wrong.
 VERIFIED_PAYMENT_HOSTS: set[str] = set()
 
-# An em dash is never used in prose written for Gabriel. Two uses are not prose
-# and stay: the glyph standing in for a value that has not been measured yet,
-# and a release title that genuinely contains one. Anything else is a typo
-# against the house style, so name the exceptions rather than allow the glyph.
+# An em dash is never used in prose written for Gabriel. A few uses are not
+# prose and stay: the glyph alone as a string, standing in for a value that has
+# not been measured yet; a release title that genuinely contains one; and the
+# verbatim quote of a Stripe product name, which would stop being a quote if it
+# were edited. Anything else is a typo against the house style, so name the
+# exceptions rather than allow the glyph.
+#
+# Blank each exception out and see what is left, rather than counting. Counting
+# made two mistakes: it accepted any em dash that merely shared a line with an
+# allowed literal, and it reported a false failure whenever two exceptions
+# overlapped, because the same dash was then counted twice.
 _EM_DASH_OK = (
-    '"—"',  # placeholder for an unmeasured value
+    '"—"',  # placeholder for a value not measured yet
+    "'—'",  # the same, single-quoted
     "Duress — Vol. 1",  # a release title, not our prose
+    'Speech Audio QC — Full Audit',  # quoted Stripe product name
+    "'Lack of Fate — Untitled #3'",  # slugify example: the point is the dash
 )
 
 
+# The placeholder always sits in a fallback position (`?"—":x`, `m[0]||"—"`),
+# never glued to a neighbouring string. Writing the glyph back as a separator,
+# `"<b>"+word+"</b>"+"—"+label`, is prose wearing the placeholder's clothes, so
+# reject a quoted dash adjacent to a concatenation operator before anything else.
+_EM_DASH_SMUGGLED = re.compile(r'\+\s*["\']—["\']|["\']—["\']\s*\+')
+
+
 def _em_dash_allowed(line: str) -> bool:
-    return line.count("—") == sum(line.count(ok) * ok.count("—") for ok in _EM_DASH_OK)
+    if _EM_DASH_SMUGGLED.search(line):
+        return False
+    rest = line
+    for ok in _EM_DASH_OK:
+        rest = rest.replace(ok, "")
+    return "—" not in rest
 
 
 failures: list[str] = []
@@ -168,7 +191,15 @@ def main() -> int:
     check("a single contact address is used everywhere", len(addrs) <= 1, f"{dict(addrs)}")
 
     print("\n=== no em dashes in prose, which is a house rule ===")
-    for name, body in src.items():
+    # Everything written for him, not only the pages. The first version of this
+    # check looked at docs/ alone, which left the README, the working notes and
+    # the Python that generates HTML free to reintroduce the character.
+    prose = dict(src)
+    for extra in ("README.md", "CLAUDE.md", *sorted(p.name for p in ROOT.glob("coverforge/*.py"))):
+        path = ROOT / extra if (ROOT / extra).exists() else ROOT / "coverforge" / extra
+        if path.exists():
+            prose[extra] = path.read_text(encoding="utf-8")
+    for name, body in prose.items():
         stray = [
             line.strip()
             for line in body.split("\n")

@@ -386,7 +386,10 @@
       var el=document.createElement("div"); el.className="plat";
       var word={pass:"Pass",warn:"Check",fail:"Fail"}[st];
       el.innerHTML="<div class='n'>"+p.name+"<span class='tick' style='background:"+col2+"' aria-hidden='true'></span></div>"+
-        "<div class='s'><b>"+word+"</b> "+label+"</div>";
+        // The label is a lowercase fragment written to follow a separator. Without
+        // one, "Pass" runs into the number and reads as a threshold ("Pass 1400")
+        // rather than a verdict plus the floor behind it.
+        "<div class='s'><b>"+word+"</b>: "+label+"</div>";
       $("platforms").appendChild(el);
     });
 
