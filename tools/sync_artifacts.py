@@ -22,15 +22,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
-# docs/ page -> artifact filename. The names differ because the artifacts were
-# published under their own titles and those URLs must stay stable.
-PAGES = {
+# Only the pages whose artifact filename differs from their docs/ filename,
+# because those artifacts were published under their own titles and the URLs
+# must stay stable. Everything else keeps its name.
+#
+# Pages are discovered, not listed: a hardcoded list here meant splits.html
+# shipped with no artifact copy at all, which is the same bug the test suites
+# had for the same reason.
+RENAMED = {
     "index.html": "preflight.html",
     "cover.html": "coverforge.html",
-    "loudness.html": "loudness.html",
-    "release.html": "release.html",
-    "shop.html": "shop.html",
 }
+
+
+def pages() -> dict[str, str]:
+    return {p.name: RENAMED.get(p.name, p.name) for p in sorted(DOCS.glob("*.html"))}
 
 STRIP_PREFIXES = ("<!doctype html>", '<html lang="en">', '<meta charset="utf-8">')
 
@@ -62,7 +68,7 @@ def main() -> int:
         out.mkdir(parents=True, exist_ok=True)
 
     stale = []
-    for src_name, dst_name in PAGES.items():
+    for src_name, dst_name in pages().items():
         page = DOCS / src_name
         if not page.exists():
             print(f"missing {page}", file=sys.stderr)
