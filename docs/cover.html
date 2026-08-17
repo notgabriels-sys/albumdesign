@@ -351,7 +351,7 @@
     else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG. Re-export as RGB"]);
     else checks.push(["colour","warn","Colour mode unread. Make sure it is RGB / sRGB"]);
     // filesize
-    if(info.bytes>10*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is over the 10 MB ceiling TuneCore and Ditto enforce. Aim for 5 to 8 MB"]);
+    if(info.bytes>10*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is over the 10 MB ceiling Ditto and DistroKid document. Aim for 5 to 8 MB"]);
     else checks.push(["filesize","pass",fmtBytes(info.bytes)]);
 
     // specs
