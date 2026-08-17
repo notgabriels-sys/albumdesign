@@ -126,8 +126,8 @@ to correct a wrong attribution, not as grounds for a new hard claim.
 
 ## Open, needs Gabriel
 
-- **There is no payment button on the shop, on purpose. Do not add one back
-  from memory.** The link that used to be there was read through the Stripe MCP
+- **The shop's card buttons must never point at a link nobody read. Do not add
+  one from memory.** The link that used to be there was read through the Stripe MCP
   and turned out to be a €1,200 "Speech Audio QC — Full Audit (50% deposit)",
   `tax_behavior: exclusive`, with another €1,200 invoiced on delivery. It sat on
   the mixing and mastering page labelled "Pay €25 deposit". Wrong service, wrong
@@ -168,12 +168,27 @@ to correct a wrong attribution, not as grounds for a new hard claim.
   Germany, prices tax-inclusive, tax collection not started, which is right for
   a §19 Kleinunternehmer.
 
-  **The buttons are still not on the shop, and the reason has changed.** It is
-  no longer that the links are wrong. It is that taking card money creates an
-  obligation to issue an invoice, and §14 UStG wants a Steuernummer he does not
-  have yet: the number he has is the 11-digit Identifikationsnummer from the
-  BZSt, which is not valid for invoices. Put the buttons up once the Finanzamt
-  issues the Steuernummer, not before.
+  **The three buttons went on the shop the same day, at his instruction.** They
+  had been held back on the reasoning that taking card money obliges him to
+  issue an invoice he cannot yet make compliant. That reasoning was wrong: he
+  already invoices for bank transfers, so §14 applies today either way. A button
+  changes the sequence, not the law, and which sequence he wants is his call.
+
+  `buy.stripe.com` is on VERIFIED_PAYMENT_HOSTS in tools/consistency_check.py,
+  and a check asserts every card link quotes an amount its own rate table
+  charges. Both were proved to fail before being trusted. Adding a host to that
+  set is a claim that someone read the provider's objects, so do not add one
+  because a link looks right.
+
+  Still open: the Steuernummer. What he holds is the 11-digit
+  Identifikationsnummer from the BZSt, which §14 UStG does not accept on an
+  invoice. It is needed for the invoices he already sends, not for the buttons.
+  When it arrives it goes in the Stripe invoice template, replacing the
+  `VOR LIVEBETRIEB EINTRAGEN` placeholder.
+
+  PayPal: a Business account exists under hologrampeoplemusic@gmail.com. Its MCP
+  server returns `Unauthorized` here even after reconnecting, so nothing about
+  it has been verified and no PayPal button goes on the page until it can be.
 
   Gabriel saying card payment is fine by him was a decision about what he wants
   to accept, never evidence the mechanism existed. Reading the objects is what

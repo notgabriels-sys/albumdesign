@@ -25,9 +25,18 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
 # A card button may only point at a payment host whose amount and product have
-# been read through the provider's API. Nothing is on this list today, and that
-# is deliberate: the last link here was never verified and was wrong.
-VERIFIED_PAYMENT_HOSTS: set[str] = set()
+# been read through the provider's API.
+#
+# buy.stripe.com went on this list on 17 August 2026, after the three links now
+# on the shop were created and then read back with GetPaymentLinks and
+# GetPaymentLinksPaymentLinkLineItems: EUR 45, 160 and 190, every one
+# tax_behavior "inclusive" with automatic_tax off and amount_tax 0. The two
+# links that were there before, both EUR 160 tax-exclusive at URLs that were
+# the test slugs with test_ removed, are deactivated.
+#
+# Adding a host here is a claim that someone read the objects. Do not add one
+# because a link looks right.
+VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com"}
 
 # An em dash is never used in prose written for Gabriel. A few uses are not
 # prose and stay: the glyph alone as a string, standing in for a value that has
@@ -137,6 +146,25 @@ def main() -> int:
                     "a button naming an amount the page does not otherwise quote is how the "
                     "wrong-checkout bug looked",
                 )
+
+    print("\n=== every card link quotes a price the page actually charges ===")
+    # The failure this exists for: a button reading "Pay EUR 25" that charged
+    # EUR 1,200 for a different service. The amount a customer is promised has
+    # to be one the rate table on the same page states.
+    for name, body in src.items():
+        anchors = re.findall(
+            r'<a\b[^>]*href="https?://([^"/]+)/[^"]*"[^>]*>(.*?)</a>', body, re.S
+        )
+        for host, text in anchors:
+            if not any(h in host for h in VERIFIED_PAYMENT_HOSTS):
+                continue
+            quoted = re.findall(r"€\s?([\d.,]+)", re.sub(r"<[^>]+>", "", text))
+            check(
+                f"{name} card link '{re.sub(r'<[^>]+>', '', text).strip()}' quotes an amount from its table",
+                bool(quoted) and all(f"€{a}" in "".join(tables.get(name, [])) for a in quoted),
+                f"quoted {quoted}, table has {tables.get(name, [])}. A card link must name a price "
+                f"the page charges, or name none at all",
+            )
 
     print("\n=== tax position stated the same way wherever it appears ===")
     vat_pages = {n: b for n, b in src.items() if re.search(r"VAT|UStG", b)}
