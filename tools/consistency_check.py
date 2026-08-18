@@ -252,6 +252,50 @@ def main() -> int:
         ]
         check(f"{name} internal links resolve", not broken, f"{broken}")
 
+    # Share metadata. A page with none of this still works, it just arrives
+    # anywhere it is posted as a bare URL with no title and no description,
+    # which is how three tool pages had been shipping. These checks exist so a
+    # sixth tool cannot be added and quietly miss the whole set.
+    print("\n=== share metadata ===")
+    SITE = "https://notgabriels-sys.github.io/albumdesign/"
+    for name, body in src.items():
+        url = SITE + name
+        want = {
+            "description": r'<meta name="description" content="([^"]+)">',
+            "canonical": r'<link rel="canonical" href="([^"]+)">',
+            "og:url": r'<meta property="og:url" content="([^"]+)">',
+            "og:title": r'<meta property="og:title" content="([^"]+)">',
+            "og:description": r'<meta property="og:description" content="([^"]+)">',
+            "og:image": r'<meta property="og:image" content="([^"]+)">',
+            "twitter:card": r'<meta name="twitter:card" content="([^"]+)">',
+        }
+        found = {k: re.search(v, body) for k, v in want.items()}
+        missing = [k for k, m in found.items() if not m]
+        check(f"{name} has the share tags", not missing, f"missing {missing}")
+        if missing:
+            continue
+        # A canonical or og:url pointing at another page is worse than none:
+        # it tells a crawler this page is a copy of that one.
+        check(f"{name} canonical points at itself", found["canonical"].group(1) == url,
+              found["canonical"].group(1))
+        check(f"{name} og:url points at itself", found["og:url"].group(1) == url,
+              found["og:url"].group(1))
+        title = re.search(r"<title>(.*?)</title>", body, re.S).group(1).strip()
+        check(f"{name} og:title matches its title", found["og:title"].group(1) == title,
+              f"{found['og:title'].group(1)!r} vs {title!r}")
+        check(f"{name} og:description matches its description",
+              found["og:description"].group(1) == found["description"].group(1))
+        img = found["og:image"].group(1)
+        check(f"{name} og:image is absolute and present",
+              img.startswith(SITE) and (DOCS / img[len(SITE):]).exists(), img)
+
+    listed = re.findall(r"<loc>([^<]+)</loc>", (DOCS / "sitemap.xml").read_text(encoding="utf-8"))
+    check("the sitemap lists every page and no others",
+          sorted(listed) == sorted(SITE + n for n in src),
+          f"{sorted(set(listed) ^ {SITE + n for n in src})}")
+    check("robots.txt points at the sitemap",
+          SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
+
     print()
     if failures:
         print(f"{len(failures)} of {checks} checks FAILED:")
