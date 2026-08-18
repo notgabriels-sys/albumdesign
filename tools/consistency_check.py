@@ -38,6 +38,15 @@ DOCS = ROOT / "docs"
 # because a link looks right.
 VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com"}
 
+# Some links name a payment provider without being able to take money: the
+# privacy statement a data protection notice has to cite, for instance. Those
+# are listed one exact URL at a time rather than by loosening the rule above,
+# because "the host contains stripe" is exactly the sloppiness this check
+# exists to prevent. A URL here must be a page that cannot charge anyone.
+NON_PAYMENT_PROVIDER_LINKS: set[str] = {
+    "https://stripe.com/privacy",
+}
+
 # An em dash is never used in prose written for Gabriel. A few uses are not
 # prose and stay: the glyph alone as a string, standing in for a value that has
 # not been measured yet; a release title that genuinely contains one; and the
@@ -123,6 +132,7 @@ def main() -> int:
             for u in links
             if re.search(r"(stripe|paypal|gumroad|lemonsqueezy|ko-fi|buymeacoffee)", u, re.I)
             and not any(h in u for h in VERIFIED_PAYMENT_HOSTS)
+            and u not in NON_PAYMENT_PROVIDER_LINKS
         ]
         check(
             f"{name} has no unverified payment link",
