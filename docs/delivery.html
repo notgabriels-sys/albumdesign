@@ -111,9 +111,10 @@
 
   <main id="main">
   <h1>Is the whole release ready to deliver?</h1>
-  <p class="lede">Drop every final master at once. This reads the real sample rate and bit depth out of
-    each file header, measures integrated LUFS and true peak the way the platforms do, and then checks
-    the tracks against each other, which is where releases actually go wrong.</p>
+  <p class="lede">Drop every final master at once. This reads the sample rate and bit depth out of each
+    file header rather than from your audio device, measures integrated LUFS and true peak, and then
+    checks the tracks against each other, which is where releases actually go wrong. Headers it cannot
+    read are left blank instead of guessed.</p>
 
   <label class="drop" id="drop">
     <input type="file" id="files" multiple accept="audio/*,.wav,.aiff,.aif,.flac,.mp3" aria-label="Choose or drop your master files">
@@ -187,6 +188,66 @@
   input.addEventListener("change",function(){ if(input.files.length) run(input.files) });
 
   // ---- header reading -------------------------------------------------
+  // An MPEG audio frame header is only four bytes, and its sync word is
+  // eleven bits, so the sync alone proves nothing: in arbitrary binary it
+  // turns up about every 2 KB. A header that is really a header has a valid
+  // version, layer, bitrate and sample-rate field, and is followed by the next
+  // sync exactly one frame later. Checking all of that is the difference
+  // between reading a rate and guessing one.
+  var MP3_BITRATES={
+    // [version group][layer] -> kbps by index 1..14
+    "1_1":[0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],
+    "1_2":[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],
+    "1_3":[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320],
+    "2_1":[0,32,48,56,64,80,96,112,128,144,160,176,192,224,256],
+    "2_2":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],
+    "2_3":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160]
+  };
+  function frameAt(b,i){
+    if(i+4>b.length) return null;
+    if(b[i]!==0xff||(b[i+1]&0xe0)!==0xe0) return null;
+    var ver=(b[i+1]>>3)&3;            // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5, 1 reserved
+    var lay=(b[i+1]>>1)&3;            // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 reserved
+    var bri=(b[i+2]>>4)&15, sri=(b[i+2]>>2)&3, pad=(b[i+2]>>1)&1;
+    if(ver===1||lay===0) return null;
+    if(bri===0||bri===15||sri===3) return null;
+    var base=[44100,48000,32000][sri];
+    var rate = ver===3?base : ver===2?base/2 : base/4;
+    var layer=4-lay;                  // 1, 2 or 3
+    var kbps=MP3_BITRATES[(ver===3?"1_":"2_")+layer][bri];
+    if(!kbps) return null;
+    var bits=kbps*1000, len;
+    if(layer===1) len=Math.floor((12*bits/rate+pad)*4);
+    else if(layer===3&&ver!==3) len=Math.floor(72*bits/rate+pad);
+    else len=Math.floor(144*bits/rate+pad);
+    if(len<8) return null;
+    return {rate:rate,len:len,ver:ver,lay:lay};
+  }
+  // A frame is only believed when the frames it predicts are there too, and
+  // agree with it about version, layer and sample rate. One confirming frame
+  // was not enough: periodic data lands a matching sync at the predicted offset
+  // often enough to be found within a 200 KB scan. Requiring a chain that also
+  // agrees on its own fields is what a decoder does when it resyncs.
+  function frameChain(b,i,want){
+    var f=frameAt(b,i);
+    if(!f) return null;
+    for(var n=0;n<want;n++){
+      var next=i+f.len;
+      if(next+4>b.length) return f;   // ran out of file, believe what we have
+      var g=frameAt(b,next);
+      if(!g||g.ver!==f.ver||g.lay!==f.lay||g.rate!==f.rate) return null;
+      i=next; f=g;
+    }
+    return f;
+  }
+  function findFrame(b,start){
+    for(var i=Math.max(0,start);i<Math.min(b.length-4,start+200000);i++){
+      var f=frameChain(b,i,2);
+      if(f) return f;
+    }
+    return null;
+  }
+
   // decodeAudioData resamples to the audio device's rate and gives no bit
   // depth at all, so both numbers have to come out of the container itself.
   // Getting this wrong is how a tool tells someone their 24-bit 44.1k master
@@ -232,18 +293,29 @@
         out.bits=(((b[s+12]&1)<<4)|(b[s+13]>>4))+1;
         return out;
       }
-      var start=0;
-      if(tag(0).slice(0,3)==="ID3") start=10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]);
-      for(var i=start;i<Math.min(b.length-4,start+200000);i++){
-        if(b[i]===0xff&&(b[i+1]&0xe0)===0xe0){
-          var ver=(b[i+1]>>3)&3, idx=(b[i+2]>>2)&3, base=[44100,48000,32000][idx];
-          if(base===undefined) continue;
-          out.format="MP3";
-          // Lossy: there is no bit depth to report, and pretending otherwise
-          // would invent a parameter.
-          out.rate = ver===3?base : ver===2?base/2 : ver===0?base/4 : null;
-          return out;
-        }
+      // Containers we can read nothing out of. Naming them beats calling them
+      // unknown, and it keeps them out of the MP3 scan below, which used to
+      // claim them: two bytes matching 0xFF 0xEx turn up by chance roughly
+      // every 2 KB of arbitrary binary, so an .m4a or .ogg came back labelled
+      // MP3 with a sample rate read off a coincidence.
+      if(tag(4)==="ftyp"){ out.format="MP4"; return out; }
+      if(tag(0)==="OggS"){ out.format="Ogg"; return out; }
+
+      // Only look for frames in a file that says it is one. A blind scan of
+      // 200 KB will eventually find a chain that validates in almost anything,
+      // so the scan cannot be what decides the format: an MP3 either opens with
+      // an ID3 tag or opens with a frame. The scan then still tolerates an ID3
+      // size that points slightly wrong, which is the case it exists for.
+      var isID3=tag(0).slice(0,3)==="ID3";
+      if(!isID3&&!frameChain(b,0,2)) return out;
+      var start=isID3?10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]):0;
+      var f=findFrame(b,start);
+      if(f){
+        out.format="MP3";
+        // Lossy: there is no bit depth to report, and pretending otherwise
+        // would invent a parameter.
+        out.rate=f.rate;
+        return out;
       }
     }catch(e){ return out; }
     return out;
@@ -295,7 +367,15 @@
   }
   function truePeak(ab){
     var factor=Math.max(1,Math.min(4,Math.floor(192000/ab.sampleRate)));
-    return resample(ab,ab.sampleRate*factor).then(function(ob){
+    // resample constructs an OfflineAudioContext, which throws synchronously
+    // when the engine will not take the oversampled rate or the length. Thrown
+    // rather than rejected, that escaped the caller's .catch and landed in the
+    // outer one, so a file that had already measured its loudness, rate and bit
+    // depth was reported as unreadable. Start the chain in a promise so a throw
+    // becomes a rejection the caller can actually handle.
+    return Promise.resolve().then(function(){
+      return resample(ab,ab.sampleRate*factor);
+    }).then(function(ob){
       var peak=0;
       for(var c=0;c<ob.numberOfChannels;c++){
         var d=ob.getChannelData(c);
@@ -311,7 +391,10 @@
     for(var c=0;c<ab.numberOfChannels;c++){
       var d=ab.getChannelData(c),run=0;
       for(var i=0;i<d.length;i++){
-        if(Math.abs(d[i])>=0.99969){ run++; if(run===3) runs++ } else run=0;
+        // 32767/32768, which is full scale for a 16-bit file. The constant was
+        // a digit short at 0.99969, ten times further from full scale, so a
+        // master limited to -0.003 dBFS was reported as pinned at full scale.
+        if(Math.abs(d[i])>=0.999969){ run++; if(run===3) runs++ } else run=0;
       }
     }
     return runs;
@@ -323,8 +406,13 @@
   function blanks(n){var s="";for(var i=0;i<n;i++){s+="<td class='num'>"+NOVAL+"</td>"}return s}
   function fmt(x,d){return (x==null||!isFinite(x))?NOVAL:x.toFixed(d===undefined?1:d)}
   function mmss(s){var m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+(ss<10?"0":"")+ss}
-  function esc(s){return String(s).replace(/[&<>"]/g,function(c){
-    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+  // The apostrophe belongs in this set. File names are the one piece of
+  // attacker-shaped text this page handles, and the name goes into a
+  // single-quoted title attribute, so leaving ' alone let a file called
+  // `a' onmouseover='alert(1)' x='.wav` close the attribute and open an event
+  // handler. splits.html already escaped it; this copy had been trimmed.
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 
   function readFile(file){
     return new Promise(function(res,rej){
@@ -361,8 +449,24 @@
 
   function run(fileList){
     if(busy) return;
-    busy=true;
     var files=Array.prototype.slice.call(fileList);
+    // The loudness page refuses a single file over 400 MB rather than letting
+    // the tab run out of memory. This is the page that asks for a whole album
+    // at once, so it needs the guard more, not less. Files are measured one at
+    // a time, so the ceiling is per file, with a looser one on the total.
+    var oversize=files.filter(function(f){return f.size>400*1024*1024});
+    if(oversize.length){
+      say(oversize.length===1
+        ? oversize[0].name+" is over 400 MB, too large to measure in a browser."
+        : oversize.length+" of these files are over 400 MB, too large to measure in a browser.");
+      return;
+    }
+    var total=files.reduce(function(a,f){return a+f.size},0);
+    if(total>2*1024*1024*1024){
+      say("That is over 2 GB in one go. Try it in two halves.");
+      return;
+    }
+    busy=true;
     $("results").classList.remove("show");
     say("Reading "+files.length+" file"+(files.length===1?"":"s")+" …");
     var AC=window.AudioContext||window.webkitAudioContext;
@@ -402,8 +506,14 @@
       // The stricter ceiling applies above -14 LUFS, the same rule the
       // loudness meter states and applies.
       var ceiling = (r.lufs!=null&&isFinite(r.lufs)&&r.lufs>-14) ? -2 : -1;
-      var bad = (isFinite(r.tp)&&r.tp>ceiling) || r.clipped>0 || (r.bits!=null&&r.bits<16);
-      var st = bad ? "fail" : "pass";
+      var bad = (isFinite(r.tp)&&r.tp>ceiling) || (r.bits!=null&&r.bits<16);
+      // Clipping is a warning, not a failure, because a master limited hard at
+      // 0 dBFS produces it legitimately. A measurement that did not happen is
+      // also a warning: a green OK on a row whose peak column reads blank is
+      // the tool claiming a check it never ran.
+      var soft = r.clipped>0 || !isFinite(r.tp) || r.lufs==null || !isFinite(r.lufs);
+      var st = bad ? "fail" : (soft ? "warn" : "pass");
+      var label = bad ? "CHECK" : (soft ? "LOOK" : "OK");
       tr.innerHTML="<td class='name' title='"+esc(r.name)+"'>"+esc(r.name)+"</td>"+
         "<td>"+esc(r.format)+"</td>"+
         "<td class='num'>"+(r.rate?(r.rate/1000)+"k":NOVAL)+"</td>"+
@@ -411,16 +521,29 @@
         "<td class='num'>"+mmss(r.dur)+"</td>"+
         "<td class='num'>"+fmt(r.lufs)+"</td>"+
         "<td class='num'>"+fmt(r.tp)+"</td>"+
-        "<td><span class='pill "+st+"'>"+(bad?"CHECK":"OK")+"</span></td>";
+        "<td><span class='pill "+st+"'>"+label+"</span></td>";
       rows.appendChild(tr);
     });
 
     var checks=[];
     var add=function(name,state,msg){checks.push([name,state,msg])};
 
+    var unread=rs.filter(function(r){return !r.ok});
     if(!good.length){
       add("readable","fail","None of these files could be decoded. Export WAV or AIFF and try again");
     } else {
+      // A file that would not decode used to reach the verdict only when every
+      // file failed. Drop two masters and one stray file and the table showed a
+      // red NOT READ row under the words "Ready to deliver". Nothing here knows
+      // whether the file that failed was a master, so it blocks the verdict.
+      if(unread.length){
+        add("readable","fail",
+          unread.length+" file"+(unread.length===1?"":"s")+" could not be decoded: "+
+          unread.map(function(r){return r.name}).join(", ")+
+          ". Nothing below describes "+(unread.length===1?"it":"them")+
+          ", so this release has not been read in full");
+      }
+
       var rates={}, bits={}, chans={};
       good.forEach(function(r){
         if(r.rate) rates[r.rate]=(rates[r.rate]||0)+1;
@@ -429,24 +552,41 @@
       });
       var rateKeys=Object.keys(rates), bitKeys=Object.keys(bits), chKeys=Object.keys(chans);
 
-      add("sample rate", rateKeys.length<=1?"pass":"fail",
-        rateKeys.length<=1
-          ? (rateKeys.length?("every track is "+(rateKeys[0]/1000)+" kHz"):"no rate could be read")
+      // No rate read is not agreement. It used to score pass, so a release
+      // whose headers said nothing was told its rates matched.
+      add("sample rate", !rateKeys.length?"warn":(rateKeys.length===1?"pass":"fail"),
+        !rateKeys.length
+          ? "no sample rate could be read from these files, so this has not been checked"
+          : rateKeys.length===1
+          ? "every track is "+(rateKeys[0]/1000)+" kHz"
           : "the tracks are not all the same rate: "+rateKeys.map(function(k){return (k/1000)+"k"}).join(", ")+
-            ". Distributors take one rate per release, so resample before you deliver");
+            ". Distributors generally want one rate per release, so resample before you deliver");
 
       var readBits = bitKeys.length>0;
       add("bit depth", !readBits?"warn":(bitKeys.length>1?"fail":(+bitKeys[0]>=16?"pass":"fail")),
         !readBits ? "no bit depth to read, which is normal for lossy files. Deliver from WAV or AIFF instead"
         : bitKeys.length>1 ? "mixed depths across the release: "+bitKeys.join(", ")+" bit. Bounce them all the same way"
         : +bitKeys[0]>=16 ? "every track is "+bitKeys[0]+" bit"
-        : bitKeys[0]+" bit is below the 16 bit floor every store expects");
+        : bitKeys[0]+" bit is below 16, which is the usual floor for distribution");
 
       add("channels", chKeys.length<=1?"pass":"warn",
         chKeys.length<=1 ? (chKeys[0]==="2"?"every track is stereo":"every track has "+chKeys[0]+" channels")
-        : "mixed channel counts: "+chKeys.join(", ")+". Check the mono tracks are meant to be mono");
+        : "mixed channel counts: "+chKeys.join(", ")+". Worth checking that is deliberate");
 
       var measured=good.filter(function(r){return r.lufs!=null&&isFinite(r.lufs)});
+      // BS.1770 defines channel weights for mono, stereo, quad and 5.1 only, so
+      // a 3- or 5-channel file is left unmeasured. Saying nothing let it sit
+      // inside a "Ready to deliver" verdict with a blank LUFS cell, and it also
+      // silently took the looser -1 dBTP ceiling, which is the one that applies
+      // when the loudness is unknown.
+      if(measured.length<good.length){
+        var unmeasured=good.filter(function(r){return !(r.lufs!=null&&isFinite(r.lufs))});
+        add("loudness measured","warn",
+          unmeasured.length+" track"+(unmeasured.length===1?"":"s")+" could not be measured: "+
+          unmeasured.map(function(r){return r.name+" ("+r.ch+" channels)"}).join(", ")+
+          ". BS.1770 covers mono, stereo, quad and 5.1, so the loudness checks below leave "+
+          (unmeasured.length===1?"it":"them")+" out");
+      }
       if(measured.length>1){
         var ls=measured.map(function(r){return r.lufs});
         var lo=Math.min.apply(null,ls), hi=Math.max.apply(null,ls), spread=hi-lo;
@@ -457,17 +597,25 @@
           "quietest "+fmt(lo)+" LUFS, loudest "+fmt(hi)+" LUFS, a spread of "+fmt(spread)+" LU"+
           (spread<=2 ? ". That holds together as one record"
            : spread<=4 ? ". Worth a listen back to back, because album normalisation keeps this spread"
-           : ". Album normalisation plays these at one gain, so this spread is what the listener gets"));
+           : ". Played under album normalisation these run at one gain, so this spread is what the listener gets"));
       }
 
-      var overs=good.filter(function(r){
+      // Only tracks whose peak was actually measured can be under a ceiling.
+      // Filtering the overs list on isFinite while scoring the check pass meant
+      // a release whose peaks all failed to measure was told every track sat
+      // under its ceiling, with the whole column blank above the sentence.
+      var tpKnown=good.filter(function(r){return isFinite(r.tp)});
+      var overs=tpKnown.filter(function(r){
         var ceiling=(r.lufs!=null&&isFinite(r.lufs)&&r.lufs>-14)?-2:-1;
-        return isFinite(r.tp)&&r.tp>ceiling;
+        return r.tp>ceiling;
       });
-      add("true peak", overs.length?"fail":"pass",
+      var SPOTIFY=". Spotify asks for below -1 dBTP, and below -2 if the master is louder than -14 LUFS";
+      add("true peak", overs.length?"fail":(tpKnown.length<good.length?"warn":"pass"),
         overs.length ? overs.length+" track"+(overs.length===1?"":"s")+" over the ceiling: "+
-          overs.map(function(r){return r.name+" at "+fmt(r.tp)+" dBTP"}).join(", ")+
-          ". Spotify asks for below -1 dBTP, and below -2 if the master is louder than -14 LUFS"
+          overs.map(function(r){return r.name+" at "+fmt(r.tp)+" dBTP"}).join(", ")+SPOTIFY
+        : !tpKnown.length ? "no true peak could be measured on any of these, so this has not been checked"
+        : tpKnown.length<good.length
+          ? tpKnown.length+" of "+good.length+" tracks measured, and those sit under the ceiling that applies. The rest could not be measured"
         : "every track sits under the ceiling that applies to it");
 
       var clipped=good.filter(function(r){return r.clipped>0});
@@ -510,6 +658,13 @@
     var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
     $("results").scrollIntoView({behavior:reduce?"auto":"smooth",block:"nearest"});
   }
+
+  // Test seam. header() is a pure function from bytes to a description of the
+  // container, and the cases worth testing hardest are files no encoder in the
+  // test environment can produce: an m4a, an ogg, a stream whose bytes merely
+  // resemble an MPEG sync. Handing it buffers directly is the only way to
+  // cover those, and it exposes nothing a reader of this page cannot see.
+  window.__header=header;
 })();
 </script>
 

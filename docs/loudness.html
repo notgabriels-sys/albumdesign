@@ -215,6 +215,66 @@
     fr.readAsArrayBuffer(file);
   }
 
+  // An MPEG audio frame header is only four bytes, and its sync word is
+  // eleven bits, so the sync alone proves nothing: in arbitrary binary it
+  // turns up about every 2 KB. A header that is really a header has a valid
+  // version, layer, bitrate and sample-rate field, and is followed by the next
+  // sync exactly one frame later. Checking all of that is the difference
+  // between reading a rate and guessing one.
+  var MP3_BITRATES={
+    // [version group][layer] -> kbps by index 1..14
+    "1_1":[0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],
+    "1_2":[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],
+    "1_3":[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320],
+    "2_1":[0,32,48,56,64,80,96,112,128,144,160,176,192,224,256],
+    "2_2":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],
+    "2_3":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160]
+  };
+  function frameAt(b,i){
+    if(i+4>b.length) return null;
+    if(b[i]!==0xff||(b[i+1]&0xe0)!==0xe0) return null;
+    var ver=(b[i+1]>>3)&3;            // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5, 1 reserved
+    var lay=(b[i+1]>>1)&3;            // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 reserved
+    var bri=(b[i+2]>>4)&15, sri=(b[i+2]>>2)&3, pad=(b[i+2]>>1)&1;
+    if(ver===1||lay===0) return null;
+    if(bri===0||bri===15||sri===3) return null;
+    var base=[44100,48000,32000][sri];
+    var rate = ver===3?base : ver===2?base/2 : base/4;
+    var layer=4-lay;                  // 1, 2 or 3
+    var kbps=MP3_BITRATES[(ver===3?"1_":"2_")+layer][bri];
+    if(!kbps) return null;
+    var bits=kbps*1000, len;
+    if(layer===1) len=Math.floor((12*bits/rate+pad)*4);
+    else if(layer===3&&ver!==3) len=Math.floor(72*bits/rate+pad);
+    else len=Math.floor(144*bits/rate+pad);
+    if(len<8) return null;
+    return {rate:rate,len:len,ver:ver,lay:lay};
+  }
+  // A frame is only believed when the frames it predicts are there too, and
+  // agree with it about version, layer and sample rate. One confirming frame
+  // was not enough: periodic data lands a matching sync at the predicted offset
+  // often enough to be found within a 200 KB scan. Requiring a chain that also
+  // agrees on its own fields is what a decoder does when it resyncs.
+  function frameChain(b,i,want){
+    var f=frameAt(b,i);
+    if(!f) return null;
+    for(var n=0;n<want;n++){
+      var next=i+f.len;
+      if(next+4>b.length) return f;   // ran out of file, believe what we have
+      var g=frameAt(b,next);
+      if(!g||g.ver!==f.ver||g.lay!==f.lay||g.rate!==f.rate) return null;
+      i=next; f=g;
+    }
+    return f;
+  }
+  function findFrame(b,start){
+    for(var i=Math.max(0,start);i<Math.min(b.length-4,start+200000);i++){
+      var f=frameChain(b,i,2);
+      if(f) return f;
+    }
+    return null;
+  }
+
   // decodeAudioData resamples to the AudioContext's rate, which is the
   // listener's audio device, not the file. Reporting ab.sampleRate told a user
   // with a 48k interface that their 44.1k master was 48k, and told everyone
@@ -252,19 +312,23 @@
         var s=8;
         return ((b[s+10]<<12)|(b[s+11]<<4)|(b[s+12]>>4))||null;
       }
-      // MP3: first frame header after any ID3v2 tag.
-      var start=0;
-      if(tag(0).slice(0,3)==="ID3") start=10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]);
-      for(var i=start;i<Math.min(b.length-4,start+200000);i++){
-        if(b[i]===0xff&&(b[i+1]&0xe0)===0xe0){
-          var ver=(b[i+1]>>3)&3, idx=(b[i+2]>>2)&3;
-          var base=[44100,48000,32000][idx];
-          if(base===undefined) continue;
-          if(ver===3) return base;          // MPEG 1
-          if(ver===2) return base/2;        // MPEG 2
-          if(ver===0) return base/4;        // MPEG 2.5
-        }
-      }
+      // Containers this cannot read. Naming them here keeps them out of the
+      // MP3 scan below, which would otherwise answer for them.
+      if(tag(4)==="ftyp"||tag(0)==="OggS") return null;
+      // MP3: first frame header after any ID3v2 tag. The eleven-bit sync alone
+      // is not evidence, because it turns up about every 2 KB in arbitrary
+      // binary, so this used to read a rate off a coincidence in any file that
+      // was not WAV, AIFF or FLAC. findFrame validates the header's fields and
+      // confirms the frame it predicts is really there.
+      // Only look for frames in a file that says it is one. A blind scan of
+      // 200 KB will eventually find a chain that validates in almost anything,
+      // so the scan cannot be what decides the format: an MP3 either opens with
+      // an ID3 tag or opens with a frame.
+      var isID3=tag(0).slice(0,3)==="ID3";
+      if(!isID3&&!frameChain(b,0,2)) return null;
+      var start=isID3?10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]):0;
+      var f=findFrame(b,start);
+      if(f) return f.rate;
     }catch(e){ return null; }
     return null;
   }
@@ -444,6 +508,10 @@
     var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
     r.scrollIntoView({behavior:reduce?"auto":"smooth",block:"nearest"});
   }
+
+  // Test seam, matching delivery.html: a pure bytes-to-rate function, tested
+  // against containers no encoder here can produce.
+  window.__fileSampleRate=fileSampleRate;
 })();
 </script>
 

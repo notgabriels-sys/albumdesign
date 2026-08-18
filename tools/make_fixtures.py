@@ -112,6 +112,48 @@ _write_transient(
     10 ** (-3.0 / 20.0),
 )
 
+
+# Clipping is judged against 32767/32768, full scale for a 16-bit file. The
+# threshold used to be 0.99969, a digit short and ten times further out, which
+# reported a master limited to -0.003 dBFS as pinned at full scale. These two
+# straddle the corrected line: 32760 must not be called clipped, 32767 must.
+def _write_clipped(path, rate, secs, clip_value):
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        frames = bytearray()
+        for i in range(int(rate * secs)):
+            v = int(1.2 * math.sin(2 * math.pi * 1000 * i / rate) * 32767)
+            v = max(-clip_value, min(clip_value, v))
+            frames += struct.pack("<hh", v, v)
+        w.writeframes(bytes(frames))
+
+
+_write_clipped(d / "rel_near_fs_44100_16.wav", 44100, 3, 32760)
+_write_clipped(d / "rel_at_fs_44100_16.wav", 44100, 3, 32767)
+
+
+# BS.1770 defines channel weights for mono, stereo, quad and 5.1 only, so a
+# 3-channel file cannot be measured for loudness. It used to sit inside a
+# "Ready to deliver" verdict with a blank LUFS cell and nothing said.
+with wave.open(str(d / "rel_3channel_44100_24.wav"), "w") as w:
+    w.setnchannels(3)
+    w.setsampwidth(3)
+    w.setframerate(44100)
+    frames = bytearray()
+    for i in range(44100 * 2):
+        v = int(10 ** (-18.0 / 20.0) * math.sin(2 * math.pi * 1000 * i / 44100) * 8388607)
+        frames += v.to_bytes(3, "little", signed=True) * 3
+    w.writeframes(bytes(frames))
+
+# A file name is the one piece of attacker-shaped text these pages handle, and
+# it goes into a single-quoted title attribute. With ' left out of the escape
+# set this name closed the attribute and opened an event handler.
+_write_wav(
+    d / "a' onmouseover='alert(1)' x='.wav", 44100, 3, 1, 10 ** (-20.0 / 20.0)
+)
+
 # Edge cases: silence and a clip shorter than the 400 ms BS.1770 block. Both
 # used to render "+Infinity dB" in the platform table.
 for name, secs in (("silence.wav", 4), ("tiny_200ms.wav", 0.2)):
