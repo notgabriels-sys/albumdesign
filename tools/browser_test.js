@@ -214,6 +214,151 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     ok(!/Infinity/.test(o.text), `${f} -> no Infinity leaked to the UI`);
   }
 
+  // ---- functional: delivery check across a whole release ----
+  console.log('\n=== delivery check, a release of several files ===');
+  const runDelivery = async (names) => {
+    await page.goto('file://' + path.join(DOCS, 'delivery.html'));
+    await page.setInputFiles('#files', names.map(n => path.join(FIX, n)));
+    await page.waitForSelector('#results.show', { timeout: 90000 });
+    await page.waitForTimeout(250);
+    return page.evaluate(() => ({
+      verdict: document.getElementById('vtitle').textContent,
+      rows: [...document.querySelectorAll('#rows tr')].map(tr =>
+        [...tr.children].map(td => td.textContent.trim())),
+      checks: [...document.querySelectorAll('#checks li')].map(li => ({
+        pill: li.querySelector('.pill').textContent.trim(),
+        name: li.querySelector('.name').textContent.trim(),
+        msg: li.querySelector('.msg').textContent.trim(),
+      })),
+    }));
+  };
+  const dcheck = (r, name) => r.checks.find(c => c.name.toLowerCase() === name);
+
+  let d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav']);
+  ok(d.rows.length === 2, `two files measured (${d.rows.length} rows)`);
+  // Bit depth cannot come from decodeAudioData at all, and the sample rate it
+  // reports is the audio device's. Both of these prove the header was read.
+  ok(d.rows.every(r => r[3] === '24'), `bit depth read from the header -> ${d.rows.map(r => r[3]).join(', ')}`);
+  ok(d.rows.every(r => r[2] === '44.1k'), `sample rate read from the header -> ${d.rows.map(r => r[2]).join(', ')}`);
+  ok(dcheck(d, 'sample rate').pill === 'PASS', `matched rates -> sample rate PASS`);
+  ok(dcheck(d, 'bit depth').pill === 'PASS', `matched depths -> bit depth PASS`);
+  ok(d.verdict === 'Ready to deliver', `consistent release -> verdict "${d.verdict}"`);
+
+  // Now the same release with one track bounced wrong.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav', 'rel_oddball_48000_16.wav']);
+  ok(dcheck(d, 'sample rate').pill === 'FAIL', `mixed rates -> sample rate FAIL (${dcheck(d,'sample rate').pill})`);
+  ok(dcheck(d, 'bit depth').pill === 'FAIL', `mixed depths -> bit depth FAIL (${dcheck(d,'bit depth').pill})`);
+  ok(/48k/.test(dcheck(d, 'sample rate').msg), `the mismatch names the odd rate -> "${dcheck(d,'sample rate').msg}"`);
+  ok(dcheck(d, 'true peak').pill === 'FAIL', `a hot track breaks the ceiling -> true peak FAIL`);
+  ok(d.verdict === 'Not ready to deliver', `broken release -> verdict "${d.verdict}"`);
+
+  // Every other fixture is a 1 kHz sine, and for one of those the loudness and
+  // the true peak are the same number: the K-weighting gain at 1 kHz cancels
+  // BS.1770's -0.691 offset. Correct, and worthless as a test, because writing
+  // the loudness into the true-peak column would satisfy all of the above. This
+  // file is quiet with one short transient, so the two must diverge.
+  d = await runDelivery(['rel_transient_44100_24.wav']);
+  const trLufs = parseFloat(d.rows[0][5]), trTp = parseFloat(d.rows[0][6]);
+  ok(trLufs < -20, `quiet body sets the loudness -> ${trLufs} LUFS`);
+  ok(trTp > -4, `the transient sets the peak -> ${trTp} dBTP`);
+  ok(trTp - trLufs > 15, `peak and loudness are separate measurements (${(trTp - trLufs).toFixed(1)} dB apart)`);
+
+  // A file name is the only attacker-shaped text this page handles, and it goes
+  // into a single-quoted title attribute. With ' missing from the escape set,
+  // this name closed the attribute and added a live onmouseover handler.
+  await page.goto('file://' + path.join(DOCS, 'delivery.html'));
+  await page.setInputFiles('#files', [path.join(FIX, "a' onmouseover='alert(1)' x='.wav")]);
+  await page.waitForSelector('#results.show', { timeout: 90000 });
+  const nameCell = await page.$eval('#rows tr td.name',
+    e => ({ attrs: [...e.attributes].map(a => a.name), text: e.textContent }));
+  ok(!nameCell.attrs.includes('onmouseover'),
+    `a quote in a file name injects no handler (attributes: ${nameCell.attrs.join(', ')})`);
+  ok(nameCell.attrs.length === 2, `only class and title survive (${nameCell.attrs.length} attributes)`);
+  ok(/onmouseover='alert\(1\)'/.test(nameCell.text), `the name is still shown in full as text`);
+
+  // An unreadable file used to reach the verdict only when every file failed,
+  // so two masters plus a stray JPEG read "Ready to deliver" with a red NOT
+  // READ row directly above the words.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav', 'good_3000.jpg']);
+  ok(d.rows.length === 3, `the unreadable file still gets a row (${d.rows.length} rows)`);
+  ok(dcheck(d, 'readable') && dcheck(d, 'readable').pill === 'FAIL',
+    `one file that would not decode fails the release (${dcheck(d, 'readable') ? dcheck(d, 'readable').pill : 'no check'})`);
+  ok(d.verdict !== 'Ready to deliver', `a release with an unread file is not ready -> "${d.verdict}"`);
+
+  // Clipping is judged against 32767/32768. The threshold was a digit short, so
+  // a master limited to -0.003 dBFS was called pinned at full scale.
+  d = await runDelivery(['rel_near_fs_44100_16.wav']);
+  ok(dcheck(d, 'clipping').pill === 'PASS',
+    `-0.003 dBFS is not full scale (${dcheck(d, 'clipping').pill}: ${dcheck(d, 'clipping').msg})`);
+  d = await runDelivery(['rel_at_fs_44100_16.wav']);
+  ok(dcheck(d, 'clipping').pill === 'WARN',
+    `samples actually at full scale are caught (${dcheck(d, 'clipping').pill})`);
+  // That file peaks at 0 dBTP too, so its row is a CHECK on the ceiling. The
+  // separate LOOK state is for a track that could not be measured at all.
+  ok(d.rows[0][7] === 'CHECK', `and it breaks the ceiling as well (${d.rows[0][7]})`);
+
+  // BS.1770 weights only mono, stereo, quad and 5.1, so a 3-channel file has no
+  // loudness. It used to show a blank LUFS cell, a green OK, and no mention.
+  d = await runDelivery(['rel_3channel_44100_24.wav']);
+  ok(d.rows[0][5] === '—', `a 3-channel file has no loudness to show (${d.rows[0][5]})`);
+  ok(d.rows[0][7] === 'LOOK', `so its row does not claim OK (${d.rows[0][7]})`);
+  ok(dcheck(d, 'loudness measured') && dcheck(d, 'loudness measured').pill === 'WARN',
+    `and the release says which track it could not measure`);
+  ok(/3 channels/.test((dcheck(d, 'loudness measured') || {}).msg || ''),
+    `naming the channel count -> "${(dcheck(d, 'loudness measured') || {}).msg}"`);
+
+  // The header parser, on containers no encoder in this environment can write.
+  console.log('\n=== container headers the parser must not guess at ===');
+  const hdr = await page.evaluate(() => {
+    const buf = (bytes) => new Uint8Array(bytes).buffer;
+    const pad = (head, n) => {
+      const a = new Uint8Array(n);
+      a.set(head);
+      // Deterministic filler that contains 0xFF 0xE0 pairs, which is what an
+      // eleven-bit sync word finds in arbitrary binary about every 2 KB.
+      for (let i = head.length; i < n; i++) a[i] = (i % 7 === 0) ? 0xff : (i % 7 === 1) ? 0xe4 : (i * 31) & 0xff;
+      return a.buffer;
+    };
+    const ascii = s => [...s].map(c => c.charCodeAt(0));
+    // A real MPEG1 Layer III frame: 128 kbps, 44100 Hz, no padding -> 417 bytes,
+    // with the next frame's sync exactly there.
+    const mp3 = new Uint8Array(1200);
+    const h = [0xff, 0xfb, 0x90, 0x00];
+    mp3.set(h, 0); mp3.set(h, 417); mp3.set(h, 834);
+    return {
+      m4a: window.__header(pad([0, 0, 0, 0x20, ...ascii('ftypM4A ')], 4096)),
+      ogg: window.__header(pad(ascii('OggS'), 4096)),
+      junk: window.__header(pad(ascii('JUNK'), 8192)),
+      mp3: window.__header(mp3.buffer),
+    };
+  });
+  ok(hdr.m4a.format === 'MP4' && hdr.m4a.rate === null,
+    `an m4a is named, not guessed at (${hdr.m4a.format}, rate ${hdr.m4a.rate})`);
+  ok(hdr.ogg.format === 'Ogg' && hdr.ogg.rate === null,
+    `an ogg is named, not guessed at (${hdr.ogg.format}, rate ${hdr.ogg.rate})`);
+  ok(hdr.junk.format === 'unknown' && hdr.junk.rate === null,
+    `a stray sync word in arbitrary bytes is not an MP3 (${hdr.junk.format}, rate ${hdr.junk.rate})`);
+  ok(hdr.mp3.format === 'MP3' && hdr.mp3.rate === 44100,
+    `a real frame followed by the frame it predicts still reads (${hdr.mp3.format}, rate ${hdr.mp3.rate})`);
+  ok(hdr.mp3.bits === null, `and no bit depth is invented for a lossy file (${hdr.mp3.bits})`);
+
+  await page.goto('file://' + path.join(DOCS, 'loudness.html'));
+  const lhdr = await page.evaluate(() => {
+    const pad = (head, n) => {
+      const a = new Uint8Array(n);
+      a.set(head);
+      for (let i = head.length; i < n; i++) a[i] = (i % 7 === 0) ? 0xff : (i % 7 === 1) ? 0xe4 : (i * 31) & 0xff;
+      return a.buffer;
+    };
+    const ascii = s => [...s].map(c => c.charCodeAt(0));
+    return {
+      junk: window.__fileSampleRate(pad(ascii('JUNK'), 8192)),
+      m4a: window.__fileSampleRate(pad([0, 0, 0, 0x20, ...ascii('ftypM4A ')], 4096)),
+    };
+  });
+  ok(lhdr.junk === null, `the loudness page does not guess a rate either (${lhdr.junk})`);
+  ok(lhdr.m4a === null, `and reports nothing for a container it cannot read (${lhdr.m4a})`);
+
   // ---- functional: checklist persistence ----
   console.log('\n=== release checklist ===');
   await page.goto('file://' + path.join(DOCS, 'release.html'));

@@ -6,6 +6,7 @@ in one command.
 **Free browser tools, nothing to install:**
 [cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
 [LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
+[delivery check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
 [release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
 [split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
 

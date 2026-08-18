@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Delivery Check</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Check a whole release before you deliver it: sample rate, bit depth, true peak, loudness consistency across every track. Runs in your browser, nothing uploaded.">
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --accent:#5a46e0;
+    --pass:#197e46; --warn:#946318; --fail:#c5362c;
+    --pass-bg:#e7f5ec; --warn-bg:#f7efdd; --fail-bg:#fbe8e6;
+    --shadow:0 1px 2px rgba(20,22,28,.06),0 8px 24px rgba(20,22,28,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+    --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}}
+  :root[data-theme="dark"]{
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+    --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:26px}
+  .brand{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.3em;font-size:15px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .tag{color:var(--muted);font-size:13.5px}
+  .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .priv::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:var(--pass);margin-right:7px;vertical-align:1px}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.08;margin:.1em 0 .35em;
+    letter-spacing:-.02em;text-wrap:balance;max-width:20ch}
+  .lede{color:var(--muted);font-size:16px;max-width:62ch;margin:0 0 22px}
+  .drop{position:relative;border:1.5px dashed var(--line);border-radius:16px;background:var(--surface);
+    box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:44px 24px;cursor:pointer;transition:border-color .18s,background .18s}
+  .drop:hover,.drop:focus-within{border-color:var(--accent)}
+  .drop.over{border-color:var(--accent);background:var(--surface-2);border-style:solid}
+  .drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .drop:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+  .glyph{display:flex;gap:5px;align-items:flex-end;height:38px;margin-bottom:14px}
+  .glyph i{width:7px;background:var(--accent);border-radius:2px;display:block}
+  .glyph i:nth-child(1){height:55%} .glyph i:nth-child(2){height:100%}
+  .glyph i:nth-child(3){height:70%} .glyph i:nth-child(4){height:40%}
+  .drop h2{margin:0 0 4px;font-size:18px;letter-spacing:-.01em}
+  .drop p{margin:0;color:var(--muted);font-size:13.5px}
+  .drop .formats{margin-top:12px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .status{margin-top:16px;color:var(--muted);font-size:14px;display:none}
+  .status.show{display:block}
+
+  .results{margin-top:26px;display:none}
+  .results.show{display:block}
+  .verdict{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:13px;
+    border:1px solid var(--line);margin-bottom:18px;background:var(--surface)}
+  .verdict .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .verdict h3{margin:0;font-size:16px;letter-spacing:-.01em}
+  .verdict p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:13px;
+    box-shadow:var(--shadow);overflow:hidden;margin-bottom:18px}
+  .card h4{margin:0;padding:12px 15px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);border-bottom:1px solid var(--line)}
+  .tscroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  tr:last-child td{border-bottom:0}
+  td.num{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;font-variant-numeric:tabular-nums}
+  td.name{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;font-weight:700;
+    letter-spacing:.05em;padding:3px 7px;border-radius:6px;white-space:nowrap}
+  .pill.pass{color:var(--pass);background:var(--pass-bg)}
+  .pill.warn{color:var(--warn);background:var(--warn-bg)}
+  .pill.fail{color:var(--fail);background:var(--fail-bg)}
+  ul.checks{list-style:none;margin:0;padding:8px 15px 14px}
+  ul.checks li{display:grid;grid-template-columns:auto 1fr;gap:11px;align-items:start;
+    padding:10px 0;border-bottom:1px solid var(--line)}
+  ul.checks li:last-child{border-bottom:0}
+  .checks .name{font-size:14px}
+  .checks .msg{color:var(--muted);font-size:12.5px;display:block;margin-top:1px}
+  .note{color:var(--muted);font-size:12.5px;line-height:1.55;padding:12px 15px 16px;margin:0}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;
+    gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  footer a:hover{text-decoration:underline}
+  .cta{margin-left:auto}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+</style>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header>
+    <span class="brand">DELIVERY<b>·</b>CHECK</span>
+    <span class="tag">the whole release, not one track</span>
+    <span class="priv">runs in your browser · nothing uploaded</span>
+  </header>
+
+  <main id="main">
+  <h1>Is the whole release ready to deliver?</h1>
+  <p class="lede">Drop every final master at once. This reads the sample rate and bit depth out of each
+    file header rather than from your audio device, measures integrated LUFS and true peak, and then
+    checks the tracks against each other, which is where releases actually go wrong. Headers it cannot
+    read are left blank instead of guessed.</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="files" multiple accept="audio/*,.wav,.aiff,.aif,.flac,.mp3" aria-label="Choose or drop your master files">
+    <span class="glyph" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="drop-body">
+      <h2>Drop all your masters here</h2>
+      <p>or click to choose them. Nothing leaves your device</p>
+      <span class="formats">WAV · AIFF · FLAC · MP3</span>
+    </span>
+  </label>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <section class="results" id="results" aria-label="Delivery results">
+    <div class="verdict" id="verdict">
+      <span class="dot" id="dot" aria-hidden="true"></span>
+      <div><h3 id="vtitle">Checked</h3><p id="vsub"></p></div>
+    </div>
+
+    <div class="card">
+      <h4>Every track</h4>
+      <div class="tscroll" role="region" aria-label="Per track measurements" tabindex="0">
+        <table>
+          <thead><tr>
+            <th scope="col">File</th>
+            <th scope="col">Format</th>
+            <th scope="col" style="text-align:right">Rate</th>
+            <th scope="col" style="text-align:right">Bits</th>
+            <th scope="col" style="text-align:right">Length</th>
+            <th scope="col" style="text-align:right">LUFS</th>
+            <th scope="col" style="text-align:right">True peak</th>
+            <th scope="col">Result</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>The release as a whole</h4>
+      <ul class="checks" id="checks"></ul>
+      <p class="note" id="srcnote"></p>
+    </div>
+  </section>
+  </main>
+
+  <footer>
+    <a href="index.html">← all tools</a>
+    <a href="impressum.html">Impressum</a>
+    <span>Delivery Check: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Want it mastered properly? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var drop=$("drop"),input=$("files"),status=$("status");
+  var busy=false;
+
+  function say(t){status.textContent=t;status.classList.add("show")}
+
+  ["dragenter","dragover"].forEach(function(e){
+    drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.add("over")});
+  });
+  ["dragleave","drop"].forEach(function(e){
+    drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove("over")});
+  });
+  drop.addEventListener("drop",function(ev){
+    if(ev.dataTransfer&&ev.dataTransfer.files.length) run(ev.dataTransfer.files);
+  });
+  input.addEventListener("change",function(){ if(input.files.length) run(input.files) });
+
+  // ---- header reading -------------------------------------------------
+  // An MPEG audio frame header is only four bytes, and its sync word is
+  // eleven bits, so the sync alone proves nothing: in arbitrary binary it
+  // turns up about every 2 KB. A header that is really a header has a valid
+  // version, layer, bitrate and sample-rate field, and is followed by the next
+  // sync exactly one frame later. Checking all of that is the difference
+  // between reading a rate and guessing one.
+  var MP3_BITRATES={
+    // [version group][layer] -> kbps by index 1..14
+    "1_1":[0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],
+    "1_2":[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],
+    "1_3":[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320],
+    "2_1":[0,32,48,56,64,80,96,112,128,144,160,176,192,224,256],
+    "2_2":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],
+    "2_3":[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160]
+  };
+  function frameAt(b,i){
+    if(i+4>b.length) return null;
+    if(b[i]!==0xff||(b[i+1]&0xe0)!==0xe0) return null;
+    var ver=(b[i+1]>>3)&3;            // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5, 1 reserved
+    var lay=(b[i+1]>>1)&3;            // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 reserved
+    var bri=(b[i+2]>>4)&15, sri=(b[i+2]>>2)&3, pad=(b[i+2]>>1)&1;
+    if(ver===1||lay===0) return null;
+    if(bri===0||bri===15||sri===3) return null;
+    var base=[44100,48000,32000][sri];
+    var rate = ver===3?base : ver===2?base/2 : base/4;
+    var layer=4-lay;                  // 1, 2 or 3
+    var kbps=MP3_BITRATES[(ver===3?"1_":"2_")+layer][bri];
+    if(!kbps) return null;
+    var bits=kbps*1000, len;
+    if(layer===1) len=Math.floor((12*bits/rate+pad)*4);
+    else if(layer===3&&ver!==3) len=Math.floor(72*bits/rate+pad);
+    else len=Math.floor(144*bits/rate+pad);
+    if(len<8) return null;
+    return {rate:rate,len:len,ver:ver,lay:lay};
+  }
+  // A frame is only believed when the frames it predicts are there too, and
+  // agree with it about version, layer and sample rate. One confirming frame
+  // was not enough: periodic data lands a matching sync at the predicted offset
+  // often enough to be found within a 200 KB scan. Requiring a chain that also
+  // agrees on its own fields is what a decoder does when it resyncs.
+  function frameChain(b,i,want){
+    var f=frameAt(b,i);
+    if(!f) return null;
+    for(var n=0;n<want;n++){
+      var next=i+f.len;
+      if(next+4>b.length) return f;   // ran out of file, believe what we have
+      var g=frameAt(b,next);
+      if(!g||g.ver!==f.ver||g.lay!==f.lay||g.rate!==f.rate) return null;
+      i=next; f=g;
+    }
+    return f;
+  }
+  function findFrame(b,start){
+    for(var i=Math.max(0,start);i<Math.min(b.length-4,start+200000);i++){
+      var f=frameChain(b,i,2);
+      if(f) return f;
+    }
+    return null;
+  }
+
+  // decodeAudioData resamples to the audio device's rate and gives no bit
+  // depth at all, so both numbers have to come out of the container itself.
+  // Getting this wrong is how a tool tells someone their 24-bit 44.1k master
+  // is 16-bit 48k, which is exactly the claim they came to check.
+  function header(buf){
+    var b=new Uint8Array(buf), dv=new DataView(buf);
+    function tag(o){return String.fromCharCode(b[o],b[o+1],b[o+2],b[o+3])}
+    var out={rate:null,bits:null,format:"unknown"};
+    if(b.length<16) return out;
+    try{
+      if(tag(0)==="RIFF"&&tag(8)==="WAVE"){
+        out.format="WAV";
+        for(var o=12;o+8<=b.length;){
+          var id=tag(o), size=dv.getUint32(o+4,true);
+          if(id==="fmt "){
+            out.rate=dv.getUint32(o+12,true);
+            out.bits=dv.getUint16(o+22,true);
+            return out;
+          }
+          o+=8+size+(size&1);
+        }
+        return out;
+      }
+      if(tag(0)==="FORM"&&(tag(8)==="AIFF"||tag(8)==="AIFC")){
+        out.format="AIFF";
+        for(var p=12;p+8<=b.length;){
+          var cid=tag(p), csz=dv.getUint32(p+4,false);
+          if(cid==="COMM"){
+            out.bits=dv.getUint16(p+14,false);
+            var ex=dv.getUint16(p+16,false), hi=dv.getUint32(p+18,false), lo=dv.getUint32(p+22,false);
+            var e=(ex&0x7fff)-16383, mant=hi*4294967296+lo;
+            out.rate=Math.round(mant*Math.pow(2,e-63))||null;
+            return out;
+          }
+          p+=8+csz+(csz&1);
+        }
+        return out;
+      }
+      if(tag(0)==="fLaC"){
+        out.format="FLAC";
+        var s=8;
+        out.rate=((b[s+10]<<12)|(b[s+11]<<4)|(b[s+12]>>4))||null;
+        out.bits=(((b[s+12]&1)<<4)|(b[s+13]>>4))+1;
+        return out;
+      }
+      // Containers we can read nothing out of. Naming them beats calling them
+      // unknown, and it keeps them out of the MP3 scan below, which used to
+      // claim them: two bytes matching 0xFF 0xEx turn up by chance roughly
+      // every 2 KB of arbitrary binary, so an .m4a or .ogg came back labelled
+      // MP3 with a sample rate read off a coincidence.
+      if(tag(4)==="ftyp"){ out.format="MP4"; return out; }
+      if(tag(0)==="OggS"){ out.format="Ogg"; return out; }
+
+      // Only look for frames in a file that says it is one. A blind scan of
+      // 200 KB will eventually find a chain that validates in almost anything,
+      // so the scan cannot be what decides the format: an MP3 either opens with
+      // an ID3 tag or opens with a frame. The scan then still tolerates an ID3
+      // size that points slightly wrong, which is the case it exists for.
+      var isID3=tag(0).slice(0,3)==="ID3";
+      if(!isID3&&!frameChain(b,0,2)) return out;
+      var start=isID3?10+((b[6]<<21)|(b[7]<<14)|(b[8]<<7)|b[9]):0;
+      var f=findFrame(b,start);
+      if(f){
+        out.format="MP3";
+        // Lossy: there is no bit depth to report, and pretending otherwise
+        // would invent a parameter.
+        out.rate=f.rate;
+        return out;
+      }
+    }catch(e){ return out; }
+    return out;
+  }
+
+  // ---- measurement (BS.1770-4, same code as the loudness meter) --------
+  function resample(ab,rate){
+    var OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+    var oc=new OAC(ab.numberOfChannels,Math.ceil(ab.duration*rate),rate);
+    var s=oc.createBufferSource(); s.buffer=ab; s.connect(oc.destination); s.start();
+    return oc.startRendering();
+  }
+  function biquad(x,b0,b1,b2,a1,a2){
+    var y=new Float32Array(x.length),x1=0,x2=0,y1=0,y2=0;
+    for(var i=0;i<x.length;i++){
+      var xi=x[i], yi=b0*xi+b1*x1+b2*x2-a1*y1-a2*y2;
+      x2=x1;x1=xi;y2=y1;y1=yi;y[i]=yi;
+    }
+    return y;
+  }
+  function kWeight(ch){
+    var s1=biquad(ch,1.53512485958697,-2.69169618940638,1.19839281085285,-1.69065929318241,0.73248077421585);
+    return biquad(s1,1.0,-2.0,1.0,-1.99004745483398,0.99007225036621);
+  }
+  var CH_WEIGHTS={1:[1],2:[1,1],4:[1,1,1.41,1.41],6:[1,1,1,0,1.41,1.41]};
+  function blocks(chans,rate,winSec,hopSec,G){
+    var win=Math.round(winSec*rate),hop=Math.round(hopSec*rate),n=chans[0].length,out=[];
+    for(var start=0;start+win<=n;start+=hop){
+      var z=0;
+      for(var c=0;c<chans.length;c++){
+        if(!G[c]) continue;
+        var ch=chans[c],s=0;
+        for(var i=start;i<start+win;i++){var v=ch[i];s+=v*v}
+        z+=G[c]*(s/win);
+      }
+      out.push({z:z,l:-0.691+10*Math.log10(z+1e-12)});
+    }
+    return out;
+  }
+  function integrated(bl){
+    var g1=bl.filter(function(b){return b.l>-70});
+    if(!g1.length) return -Infinity;
+    var mz=g1.reduce(function(a,b){return a+b.z},0)/g1.length;
+    var rel=-0.691+10*Math.log10(mz)-10;
+    var g2=g1.filter(function(b){return b.l>rel});
+    if(!g2.length) return -Infinity;
+    var mz2=g2.reduce(function(a,b){return a+b.z},0)/g2.length;
+    return -0.691+10*Math.log10(mz2);
+  }
+  function truePeak(ab){
+    var factor=Math.max(1,Math.min(4,Math.floor(192000/ab.sampleRate)));
+    // resample constructs an OfflineAudioContext, which throws synchronously
+    // when the engine will not take the oversampled rate or the length. Thrown
+    // rather than rejected, that escaped the caller's .catch and landed in the
+    // outer one, so a file that had already measured its loudness, rate and bit
+    // depth was reported as unreadable. Start the chain in a promise so a throw
+    // becomes a rejection the caller can actually handle.
+    return Promise.resolve().then(function(){
+      return resample(ab,ab.sampleRate*factor);
+    }).then(function(ob){
+      var peak=0;
+      for(var c=0;c<ob.numberOfChannels;c++){
+        var d=ob.getChannelData(c);
+        for(var i=0;i<d.length;i++){var a=Math.abs(d[i]);if(a>peak)peak=a}
+      }
+      return 20*Math.log10(peak+1e-12);
+    });
+  }
+  // Consecutive samples pinned at full scale are what a clipped master looks
+  // like after the fact. One lone sample at 1.0 is not evidence of anything.
+  function clippedRuns(ab){
+    var runs=0;
+    for(var c=0;c<ab.numberOfChannels;c++){
+      var d=ab.getChannelData(c),run=0;
+      for(var i=0;i<d.length;i++){
+        // 32767/32768, which is full scale for a 16-bit file. The constant was
+        // a digit short at 0.99969, ten times further from full scale, so a
+        // master limited to -0.003 dBFS was reported as pinned at full scale.
+        if(Math.abs(d[i])>=0.999969){ run++; if(run===3) runs++ } else run=0;
+      }
+    }
+    return runs;
+  }
+
+  // One placeholder for "nothing was measured here", so an empty cell never has
+  // to be spelled out inside markup where it would read as prose.
+  var NOVAL="—";
+  function blanks(n){var s="";for(var i=0;i<n;i++){s+="<td class='num'>"+NOVAL+"</td>"}return s}
+  function fmt(x,d){return (x==null||!isFinite(x))?NOVAL:x.toFixed(d===undefined?1:d)}
+  function mmss(s){var m=Math.floor(s/60),ss=Math.round(s%60);return m+":"+(ss<10?"0":"")+ss}
+  // The apostrophe belongs in this set. File names are the one piece of
+  // attacker-shaped text this page handles, and the name goes into a
+  // single-quoted title attribute, so leaving ' alone let a file called
+  // `a' onmouseover='alert(1)' x='.wav` close the attribute and open an event
+  // handler. splits.html already escaped it; this copy had been trimmed.
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+
+  function readFile(file){
+    return new Promise(function(res,rej){
+      var fr=new FileReader();
+      fr.onload=function(){res(fr.result)};
+      fr.onerror=function(){rej(new Error("could not read "+file.name))};
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+  function measure(file,ctx){
+    return readFile(file).then(function(buf){
+      var h=header(buf);
+      return ctx.decodeAudioData(buf.slice(0)).then(function(ab){
+        return resample(ab,48000).then(function(rb){
+          var G=CH_WEIGHTS[rb.numberOfChannels];
+          var lufs=null;
+          if(G){
+            var chans=[];
+            for(var c=0;c<rb.numberOfChannels;c++) chans.push(kWeight(rb.getChannelData(c)));
+            lufs=integrated(blocks(chans,48000,0.4,0.1,G));
+          }
+          return truePeak(ab).catch(function(){return NaN}).then(function(tp){
+            return {name:file.name,ok:true,format:h.format,rate:h.rate,bits:h.bits,
+                    dur:ab.duration,ch:ab.numberOfChannels,lufs:lufs,tp:tp,
+                    clipped:clippedRuns(ab)};
+          });
+        });
+      });
+    }).catch(function(){
+      return {name:file.name,ok:false,format:"unreadable"};
+    });
+  }
+
+  function run(fileList){
+    if(busy) return;
+    var files=Array.prototype.slice.call(fileList);
+    // The loudness page refuses a single file over 400 MB rather than letting
+    // the tab run out of memory. This is the page that asks for a whole album
+    // at once, so it needs the guard more, not less. Files are measured one at
+    // a time, so the ceiling is per file, with a looser one on the total.
+    var oversize=files.filter(function(f){return f.size>400*1024*1024});
+    if(oversize.length){
+      say(oversize.length===1
+        ? oversize[0].name+" is over 400 MB, too large to measure in a browser."
+        : oversize.length+" of these files are over 400 MB, too large to measure in a browser.");
+      return;
+    }
+    var total=files.reduce(function(a,f){return a+f.size},0);
+    if(total>2*1024*1024*1024){
+      say("That is over 2 GB in one go. Try it in two halves.");
+      return;
+    }
+    busy=true;
+    $("results").classList.remove("show");
+    say("Reading "+files.length+" file"+(files.length===1?"":"s")+" …");
+    var AC=window.AudioContext||window.webkitAudioContext;
+    var ctx=new AC();
+    var results=[];
+    var chain=Promise.resolve();
+    files.forEach(function(f,i){
+      chain=chain.then(function(){
+        say("Measuring "+(i+1)+" of "+files.length+": "+f.name);
+        return measure(f,ctx).then(function(r){results.push(r)});
+      });
+    });
+    chain.then(function(){
+      try{ctx.close()}catch(e){}
+      busy=false;
+      status.classList.remove("show");
+      render(results);
+    }).catch(function(){
+      try{ctx.close()}catch(e){}
+      busy=false;
+      say("Something went wrong reading those files. WAV or AIFF exports work best.");
+    });
+  }
+
+  function render(rs){
+    var rows=$("rows"); rows.innerHTML="";
+    var good=rs.filter(function(r){return r.ok});
+
+    rs.forEach(function(r){
+      var tr=document.createElement("tr");
+      if(!r.ok){
+        tr.innerHTML="<td class='name'>"+esc(r.name)+"</td><td>unreadable</td>"+
+          blanks(5)+
+          "<td><span class='pill fail'>NOT READ</span></td>";
+        rows.appendChild(tr); return;
+      }
+      // The stricter ceiling applies above -14 LUFS, the same rule the
+      // loudness meter states and applies.
+      var ceiling = (r.lufs!=null&&isFinite(r.lufs)&&r.lufs>-14) ? -2 : -1;
+      var bad = (isFinite(r.tp)&&r.tp>ceiling) || (r.bits!=null&&r.bits<16);
+      // Clipping is a warning, not a failure, because a master limited hard at
+      // 0 dBFS produces it legitimately. A measurement that did not happen is
+      // also a warning: a green OK on a row whose peak column reads blank is
+      // the tool claiming a check it never ran.
+      var soft = r.clipped>0 || !isFinite(r.tp) || r.lufs==null || !isFinite(r.lufs);
+      var st = bad ? "fail" : (soft ? "warn" : "pass");
+      var label = bad ? "CHECK" : (soft ? "LOOK" : "OK");
+      tr.innerHTML="<td class='name' title='"+esc(r.name)+"'>"+esc(r.name)+"</td>"+
+        "<td>"+esc(r.format)+"</td>"+
+        "<td class='num'>"+(r.rate?(r.rate/1000)+"k":NOVAL)+"</td>"+
+        "<td class='num'>"+(r.bits!=null?r.bits:NOVAL)+"</td>"+
+        "<td class='num'>"+mmss(r.dur)+"</td>"+
+        "<td class='num'>"+fmt(r.lufs)+"</td>"+
+        "<td class='num'>"+fmt(r.tp)+"</td>"+
+        "<td><span class='pill "+st+"'>"+label+"</span></td>";
+      rows.appendChild(tr);
+    });
+
+    var checks=[];
+    var add=function(name,state,msg){checks.push([name,state,msg])};
+
+    var unread=rs.filter(function(r){return !r.ok});
+    if(!good.length){
+      add("readable","fail","None of these files could be decoded. Export WAV or AIFF and try again");
+    } else {
+      // A file that would not decode used to reach the verdict only when every
+      // file failed. Drop two masters and one stray file and the table showed a
+      // red NOT READ row under the words "Ready to deliver". Nothing here knows
+      // whether the file that failed was a master, so it blocks the verdict.
+      if(unread.length){
+        add("readable","fail",
+          unread.length+" file"+(unread.length===1?"":"s")+" could not be decoded: "+
+          unread.map(function(r){return r.name}).join(", ")+
+          ". Nothing below describes "+(unread.length===1?"it":"them")+
+          ", so this release has not been read in full");
+      }
+
+      var rates={}, bits={}, chans={};
+      good.forEach(function(r){
+        if(r.rate) rates[r.rate]=(rates[r.rate]||0)+1;
+        if(r.bits!=null) bits[r.bits]=(bits[r.bits]||0)+1;
+        chans[r.ch]=(chans[r.ch]||0)+1;
+      });
+      var rateKeys=Object.keys(rates), bitKeys=Object.keys(bits), chKeys=Object.keys(chans);
+
+      // No rate read is not agreement. It used to score pass, so a release
+      // whose headers said nothing was told its rates matched.
+      add("sample rate", !rateKeys.length?"warn":(rateKeys.length===1?"pass":"fail"),
+        !rateKeys.length
+          ? "no sample rate could be read from these files, so this has not been checked"
+          : rateKeys.length===1
+          ? "every track is "+(rateKeys[0]/1000)+" kHz"
+          : "the tracks are not all the same rate: "+rateKeys.map(function(k){return (k/1000)+"k"}).join(", ")+
+            ". Distributors generally want one rate per release, so resample before you deliver");
+
+      var readBits = bitKeys.length>0;
+      add("bit depth", !readBits?"warn":(bitKeys.length>1?"fail":(+bitKeys[0]>=16?"pass":"fail")),
+        !readBits ? "no bit depth to read, which is normal for lossy files. Deliver from WAV or AIFF instead"
+        : bitKeys.length>1 ? "mixed depths across the release: "+bitKeys.join(", ")+" bit. Bounce them all the same way"
+        : +bitKeys[0]>=16 ? "every track is "+bitKeys[0]+" bit"
+        : bitKeys[0]+" bit is below 16, which is the usual floor for distribution");
+
+      add("channels", chKeys.length<=1?"pass":"warn",
+        chKeys.length<=1 ? (chKeys[0]==="2"?"every track is stereo":"every track has "+chKeys[0]+" channels")
+        : "mixed channel counts: "+chKeys.join(", ")+". Worth checking that is deliberate");
+
+      var measured=good.filter(function(r){return r.lufs!=null&&isFinite(r.lufs)});
+      // BS.1770 defines channel weights for mono, stereo, quad and 5.1 only, so
+      // a 3- or 5-channel file is left unmeasured. Saying nothing let it sit
+      // inside a "Ready to deliver" verdict with a blank LUFS cell, and it also
+      // silently took the looser -1 dBTP ceiling, which is the one that applies
+      // when the loudness is unknown.
+      if(measured.length<good.length){
+        var unmeasured=good.filter(function(r){return !(r.lufs!=null&&isFinite(r.lufs))});
+        add("loudness measured","warn",
+          unmeasured.length+" track"+(unmeasured.length===1?"":"s")+" could not be measured: "+
+          unmeasured.map(function(r){return r.name+" ("+r.ch+" channels)"}).join(", ")+
+          ". BS.1770 covers mono, stereo, quad and 5.1, so the loudness checks below leave "+
+          (unmeasured.length===1?"it":"them")+" out");
+      }
+      if(measured.length>1){
+        var ls=measured.map(function(r){return r.lufs});
+        var lo=Math.min.apply(null,ls), hi=Math.max.apply(null,ls), spread=hi-lo;
+        // Album normalisation plays a record at one gain, so the relative
+        // levels you bounced are the ones listeners hear. A wide spread is a
+        // real artistic choice on some records and an accident on most.
+        add("loudness spread", spread<=2?"pass":(spread<=4?"warn":"fail"),
+          "quietest "+fmt(lo)+" LUFS, loudest "+fmt(hi)+" LUFS, a spread of "+fmt(spread)+" LU"+
+          (spread<=2 ? ". That holds together as one record"
+           : spread<=4 ? ". Worth a listen back to back, because album normalisation keeps this spread"
+           : ". Played under album normalisation these run at one gain, so this spread is what the listener gets"));
+      }
+
+      // Only tracks whose peak was actually measured can be under a ceiling.
+      // Filtering the overs list on isFinite while scoring the check pass meant
+      // a release whose peaks all failed to measure was told every track sat
+      // under its ceiling, with the whole column blank above the sentence.
+      var tpKnown=good.filter(function(r){return isFinite(r.tp)});
+      var overs=tpKnown.filter(function(r){
+        var ceiling=(r.lufs!=null&&isFinite(r.lufs)&&r.lufs>-14)?-2:-1;
+        return r.tp>ceiling;
+      });
+      var SPOTIFY=". Spotify asks for below -1 dBTP, and below -2 if the master is louder than -14 LUFS";
+      add("true peak", overs.length?"fail":(tpKnown.length<good.length?"warn":"pass"),
+        overs.length ? overs.length+" track"+(overs.length===1?"":"s")+" over the ceiling: "+
+          overs.map(function(r){return r.name+" at "+fmt(r.tp)+" dBTP"}).join(", ")+SPOTIFY
+        : !tpKnown.length ? "no true peak could be measured on any of these, so this has not been checked"
+        : tpKnown.length<good.length
+          ? tpKnown.length+" of "+good.length+" tracks measured, and those sit under the ceiling that applies. The rest could not be measured"
+        : "every track sits under the ceiling that applies to it");
+
+      var clipped=good.filter(function(r){return r.clipped>0});
+      add("clipping", clipped.length?"warn":"pass",
+        clipped.length ? clipped.length+" track"+(clipped.length===1?"":"s")+" hold three or more samples pinned at full scale: "+
+          clipped.map(function(r){return r.name}).join(", ")+". That is usually a limiter driven too hard"
+        : "no runs of samples pinned at full scale");
+    }
+
+    var sev={pass:0,warn:1,fail:2}, worst="pass";
+    var ul=$("checks"); ul.innerHTML="";
+    checks.forEach(function(c){
+      if(sev[c[1]]>sev[worst]) worst=c[1];
+      var li=document.createElement("li");
+      li.innerHTML="<span class='pill "+c[1]+"'>"+c[1].toUpperCase()+"</span>"+
+        "<span><span class='name'>"+esc(c[0].charAt(0).toUpperCase()+c[0].slice(1))+"</span>"+
+        "<span class='msg'>"+esc(c[2])+"</span></span>";
+      ul.appendChild(li);
+    });
+
+    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
+    $("dot").style.background=col; $("vtitle").style.color=col;
+    if(worst==="fail"){
+      $("vtitle").textContent="Not ready to deliver";
+      $("vsub").textContent="Fix the red items below before this goes to a distributor.";
+    } else if(worst==="warn"){
+      $("vtitle").textContent="Deliverable, with notes";
+      $("vsub").textContent="Nothing here blocks a delivery. The amber items are worth a listen before you commit.";
+    } else {
+      $("vtitle").textContent="Ready to deliver";
+      $("vsub").textContent="Every track passes, and they agree with each other.";
+    }
+
+    $("srcnote").textContent="Sample rate and bit depth are read from each file header, not from the "+
+      "browser's audio device, so they describe your file rather than your interface. Loudness is "+
+      "ITU-R BS.1770 with absolute and relative gating, the same measurement as the loudness tool, "+
+      "checked against the EBU Tech 3341 signals. Confirm on your own metering before you deliver.";
+
+    $("results").classList.add("show");
+    var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    $("results").scrollIntoView({behavior:reduce?"auto":"smooth",block:"nearest"});
+  }
+
+  // Test seam. header() is a pure function from bytes to a description of the
+  // container, and the cases worth testing hardest are files no encoder in the
+  // test environment can produce: an m4a, an ogg, a stream whose bytes merely
+  // resemble an MPEG sync. Handing it buffers directly is the only way to
+  // cover those, and it exposes nothing a reader of this page cannot see.
+  window.__header=header;
+})();
+</script>
+
+</html>
