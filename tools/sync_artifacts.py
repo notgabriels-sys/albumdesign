@@ -49,6 +49,18 @@ STRIP_LINE = re.compile(
 )
 
 
+# An artifact is a single page with no siblings, so `href="index.html"` in its
+# footer resolves to nothing at all: every published copy carried a dead "all
+# tools" link, and after the Impressum went in, a dead Impressum link too.
+# Point them at the live site instead, which is where those pages actually are.
+SITE = "https://notgabriels-sys.github.io/albumdesign/"
+INTERNAL_HREF = re.compile(r'href="(?!https?:|mailto:|#)([A-Za-z0-9._-]+\.html)"')
+
+
+def absolutise(body: str) -> str:
+    return INTERNAL_HREF.sub(lambda m: f'href="{SITE}{m.group(1)}"', body)
+
+
 def derive(page: Path) -> str:
     lines = page.read_text(encoding="utf-8").split("\n")
     while lines and STRIP_LINE.match(lines[0].strip()):
@@ -58,7 +70,7 @@ def derive(page: Path) -> str:
             lines.pop()
             continue
         lines.pop()
-    body = "\n".join(lines) + "\n"
+    body = absolutise("\n".join(lines) + "\n")
     for line in body.split("\n"):
         if STRIP_LINE.match(line.strip()):
             raise SystemExit(
