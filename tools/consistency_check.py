@@ -47,6 +47,29 @@ NON_PAYMENT_PROVIDER_LINKS: set[str] = {
     "https://stripe.com/privacy",
 }
 
+# Providers whose links must be read before they can ship. PayPal is on this
+# list while its account stays unreadable from here: the MCP server has never
+# authorised, so no amount or tax treatment behind a PayPal link has been seen,
+# and a link on the page would be exactly the remembered-URL mistake that put a
+# live EUR 1,200 charge on the shop under a EUR 25 label.
+PAYMENT_PROVIDERS = r"(stripe|paypal|gumroad|lemonsqueezy|ko-fi|buymeacoffee)"
+
+
+def unverified_payment_links(body: str) -> list[str]:
+    """Payment links in `body` that nobody has read the objects behind.
+
+    Pulled out of main() so it can be tested against pages that do not exist.
+    Running the check over the real pages only ever proves the pages are clean,
+    which is not the same as proving the check would catch a dirty one.
+    """
+    return [
+        u
+        for u in re.findall(r'href="(https?://[^"]+)"', body)
+        if re.search(PAYMENT_PROVIDERS, u, re.I)
+        and not any(h in u for h in VERIFIED_PAYMENT_HOSTS)
+        and u not in NON_PAYMENT_PROVIDER_LINKS
+    ]
+
 # An em dash is never used in prose written for Gabriel. A few uses are not
 # prose and stay: the glyph alone as a string, standing in for a value that has
 # not been measured yet; a release title that genuinely contains one; and the
@@ -126,14 +149,7 @@ def main() -> int:
 
     print("\n=== no unverified payment link can reach a page ===")
     for name, body in src.items():
-        links = re.findall(r'href="(https?://[^"]+)"', body)
-        pay = [
-            u
-            for u in links
-            if re.search(r"(stripe|paypal|gumroad|lemonsqueezy|ko-fi|buymeacoffee)", u, re.I)
-            and not any(h in u for h in VERIFIED_PAYMENT_HOSTS)
-            and u not in NON_PAYMENT_PROVIDER_LINKS
-        ]
+        pay = unverified_payment_links(body)
         check(
             f"{name} has no unverified payment link",
             not pay,
