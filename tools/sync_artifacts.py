@@ -16,6 +16,7 @@ without publishing anything.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -38,12 +39,19 @@ RENAMED = {
 def pages() -> dict[str, str]:
     return {p.name: RENAMED.get(p.name, p.name) for p in sorted(DOCS.glob("*.html"))}
 
-STRIP_PREFIXES = ("<!doctype html>", '<html lang="en">', '<meta charset="utf-8">')
+# The wrapper lines the Artifact host supplies itself. The language was
+# hardcoded to "en", so the German Impressum stopped the strip loop at its
+# `<html lang="de">` and left the charset line in the body, which then tripped
+# the check below. A page may be in any language; match that rather than one.
+STRIP_LINE = re.compile(
+    r'^(?:<!doctype html>|<html\s+lang="[^"]*"\s*>|<meta\s+charset="utf-8"\s*/?>)$',
+    re.IGNORECASE,
+)
 
 
 def derive(page: Path) -> str:
     lines = page.read_text(encoding="utf-8").split("\n")
-    while lines and lines[0].strip().lower() in [p.lower() for p in STRIP_PREFIXES]:
+    while lines and STRIP_LINE.match(lines[0].strip()):
         lines.pop(0)
     while lines and lines[-1].strip() in ("", "</html>"):
         if lines[-1].strip() == "</html>":
@@ -51,9 +59,11 @@ def derive(page: Path) -> str:
             continue
         lines.pop()
     body = "\n".join(lines) + "\n"
-    for bad in STRIP_PREFIXES:
-        if bad.lower() in body.lower():
-            raise SystemExit(f"{page.name}: {bad} still present after stripping; check the header")
+    for line in body.split("\n"):
+        if STRIP_LINE.match(line.strip()):
+            raise SystemExit(
+                f"{page.name}: {line.strip()} still present after stripping; check the header"
+            )
     return body
 
 

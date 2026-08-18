@@ -221,7 +221,12 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   let pct = await page.textContent('#pct');
   ok(/^1 \//.test(pct), `ticking an item updates progress (${pct})`);
   await page.reload();
-  await page.waitForTimeout(150);
+  // Wait for the list to actually render, rather than for a fixed 150ms. The
+  // checklist builds its items in script on load, so on a slow runner the old
+  // sleep could read "0 / 21" before that had happened and report a
+  // persistence failure that was really a timing one. It flaked exactly once
+  // in CI, which is the most misleading way for a test to be wrong.
+  await page.waitForFunction(() => document.querySelectorAll('#list li').length > 0);
   pct = await page.textContent('#pct');
   ok(/^1 \//.test(pct), `progress survives reload (${pct})`);
   await page.click('#reset');
