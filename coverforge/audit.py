@@ -17,6 +17,16 @@ _OUTPUT_RE = re.compile(
 )
 
 
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(64 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass
 class BundleAudit:
     """Structured result of one audited delivery folder."""
@@ -29,6 +39,8 @@ class BundleAudit:
     extra_targets: list[str]
     malformed_files: list[str]
     missing_files: list[str]
+    bytes_mismatches: list[str]
+    checksum_mismatches: list[str]
     dimension_mismatches: list[str]
     format_mismatches: list[str]
     manifest_present: bool
@@ -39,6 +51,8 @@ class BundleAudit:
             self.missing_targets
             or self.malformed_files
             or self.missing_files
+            or self.bytes_mismatches
+            or self.checksum_mismatches
             or self.dimension_mismatches
             or self.format_mismatches
         )
@@ -53,6 +67,8 @@ class BundleAudit:
             "extra_targets": self.extra_targets,
             "malformed_files": self.malformed_files,
             "missing_files": self.missing_files,
+            "bytes_mismatches": self.bytes_mismatches,
+            "checksum_mismatches": self.checksum_mismatches,
             "dimension_mismatches": self.dimension_mismatches,
             "format_mismatches": self.format_mismatches,
             "manifest_present": self.manifest_present,
@@ -155,9 +171,13 @@ def _check_bundle(
     bundle: Path,
     targets: list[Target],
     expected_targets: dict[str, Target],
+    *,
+    verify_hashes: bool,
 ) -> BundleAudit:
     checked = [target.key for target in targets]
     malformed: list[str] = []
+    bytes_mismatches: list[str] = []
+    checksum_mismatches: list[str] = []
     missing_files: list[str] = []
     dimension_mismatches: list[str] = []
     format_mismatches: list[str] = []
@@ -220,6 +240,39 @@ def _check_bundle(
             except OSError as exc:
                 malformed.append(f"cannot read output image {filename}: {exc}")
                 continue
+
+            if verify_hashes:
+                expected_bytes = output.get("bytes")
+                if expected_bytes is None:
+                    malformed.append(
+                        f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing bytes"
+                    )
+                elif not isinstance(expected_bytes, int):
+                    malformed.append(
+                        f"manifest entry for {target_key} has invalid bytes in {bundle / 'manifest.json'}"
+                    )
+                else:
+                    actual_bytes = output_path.stat().st_size
+                    if actual_bytes != expected_bytes:
+                        bytes_mismatches.append(
+                            f"{target_key}: expected {expected_bytes} bytes, got {actual_bytes} in {filename}"
+                        )
+
+                expected_sha = output.get("sha256")
+                if not expected_sha:
+                    malformed.append(
+                        f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing sha256"
+                    )
+                elif not isinstance(expected_sha, str):
+                    malformed.append(
+                        f"manifest entry for {target_key} has invalid sha256 in {bundle / 'manifest.json'}"
+                    )
+                else:
+                    actual_sha = _sha256_file(output_path)
+                    if actual_sha != expected_sha:
+                        checksum_mismatches.append(
+                            f"{target_key}: expected {expected_sha}, got {actual_sha} in {filename}"
+                        )
 
             expected_from_name = f"{parsed['width']}x{parsed['height']}"
             actual_dimensions = f"{actual[0]}x{actual[1]}"
@@ -296,6 +349,8 @@ def _check_bundle(
         extra_targets=extra_targets,
         malformed_files=malformed,
         missing_files=missing_files,
+        bytes_mismatches=bytes_mismatches,
+        checksum_mismatches=checksum_mismatches,
         dimension_mismatches=dimension_mismatches,
         format_mismatches=format_mismatches,
         manifest_present=manifest_present,
@@ -305,6 +360,8 @@ def _check_bundle(
 def run_audit(
     paths: list[Path],
     targets: list[Target],
+    *,
+    verify_hashes: bool = False,
 ) -> list[BundleAudit]:
     """Validate selected targets in each delivery bundle path."""
     bundles = _discover_bundle_dirs(paths)
@@ -313,7 +370,13 @@ def run_audit(
 
     expected_targets = {target.key: target for target in targets}
     results = [
-        _check_bundle(bundle, targets, expected_targets) for bundle in sorted(bundles)
+        _check_bundle(
+            bundle,
+            targets,
+            expected_targets,
+            verify_hashes=verify_hashes,
+        )
+        for bundle in sorted(bundles)
     ]
 
     return results

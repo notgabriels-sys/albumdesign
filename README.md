@@ -61,6 +61,16 @@ If you generated only a subset (`--only` / `--group`), use the same flags in
 present, filenames are parseable, and file dimensions/formats match the selected
 target definitions.
 
+Verify delivery integrity by comparing manifest checksums and byte sizes to the
+actual files on disk:
+
+```bash
+coverforge verify build/my-release
+```
+
+`verify` is the same as `audit` with manifest checksum validation enabled. Use
+`--json` if you need structured output for CI.
+
 Create a shareable package when a bundle is ready to hand over:
 
 ```bash

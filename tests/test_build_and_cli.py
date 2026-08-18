@@ -279,6 +279,37 @@ def test_cli_audit_json_report(master, tmp_path, capsys):
     assert payload["bundles"][0]["bundle"] == str(out)
 
 
+def test_cli_verify_checks_manifest_hashes(master, tmp_path, capsys):
+    out = tmp_path / "bundle"
+    build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")
+
+    target = next(
+        child for child in out.iterdir() if child.suffix.lower() in {".jpg", ".png"}
+    )
+    data = target.read_bytes()
+    target.write_bytes(data[:1] + b"x" + data[1:])
+
+    assert main(["verify", str(out), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["bundles"][0]["ok"] is False
+    assert payload["bundles"][0]["bytes_mismatches"]
+    assert payload["bundles"][0]["checksum_mismatches"]
+
+
+def test_cli_audit_does_not_verify_hashes_without_verify_flag(master, tmp_path):
+    out = tmp_path / "bundle"
+    build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")
+
+    target = next(
+        child for child in out.iterdir() if child.suffix.lower() in {".jpg", ".png"}
+    )
+    data = target.read_bytes()
+    target.write_bytes(data[:1] + b"x" + data[1:])
+
+    assert main(["audit", str(out)]) == 0
+
+
+
 def test_cli_audit_flags_missing_files_as_errors(master, tmp_path):
     out = tmp_path / "bundle"
     build(inspect(master), ALL_TARGETS, out_dir=out, slug="lof001")

@@ -261,9 +261,10 @@ def cmd_audit(args) -> int:
     target_set = _load(args)
     targets = _selected(args, target_set)
     bundles = [Path(raw) for raw in args.deliveries]
+    verify_hashes = bool(getattr(args, "verify_hashes", False))
 
     try:
-        results = run_audit(bundles, targets)
+        results = run_audit(bundles, targets, verify_hashes=verify_hashes)
     except (ValueError, FileNotFoundError) as exc:
         print(f"audit failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
@@ -292,6 +293,14 @@ def cmd_audit(args) -> int:
             exit_code = EXIT_FINDINGS
         if result.format_mismatches:
             print(f"  format mismatches: {', '.join(result.format_mismatches)}")
+            exit_code = EXIT_FINDINGS
+        if result.bytes_mismatches:
+            print(f"  byte mismatch: {', '.join(result.bytes_mismatches)}")
+            exit_code = EXIT_FINDINGS
+        if result.checksum_mismatches:
+            print(
+                f"  checksum mismatch: {', '.join(result.checksum_mismatches)}"
+            )
             exit_code = EXIT_FINDINGS
 
         if result.extra_targets:
@@ -481,9 +490,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_audit = sub.add_parser("audit", help="validate one or more delivery bundles")
     p_audit.add_argument("deliveries", nargs="+", help="delivery folders")
+    p_audit.add_argument("--verify-hashes", action="store_true")
     p_audit.add_argument("--json", action="store_true")
     _add_target_flags(p_audit)
     p_audit.set_defaults(func=cmd_audit)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="verify manifest hashes for one or more delivery bundles",
+    )
+    p_verify.add_argument("deliveries", nargs="+", help="delivery folders")
+    p_verify.add_argument("--json", action="store_true")
+    _add_target_flags(p_verify)
+    p_verify.set_defaults(func=cmd_audit, verify_hashes=True)
 
     p_package = sub.add_parser("package", help="zip one or more delivery bundles")
     p_package.add_argument("deliveries", nargs="+", help="delivery folders")
