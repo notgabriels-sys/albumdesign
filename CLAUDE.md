@@ -50,6 +50,19 @@ These come from his operating profile and apply to anything leaving this repo:
   published. Do not put planning notes, specs, or scratch files in it.
 - `tools/`: the test suites. Fixtures are generated, not committed.
 
+The site is five tools plus the shop and the Impressum: `cover.html`,
+`loudness.html`, `delivery.html` (a whole release at once, not one track),
+`release.html`, `splits.html`, `shop.html`, `impressum.html`, with `index.html`
+as the landing page. `docs/share.png` is the link-preview image, drawn by
+`tools/make_share_card.py`. It is committed rather than built in CI because it
+uses a system font and would come out slightly different on every runner.
+
+Adding a page means more than writing it: `consistency_check.py` requires the
+Open Graph set on every page and requires `sitemap.xml` to list exactly the
+pages that exist, so a new page fails CI until both are done. That is the
+point. `delivery.html` shipped unlisted for three commits before the check
+existed.
+
 ## Testing
 
 CI (`.github/workflows/tests.yml`) runs all of it on every push and PR:
@@ -77,9 +90,38 @@ which made them useless as gates. Keep them asserting.
   `capture_id`. Two tests guard it.
 - **The artifact copies in the scratchpad must not have `<!doctype html>` or
   `<html lang>`.** The Artifact host supplies that wrapper. The `docs/` copies
-  do need it.
+  do need it. `sync_artifacts.py` also rewrites relative page links to the live
+  site, because an artifact is one page with no siblings and `href="index.html"`
+  resolved to nothing in every published copy.
 - **Check `main` before building anything.** A whole CLI was once rebuilt from
   scratch when a better version was already merged.
+- **A file name is attacker-shaped text, and it lands in an attribute.**
+  `delivery.html` put the dropped file's name in a single-quoted `title=` while
+  its `esc()` escaped only `& < > "`. A file called
+  `a' onmouseover='alert(1)' x='.wav` closed the attribute and added a live
+  handler, proved in Chromium before it was fixed. `splits.html` had always
+  escaped the apostrophe; the delivery copy had been trimmed. Any new page that
+  echoes a file name escapes `'` too, and a browser test asserts the rendered
+  cell carries no handler.
+- **Do not let a check pass on a measurement that did not happen.** The
+  delivery page filtered its over-the-ceiling list on `isFinite` while scoring
+  the check `pass`, so a release whose true peaks all failed to measure was told
+  every track sat under its ceiling, with the column blank above the sentence.
+  Same shape in three other checks. A result nobody measured is a warning that
+  says so, never a pass.
+- **An eleven-bit MPEG sync word is not evidence of an MP3.** It turns up in
+  arbitrary binary about every 2 KB, so a blind 200 KB scan claimed `.m4a` and
+  `.ogg` files as MP3 with a sample rate read off a coincidence, in both
+  `delivery.html` and `loudness.html`. Validating the header fields was not
+  enough, and requiring a confirming frame chain was not enough either: a test
+  buffer that plants a sync every seven bytes defeated both. What works is
+  gating the scan on the file declaring itself, an ID3 tag or a real frame at
+  offset 0, plus the field validation. Do not loosen that back to a bare scan.
+- **The Chromium install step in CI hangs sometimes.**
+  `npx playwright install --with-deps chromium` takes about 25 seconds
+  normally and has twice sat for 5 to 20 minutes on a PR while `main` was
+  fine. It is upstream, not the diff, and it runs before any repo code.
+  Cancel the run and re-run it rather than debugging the change.
 
 ## The site is live
 
@@ -93,6 +135,15 @@ Deploying to the existing site is fine, so pushes to `main` publish normally.
 fetched from here. To check a deploy, read the `pages build and deployment` run
 and the `github-pages` deployment sha instead, and render `docs/` locally with
 Playwright to check appearance.
+
+The seven pages are also published as Artifacts on claude.ai, private until
+Gabriel shares them. `Artifact` with `action: "list"` finds their URLs; publish
+with the same URL to update one in place, and read it with WebFetch first,
+because the tool refuses to overwrite a version this session has not seen.
+They are copies, not the source: fix `docs/`, then rederive and republish.
+Meta tags in the derived copies do nothing there, since the host supplies its
+own document head, so a docs change that only touches `<head>` is not a reason
+to republish all seven.
 
 ## Checking platform specs from here
 
