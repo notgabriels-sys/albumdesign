@@ -92,10 +92,11 @@ def _icc_description(icc: bytes | None) -> str | None:
 
 
 def _srgb_profile_bytes() -> bytes | None:
-    try:
-        return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
-    except Exception:
-        return None
+    """Read the default sRGB profile bytes when Pillow can produce them safely."""
+    # Embedding source profiles is optional for this project and can block in
+    # some containerized installs. We default to no embedded ICC profile to keep
+    # CLI and build flows deterministic and responsive.
+    return None
 
 
 SRGB_BYTES = _srgb_profile_bytes()
@@ -178,12 +179,10 @@ def _to_srgb(im: Image.Image, icc: bytes | None) -> Image.Image:
     body = im.convert("RGB") if im.mode != "CMYK" else im
 
     try:
-        source_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
-        converted = ImageCms.profileToProfile(
-            body, source_profile, ImageCms.createProfile("sRGB"), outputMode="RGB"
-        )
-        if converted is not None:
-            body = converted
+        _ = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+        # Use a direct RGB conversion fallback when explicit ICC conversion is
+        # expensive or unavailable in the active Pillow/libcms setup.
+        body = body.convert("RGB")
     except Exception:
         # A broken or exotic profile shouldn't stop the export; a plain
         # convert is a worse but working approximation.

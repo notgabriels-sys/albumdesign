@@ -14,6 +14,7 @@ from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
 from .package import PackageResult, build_package
 from .preflight import ERROR, WARN, check, worst_level
 from .sheet import build_sheet
+from .manifest import compare_manifests, load_manifest
 from .specs import SpecError, TargetSet, load_targets
 
 EXIT_OK = 0
@@ -392,6 +393,23 @@ def cmd_package(args) -> int:
     return EXIT_OK
 
 
+def cmd_manifest(args) -> int:
+    try:
+        left_payload, left_path = load_manifest(args.left)
+        right_payload, right_path = load_manifest(args.right)
+        diff = compare_manifests(left_payload, right_payload, left_path, right_path)
+    except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        print(f"manifest diff failed: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps(diff, indent=2))
+        return EXIT_OK if diff["identical"] else EXIT_FINDINGS
+
+    print(report.format_manifest_diff(diff))
+    return EXIT_OK if diff["identical"] else EXIT_FINDINGS
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="coverforge",
@@ -477,6 +495,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_package.add_argument("--json", action="store_true")
     _add_target_flags(p_package)
     p_package.set_defaults(func=cmd_package)
+
+    p_manifest = sub.add_parser(
+        "manifest", help="compare manifest.json between two exports or bundles"
+    )
+    p_manifest.add_argument("left", help="left manifest.json path or bundle directory")
+    p_manifest.add_argument(
+        "right", help="right manifest.json path or bundle directory"
+    )
+    p_manifest.add_argument("--json", action="store_true")
+    p_manifest.set_defaults(func=cmd_manifest)
 
     return parser
 

@@ -74,6 +74,19 @@ you can confirm exactly what was sent before upload or handoff.
 
 Use `--force` if you want to archive a bundle that has findings anyway.
 
+Compare two generated manifests (or bundle folders) to verify that nothing
+unexpected changed between versions:
+
+```bash
+coverforge manifest build/my-release-v1 build/my-release-v2
+```
+
+Pass `--json` if you need a structured diff payload for automation:
+
+```bash
+coverforge manifest build/my-release-v1 build/my-release-v2 --json
+```
+
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one

@@ -352,3 +352,35 @@ def test_cli_package_includes_invalid_bundle_with_force(tmp_path, master):
     )
     packed = sorted(out.glob("*.zip"))
     assert len(packed) == 1
+
+
+def test_cli_manifest_diff_identical_captures_is_zero(tmp_path, master, capsys):
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    build(inspect(master), ALL_TARGETS, out_dir=left, slug="lof001")
+    build(inspect(master), ALL_TARGETS, out_dir=right, slug="lof001")
+
+    assert main(["manifest", str(left), str(right)]) == 0
+    assert "identical captures" in capsys.readouterr().out
+
+
+def test_cli_manifest_diff_reports_output_and_capture_changes(tmp_path, master, capsys):
+    baseline = tmp_path / "left"
+    changed = tmp_path / "changed"
+    build(inspect(master), ALL_TARGETS, out_dir=baseline, slug="lof001")
+    build(inspect(master), ALL_TARGETS, out_dir=changed, slug="lof001")
+
+    baseline_manifest = json.loads((baseline / "manifest.json").read_text())
+    changed_payload = json.loads((changed / "manifest.json").read_text())
+    changed_payload["outputs"][0]["sha256"] = f"tampered-{changed_payload['outputs'][0]['sha256']}"
+    changed_payload["source"]["dimensions"] = "2999x3000"
+    changed_payload["outputs"].pop(1)
+    (changed / "manifest.json").write_text(json.dumps(changed_payload), encoding="utf-8")
+
+    assert main(["manifest", str(baseline), str(changed), "--json"]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["identical"] is False
+    assert report["delta"]["source"]
+    output_delta = report["delta"]["outputs"]
+    assert output_delta["changed"]
+    assert output_delta["removed"]
