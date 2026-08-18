@@ -214,6 +214,55 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     ok(!/Infinity/.test(o.text), `${f} -> no Infinity leaked to the UI`);
   }
 
+  // ---- functional: delivery check across a whole release ----
+  console.log('\n=== delivery check, a release of several files ===');
+  const runDelivery = async (names) => {
+    await page.goto('file://' + path.join(DOCS, 'delivery.html'));
+    await page.setInputFiles('#files', names.map(n => path.join(FIX, n)));
+    await page.waitForSelector('#results.show', { timeout: 90000 });
+    await page.waitForTimeout(250);
+    return page.evaluate(() => ({
+      verdict: document.getElementById('vtitle').textContent,
+      rows: [...document.querySelectorAll('#rows tr')].map(tr =>
+        [...tr.children].map(td => td.textContent.trim())),
+      checks: [...document.querySelectorAll('#checks li')].map(li => ({
+        pill: li.querySelector('.pill').textContent.trim(),
+        name: li.querySelector('.name').textContent.trim(),
+        msg: li.querySelector('.msg').textContent.trim(),
+      })),
+    }));
+  };
+  const dcheck = (r, name) => r.checks.find(c => c.name.toLowerCase() === name);
+
+  let d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav']);
+  ok(d.rows.length === 2, `two files measured (${d.rows.length} rows)`);
+  // Bit depth cannot come from decodeAudioData at all, and the sample rate it
+  // reports is the audio device's. Both of these prove the header was read.
+  ok(d.rows.every(r => r[3] === '24'), `bit depth read from the header -> ${d.rows.map(r => r[3]).join(', ')}`);
+  ok(d.rows.every(r => r[2] === '44.1k'), `sample rate read from the header -> ${d.rows.map(r => r[2]).join(', ')}`);
+  ok(dcheck(d, 'sample rate').pill === 'PASS', `matched rates -> sample rate PASS`);
+  ok(dcheck(d, 'bit depth').pill === 'PASS', `matched depths -> bit depth PASS`);
+  ok(d.verdict === 'Ready to deliver', `consistent release -> verdict "${d.verdict}"`);
+
+  // Now the same release with one track bounced wrong.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav', 'rel_oddball_48000_16.wav']);
+  ok(dcheck(d, 'sample rate').pill === 'FAIL', `mixed rates -> sample rate FAIL (${dcheck(d,'sample rate').pill})`);
+  ok(dcheck(d, 'bit depth').pill === 'FAIL', `mixed depths -> bit depth FAIL (${dcheck(d,'bit depth').pill})`);
+  ok(/48k/.test(dcheck(d, 'sample rate').msg), `the mismatch names the odd rate -> "${dcheck(d,'sample rate').msg}"`);
+  ok(dcheck(d, 'true peak').pill === 'FAIL', `a hot track breaks the ceiling -> true peak FAIL`);
+  ok(d.verdict === 'Not ready to deliver', `broken release -> verdict "${d.verdict}"`);
+
+  // Every other fixture is a 1 kHz sine, and for one of those the loudness and
+  // the true peak are the same number: the K-weighting gain at 1 kHz cancels
+  // BS.1770's -0.691 offset. Correct, and worthless as a test, because writing
+  // the loudness into the true-peak column would satisfy all of the above. This
+  // file is quiet with one short transient, so the two must diverge.
+  d = await runDelivery(['rel_transient_44100_24.wav']);
+  const trLufs = parseFloat(d.rows[0][5]), trTp = parseFloat(d.rows[0][6]);
+  ok(trLufs < -20, `quiet body sets the loudness -> ${trLufs} LUFS`);
+  ok(trTp > -4, `the transient sets the peak -> ${trTp} dBTP`);
+  ok(trTp - trLufs > 15, `peak and loudness are separate measurements (${(trTp - trLufs).toFixed(1)} dB apart)`);
+
   // ---- functional: checklist persistence ----
   console.log('\n=== release checklist ===');
   await page.goto('file://' + path.join(DOCS, 'release.html'));

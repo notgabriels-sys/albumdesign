@@ -57,6 +57,61 @@ with wave.open(str(d / "loud_44100.wav"), "w") as w:
         frames += struct.pack("<hh", v, v)
     w.writeframes(bytes(frames))
 
+# A small release for the delivery check: two tracks that agree, and one that
+# does not. The two matched tracks are 24-bit 44.1k, which is what a delivery
+# actually looks like, and which also proves the tool reads bit depth from the
+# file header: decodeAudioData never exposes it, and would resample the rate.
+def _write_wav(path, rate, sampwidth, secs, amp, freq=1000.0):
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(2)
+        w.setsampwidth(sampwidth)
+        w.setframerate(rate)
+        peak = 2 ** (sampwidth * 8 - 1) - 1
+        frames = bytearray()
+        for i in range(int(rate * secs)):
+            v = int(amp * math.sin(2 * math.pi * freq * i / rate) * peak)
+            b = v.to_bytes(sampwidth, "little", signed=True)
+            frames += b + b
+        w.writeframes(bytes(frames))
+
+
+_write_wav(d / "rel_track1_44100_24.wav", 44100, 3, 3, 10 ** (-14.0 / 20.0))
+_write_wav(d / "rel_track2_44100_24.wav", 44100, 3, 3, 10 ** (-14.6 / 20.0))
+# Wrong rate, wrong depth, and hot enough to break the ceiling that applies.
+_write_wav(d / "rel_oddball_48000_16.wav", 48000, 2, 3, 10 ** (-0.4 / 20.0))
+
+
+# Every sine fixture above reads the same number for loudness and for true peak,
+# because at 1 kHz the K-weighting gain happens to cancel BS.1770's -0.691
+# offset. That is correct, and it is also useless as a test: printing loudness
+# into the true-peak column would pass every assertion. This file separates
+# them. A quiet body sets the loudness, one short transient sets the peak, and
+# nothing but a real peak meter can report the gap between the two.
+def _write_transient(path, rate, sampwidth, secs, body_amp, hit_amp):
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(2)
+        w.setsampwidth(sampwidth)
+        w.setframerate(rate)
+        peak = 2 ** (sampwidth * 8 - 1) - 1
+        hit_start, hit_len = int(rate * secs / 2), int(rate * 0.005)
+        frames = bytearray()
+        for i in range(int(rate * secs)):
+            amp = hit_amp if hit_start <= i < hit_start + hit_len else body_amp
+            v = int(amp * math.sin(2 * math.pi * 1000 * i / rate) * peak)
+            b = v.to_bytes(sampwidth, "little", signed=True)
+            frames += b + b
+        w.writeframes(bytes(frames))
+
+
+_write_transient(
+    d / "rel_transient_44100_24.wav",
+    44100,
+    3,
+    3,
+    10 ** (-30.0 / 20.0),
+    10 ** (-3.0 / 20.0),
+)
+
 # Edge cases: silence and a clip shorter than the 400 ms BS.1770 block. Both
 # used to render "+Infinity dB" in the platform table.
 for name, secs in (("silence.wav", 4), ("tiny_200ms.wav", 0.2)):
