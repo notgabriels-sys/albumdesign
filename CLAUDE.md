@@ -237,9 +237,17 @@ to correct a wrong attribution, not as grounds for a new hard claim.
   When it arrives it goes in the Stripe invoice template, replacing the
   `VOR LIVEBETRIEB EINTRAGEN` placeholder.
 
-  PayPal: a Business account exists under hologrampeoplemusic@gmail.com. Its MCP
-  server returns `Unauthorized` here even after reconnecting, so nothing about
-  it has been verified and no PayPal button goes on the page until it can be.
+  PayPal: he has two accounts, and told us which is which on 18 August 2026.
+  The **business** account is hologrampeoplemusic@gmail.com, which is also the
+  site's contact address and the one in the Impressum, so it is the only one
+  client money should reach. notgabriels@gmail.com is his personal account and
+  does not belong on the shop. Both are his statement, not something read here.
+
+  Nothing about either has been verified. The PayPal MCP server has returned
+  `Unauthorized` on every attempt, and in later sessions it has not been
+  connected at all, so no PayPal button goes on the page. Knowing the address
+  an account sits under says nothing about what a button would charge, which is
+  the whole lesson of the Stripe links below.
 
   Gabriel saying card payment is fine by him was a decision about what he wants
   to accept, never evidence the mechanism existed. Reading the objects is what
