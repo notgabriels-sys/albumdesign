@@ -1,5 +1,6 @@
 import hashlib
 import json
+import zipfile
 
 import pytest
 from PIL import Image
@@ -293,3 +294,61 @@ def test_cli_audit_flags_bad_dimension(tmp_path):
 
     # Keep selection tight to one target to make the report precise.
     assert main(["audit", str(bundle), "--only", "spotify"]) == 1
+
+
+def test_cli_package_creates_delivery_zip(tmp_path, master):
+    bundle = tmp_path / "delivery"
+    build(inspect(master), ALL_TARGETS, out_dir=bundle, slug="lof001")
+
+    out = tmp_path / "pkg"
+    assert main(["package", str(bundle), "-o", str(out)]) == 0
+
+    packed = sorted(out.glob("*.zip"))
+    assert len(packed) == 1
+    with zipfile.ZipFile(packed[0]) as zf:
+        files = set(zf.namelist())
+        assert "COVERFORGE_PACKAGE.json" in files
+        assert "manifest.json" in files
+        summary = json.loads(zf.read("COVERFORGE_PACKAGE.json").decode("utf-8"))
+
+    assert summary["bundle"] == str(bundle)
+    assert summary["ok"] is True
+    assert summary["checked_targets"] == [target.key for target in ALL_TARGETS]
+    assert len(summary["files"]) == len(ALL_TARGETS) + 2
+
+
+def test_cli_package_json_payload(tmp_path, master, capsys):
+    bundle = tmp_path / "delivery"
+    build(inspect(master), ALL_TARGETS, out_dir=bundle, slug="lof001")
+
+    out = tmp_path / "pkg"
+    assert main(["package", str(bundle), "-o", str(out), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["packages"][0]["ok"] is True
+    assert payload["packages"][0]["bundle"] == str(bundle)
+    assert payload["packages"][0]["files"]
+
+
+def test_cli_package_skip_invalid_bundle_without_force(tmp_path, master):
+    bundle = tmp_path / "delivery"
+    build(inspect(master), ALL_TARGETS, out_dir=bundle, slug="lof001")
+    (bundle / "lof001--spotify--3000x3000.jpg").unlink()
+
+    out = tmp_path / "pkg"
+    assert main(["package", str(bundle), "--only", "spotify", "-o", str(out)]) == 1
+    assert list(out.glob("*.zip")) == []
+
+
+def test_cli_package_includes_invalid_bundle_with_force(tmp_path, master):
+    bundle = tmp_path / "delivery"
+    build(inspect(master), ALL_TARGETS, out_dir=bundle, slug="lof001")
+    (bundle / "lof001--spotify--3000x3000.jpg").unlink()
+
+    out = tmp_path / "pkg"
+    assert (
+        main(["package", str(bundle), "--only", "spotify", "-o", str(out), "--force"])
+        == 1
+    )
+    packed = sorted(out.glob("*.zip"))
+    assert len(packed) == 1

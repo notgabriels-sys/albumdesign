@@ -11,6 +11,7 @@ from . import report
 from .audit import run_audit
 from .build import build, summarise
 from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
+from .package import PackageResult, build_package
 from .preflight import ERROR, WARN, check, worst_level
 from .sheet import build_sheet
 from .specs import SpecError, TargetSet, load_targets
@@ -305,6 +306,92 @@ def cmd_audit(args) -> int:
     return exit_code
 
 
+def _next_zip_name(out_dir: Path, base_name: str) -> Path:
+    candidate = out_dir / f"{base_name}.zip"
+    if not candidate.exists():
+        return candidate
+
+    index = 1
+    while True:
+        candidate = out_dir / f"{base_name}-{index:02d}.zip"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def cmd_package(args) -> int:
+    target_set = _load(args)
+    targets = _selected(args, target_set)
+    out_root = Path(args.out)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        results = run_audit([Path(raw) for raw in args.deliveries], targets)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"package failed: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    packages: list[PackageResult] = []
+    skipped = 0
+
+    for audit_result in results:
+        if not audit_result.ok and not args.force:
+            skipped += 1
+            continue
+
+        if audit_result.slug:
+            base = slugify(audit_result.slug)
+        else:
+            base = slugify(audit_result.bundle.name)
+        if args.name:
+            base = (
+                slugify(args.name)
+                if len(results) == 1
+                else slugify(f"{args.name}-{base}")
+            )
+
+        path = _next_zip_name(out_root, base)
+
+        packages.append(build_package(audit_result, path))
+
+    if args.json:
+        payload = {
+            "packages": [item.as_dict() for item in packages],
+            "packages_skipped": skipped,
+        }
+        print(json.dumps(payload, indent=2))
+        if not packages:
+            return EXIT_FINDINGS if skipped else EXIT_USAGE
+        if skipped or any(not package.ok for package in packages):
+            return EXIT_FINDINGS
+        return EXIT_OK
+
+    if not packages:
+        if skipped:
+            print(
+                "no package produced due findings; pass --force to include",
+                file=sys.stderr,
+            )
+            return EXIT_FINDINGS
+        print("no package produced", file=sys.stderr)
+        return EXIT_USAGE
+
+    for package in packages:
+        status = "ok" if package.ok else "warn"
+        print(f"{status}: {package.zip_path}")
+
+    if skipped:
+        print(
+            f"skipped {skipped} delivery bundle(s) with findings; pass --force to include"
+        )
+        return EXIT_FINDINGS
+
+    if any(not package.ok for package in packages):
+        return EXIT_FINDINGS
+
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="coverforge",
@@ -379,6 +466,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--json", action="store_true")
     _add_target_flags(p_audit)
     p_audit.set_defaults(func=cmd_audit)
+
+    p_package = sub.add_parser("package", help="zip one or more delivery bundles")
+    p_package.add_argument("deliveries", nargs="+", help="delivery folders")
+    p_package.add_argument("-o", "--out", required=True, help="output directory")
+    p_package.add_argument("--name", help="bundle filename prefix")
+    p_package.add_argument(
+        "--force", action="store_true", help="package bundles even with findings"
+    )
+    p_package.add_argument("--json", action="store_true")
+    _add_target_flags(p_package)
+    p_package.set_defaults(func=cmd_package)
 
     return parser
 

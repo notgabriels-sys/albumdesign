@@ -61,6 +61,19 @@ If you generated only a subset (`--only` / `--group`), use the same flags in
 present, filenames are parseable, and file dimensions/formats match the selected
 target definitions.
 
+Create a shareable package when a bundle is ready to hand over:
+
+```bash
+coverforge package build/my-release -o release-packages
+```
+
+`package` runs the same target validation as `audit`, then creates one zip file
+per delivered master and adds `COVERFORGE_PACKAGE.json` inside each archive. That
+file captures the audit summary and SHA-256 checksums for the included files, so
+you can confirm exactly what was sent before upload or handoff.
+
+Use `--force` if you want to archive a bundle that has findings anyway.
+
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one
