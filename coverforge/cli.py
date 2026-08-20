@@ -10,6 +10,7 @@ from pathlib import Path
 from . import report
 from .audit import run_audit
 from .build import build, summarise
+from .contactsheet import ContactSheetError, ContactSheetResult, write_contact_sheet
 from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
 from .package import PackageResult, build_package
 from .preflight import ERROR, WARN, check, worst_level
@@ -257,6 +258,47 @@ def cmd_sheet(args) -> int:
     return EXIT_OK if result else EXIT_USAGE
 
 
+def cmd_contactsheet(args) -> int:
+    masters = collect_masters(args.masters)
+    if not masters:
+        print("no images found", file=sys.stderr)
+        return EXIT_USAGE
+
+    sources: list[SourceImage] = []
+    failures = 0
+
+    for path in masters:
+        try:
+            sources.append(inspect(path))
+        except ImageError as exc:
+            failures += 1
+            print(f"{path}: {exc}", file=sys.stderr)
+
+    if not sources:
+        return EXIT_USAGE
+
+    try:
+        result: ContactSheetResult = write_contact_sheet(
+            sources=tuple(sources),
+            output_dir=Path(args.out),
+            title=args.title,
+            columns=args.columns,
+            cell_size=args.cell_size,
+            background=args.background,
+        )
+    except (ContactSheetError, ValueError) as exc:
+        print(f"contactsheet failed: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps({"contact_sheet": result.as_dict()}, indent=2))
+        return EXIT_OK if not failures else EXIT_USAGE
+
+    print(f"wrote {result.image_path} ({result.source_count} variants)")
+    print(f"index: {result.html_path}")
+    return EXIT_OK if not failures else EXIT_USAGE
+
+
 def cmd_audit(args) -> int:
     target_set = _load(args)
     targets = _selected(args, target_set)
@@ -487,6 +529,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_sheet.add_argument("--json", action="store_true")
     p_sheet.set_defaults(func=cmd_sheet)
+
+    p_contactsheet = sub.add_parser(
+        "contactsheet",
+        help="build an offline review packet for one or more masters",
+    )
+    p_contactsheet.add_argument(
+        "masters", nargs="+", help="image files or directories of images"
+    )
+    p_contactsheet.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        help="output directory for the review packet",
+    )
+    p_contactsheet.add_argument(
+        "--columns",
+        type=int,
+        default=4,
+        help="thumbnails per row",
+    )
+    p_contactsheet.add_argument(
+        "--cell-size",
+        type=int,
+        default=480,
+        help="square thumbnail size in pixels",
+    )
+    p_contactsheet.add_argument(
+        "--background",
+        default="#101116",
+        help="background colour for transparent previews and packet background",
+    )
+    p_contactsheet.add_argument(
+        "--title",
+        default="Coverforge contact sheet",
+        help="packet title",
+    )
+    p_contactsheet.add_argument("--json", action="store_true")
+    p_contactsheet.set_defaults(func=cmd_contactsheet)
 
     p_audit = sub.add_parser("audit", help="validate one or more delivery bundles")
     p_audit.add_argument("deliveries", nargs="+", help="delivery folders")

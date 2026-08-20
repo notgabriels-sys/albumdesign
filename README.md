@@ -50,6 +50,18 @@ coverforge sheet path/to/variants -o review/lof-variants.jpg --columns 4 --title
 The command accepts a mix of image files and directories. It writes one JPEG
 file by default and is intended to support batch feedback loops before delivery.
 
+For stronger feedback loops, build a review packet with a still image and an
+offline HTML index:
+
+```bash
+coverforge contactsheet path/to/variants -o review/lof-variants-pack --columns 4 --cell-size 480 --title "Lack of Fate — Drift review"
+```
+
+The packet writes one folder containing:
+
+- `CONTACT_SHEET.jpg`
+- `CONTACT_SHEET.html`
+
 Validate completed delivery packs before sharing them with collaborators or labels:
 
 ```bash
