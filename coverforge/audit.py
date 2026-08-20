@@ -242,7 +242,7 @@ def _check_bundle(
                 continue
 
             if verify_hashes:
-                expected_bytes = output.get("bytes")
+                expected_bytes = item.get("bytes")
                 if expected_bytes is None:
                     malformed.append(
                         f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing bytes"
@@ -258,7 +258,7 @@ def _check_bundle(
                             f"{target_key}: expected {expected_bytes} bytes, got {actual_bytes} in {filename}"
                         )
 
-                expected_sha = output.get("sha256")
+                expected_sha = item.get("sha256")
                 if not expected_sha:
                     malformed.append(
                         f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing sha256"

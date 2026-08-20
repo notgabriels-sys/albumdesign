@@ -287,7 +287,7 @@ def test_cli_verify_checks_manifest_hashes(master, tmp_path, capsys):
         child for child in out.iterdir() if child.suffix.lower() in {".jpg", ".png"}
     )
     data = target.read_bytes()
-    target.write_bytes(data[:1] + b"x" + data[1:])
+    target.write_bytes(data + b"x")
 
     assert main(["verify", str(out), "--json"]) == 1
     payload = json.loads(capsys.readouterr().out)
@@ -304,7 +304,7 @@ def test_cli_audit_does_not_verify_hashes_without_verify_flag(master, tmp_path):
         child for child in out.iterdir() if child.suffix.lower() in {".jpg", ".png"}
     )
     data = target.read_bytes()
-    target.write_bytes(data[:1] + b"x" + data[1:])
+    target.write_bytes(data + b"x")
 
     assert main(["audit", str(out)]) == 0
 
