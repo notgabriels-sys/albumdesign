@@ -180,7 +180,7 @@ def compare_manifests(
         or changed_outputs
         or output_issues
     )
-    
+
     return {
         "left": {
             "path": str(left_meta["path"]),
