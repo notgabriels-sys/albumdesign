@@ -10,8 +10,15 @@ from pathlib import Path
 from . import report
 from .audit import run_audit
 from .build import build, summarise
-from .contactsheet import ContactSheetError, ContactSheetResult, write_contact_sheet
-from .imageops import ImageError, SourceImage, inspect, is_image_path, slugify
+from .contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
+from .imageops import (
+    READABLE_SUFFIXES,
+    ImageError,
+    SourceImage,
+    inspect,
+    is_image_path,
+    slugify,
+)
 from .package import PackageResult, build_package
 from .preflight import ERROR, WARN, check, worst_level
 from .sheet import build_sheet
@@ -127,7 +134,7 @@ def cmd_check(args) -> int:
                 }
             )
         else:
-            print(report.format_check(src, findings, targets, colour))
+            print(report.format_check(src, findings, targets, colour, args.allow_upscale))
             print()
 
     if args.json:
@@ -158,6 +165,7 @@ def cmd_build(args) -> int:
     colour = report.use_colour()
     results = []
     failed_reads = 0
+    used_slugs: dict[str, Path] = {}
 
     for path in masters:
         try:
@@ -168,19 +176,62 @@ def cmd_build(args) -> int:
             continue
 
         slug = slugify(args.name) if args.name else slugify(path.stem)
-        # One folder per master keeps batches of variants from colliding.
+        # One folder per master keeps batches of variants from colliding. Two
+        # masters in different folders can still share a stem, though, and
+        # --name is refused for multi-master runs, so suffix the later ones.
+        # Without this the second build silently overwrites the first pack's
+        # manifest, leaving files it says were never produced.
+        if len(masters) > 1:
+            if slug in used_slugs:
+                n = 2
+                while f"{slug}-{n}" in used_slugs:
+                    n += 1
+                print(
+                    f"note: {path} has the same name as {used_slugs[slug]}, "
+                    f"writing to {slug}-{n}/ so neither pack is overwritten",
+                    file=sys.stderr,
+                )
+                slug = f"{slug}-{n}"
+            used_slugs[slug] = path
         out_dir = out_root if len(masters) == 1 else out_root / slug
 
-        result = build(
-            src,
-            targets,
-            out_dir=out_dir,
-            slug=slug,
-            flatten_colour=args.flatten,
-            allow_upscale=args.allow_upscale,
-            dry_run=args.dry_run,
-        )
+        # A master that survives inspect() can still fail while rendering: a
+        # truncated file, or a symlink sitting where a delivery file goes. That
+        # used to escape as a traceback and abandon the rest of the batch, so
+        # one bad file cost every master queued behind it.
+        try:
+            result = build(
+                src,
+                targets,
+                out_dir=out_dir,
+                slug=slug,
+                flatten_colour=args.flatten,
+                allow_upscale=args.allow_upscale,
+                dry_run=args.dry_run,
+            )
+        except ImageError as exc:
+            failed_reads += 1
+            print(f"{path}: {exc}", file=sys.stderr)
+            continue
         results.append(result)
+
+        # Building into an occupied directory overwrites silently and leaves
+        # anything it did not write sitting there. Zip that folder for a
+        # distributor and you ship stale art the manifest does not describe.
+        if not args.dry_run and result.outputs:
+            written = {o.path.name for o in result.outputs} | {"manifest.json", "DELIVERY.md"}
+            stale = sorted(
+                p.name
+                for p in out_dir.iterdir()
+                if p.is_file() and p.name not in written and p.suffix.lower() in READABLE_SUFFIXES
+            )
+            if stale:
+                print(
+                    f"warning: {out_dir} also holds {len(stale)} image(s) this build did not write "
+                    f"and manifest.json does not describe: {', '.join(stale[:6])}"
+                    + (" ..." if len(stale) > 6 else ""),
+                    file=sys.stderr,
+                )
 
         if not args.json:
             print(report.format_build(result, colour))
@@ -197,6 +248,54 @@ def cmd_build(args) -> int:
         o.over_cap for r in results for o in r.outputs
     ):
         return EXIT_FINDINGS
+    return EXIT_OK
+
+
+def cmd_contact_sheet(args) -> int:
+    """Create one offline contact-sheet review packet from selected artwork variants."""
+    masters = collect_masters(args.masters)
+    if not masters:
+        print("no images found", file=sys.stderr)
+        return EXIT_USAGE
+
+    sources: list[SourceImage] = []
+    failed_reads = 0
+    for path in masters:
+        try:
+            sources.append(inspect(path))
+        except ImageError as exc:
+            failed_reads += 1
+            print(f"{path}: {exc}", file=sys.stderr)
+    if failed_reads:
+        return EXIT_USAGE
+
+    title = args.title or "Coverforge contact sheet"
+    kwargs = {
+        "title": title,
+        "columns": args.columns,
+        "cell_size": args.cell_size,
+        "background": args.background,
+    }
+    try:
+        result = (
+            plan_contact_sheet(sources, Path(args.out), **kwargs)
+            if args.dry_run
+            else write_contact_sheet(sources, Path(args.out), **kwargs)
+        )
+    except ContactSheetError as exc:
+        print(f"contact-sheet error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps({"dry_run": args.dry_run, "contact_sheet": result.as_dict()}, indent=2))
+    elif args.dry_run:
+        print(
+            f"Planned offline contact-sheet review: {result.source_count} variants "
+            f"at {result.dimensions}"
+        )
+    else:
+        print(f"Wrote offline contact-sheet review: {result.output_dir}")
+        print(f"  {result.source_count} variants · {result.dimensions} · {result.columns} columns")
     return EXIT_OK
 
 
@@ -256,47 +355,6 @@ def cmd_sheet(args) -> int:
     if result:
         print(f"wrote {result.out} ({result.master_count} masters)")
     return EXIT_OK if result else EXIT_USAGE
-
-
-def cmd_contactsheet(args) -> int:
-    masters = collect_masters(args.masters)
-    if not masters:
-        print("no images found", file=sys.stderr)
-        return EXIT_USAGE
-
-    sources: list[SourceImage] = []
-    failures = 0
-
-    for path in masters:
-        try:
-            sources.append(inspect(path))
-        except ImageError as exc:
-            failures += 1
-            print(f"{path}: {exc}", file=sys.stderr)
-
-    if not sources:
-        return EXIT_USAGE
-
-    try:
-        result: ContactSheetResult = write_contact_sheet(
-            sources=tuple(sources),
-            output_dir=Path(args.out),
-            title=args.title,
-            columns=args.columns,
-            cell_size=args.cell_size,
-            background=args.background,
-        )
-    except (ContactSheetError, ValueError) as exc:
-        print(f"contactsheet failed: {exc}", file=sys.stderr)
-        return EXIT_USAGE
-
-    if args.json:
-        print(json.dumps({"contact_sheet": result.as_dict()}, indent=2))
-        return EXIT_OK if not failures else EXIT_USAGE
-
-    print(f"wrote {result.image_path} ({result.source_count} variants)")
-    print(f"index: {result.html_path}")
-    return EXIT_OK if not failures else EXIT_USAGE
 
 
 def cmd_audit(args) -> int:
@@ -530,43 +588,45 @@ def build_parser() -> argparse.ArgumentParser:
     p_sheet.add_argument("--json", action="store_true")
     p_sheet.set_defaults(func=cmd_sheet)
 
-    p_contactsheet = sub.add_parser(
-        "contactsheet",
-        help="build an offline review packet for one or more masters",
+    p_contact_sheet = sub.add_parser(
+        "contact-sheet",
+        aliases=["contactsheet"],
+        help="write an offline visual-review packet for artwork variants",
     )
-    p_contactsheet.add_argument(
+    p_contact_sheet.add_argument(
         "masters", nargs="+", help="image files or directories of images"
     )
-    p_contactsheet.add_argument(
+    p_contact_sheet.add_argument(
         "-o",
         "--out",
         required=True,
-        help="output directory for the review packet",
+        help="new output directory outside images",
     )
-    p_contactsheet.add_argument(
+    p_contact_sheet.add_argument(
+        "--title", help="review title shown in the HTML index"
+    )
+    p_contact_sheet.add_argument(
         "--columns",
         type=int,
         default=4,
-        help="thumbnails per row",
+        help="positive grid column count",
     )
-    p_contactsheet.add_argument(
+    p_contact_sheet.add_argument(
         "--cell-size",
         type=int,
         default=480,
-        help="square thumbnail size in pixels",
+        help="positive preview-cell size in pixels",
     )
-    p_contactsheet.add_argument(
+    p_contact_sheet.add_argument(
         "--background",
         default="#101116",
-        help="background colour for transparent previews and packet background",
+        help="preview background #rrggbb",
     )
-    p_contactsheet.add_argument(
-        "--title",
-        default="Coverforge contact sheet",
-        help="packet title",
+    p_contact_sheet.add_argument(
+        "--dry-run", action="store_true", help="validate and plan without writing"
     )
-    p_contactsheet.add_argument("--json", action="store_true")
-    p_contactsheet.set_defaults(func=cmd_contactsheet)
+    p_contact_sheet.add_argument("--json", action="store_true")
+    p_contact_sheet.set_defaults(func=cmd_contact_sheet)
 
     p_audit = sub.add_parser("audit", help="validate one or more delivery bundles")
     p_audit.add_argument("deliveries", nargs="+", help="delivery folders")

@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from coverforge import imageops
-from coverforge.imageops import ImageError, encode, inspect, normalise, render, slugify
+from coverforge.imageops import _icc_description, ImageError, encode, inspect, normalise, render, slugify
 from coverforge.specs import Target
 
 from conftest import make_art
@@ -95,6 +95,10 @@ def test_normalise_applies_exif_orientation(tmp_path):
     assert normalise(path).size == (200, 400)
 
 
+# Named system profiles live here on macOS only. The tests below that need a
+# specific profile by name still skip without them, but they are no longer the
+# only cover for the conversion path: see the generated-profile test underneath,
+# which runs everywhere.
 ICC_DIR = Path("/System/Library/ColorSync/Profiles")
 
 
@@ -214,3 +218,68 @@ def test_no_size_cap_keeps_requested_quality(master):
     src = normalise(master)
     target = _target(quality=88, max_bytes=None)
     assert encode(render(src, target), target).quality == 88
+
+
+def test_the_icc_conversion_is_reached_on_any_platform(tmp_path, monkeypatch):
+    """_to_srgb must actually call profileToProfile, on every platform.
+
+    The three tests above read profiles from a macOS-only directory, so on
+    Linux they skip and nothing exercises the conversion. That is worse than a
+    coverage gap: _to_srgb catches every exception from profileToProfile and
+    falls back to a plain convert("RGB"), so colour management could break
+    completely and CI would stay green.
+
+    Asserting on pixels cannot do this portably, because the only non-sRGB
+    profile ImageCms can build here (sRGB at gamma 2.2) converts to the same
+    values. So assert the call happens and does not fall back.
+    """
+    from PIL import ImageCms
+
+    other = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB", 2.2)).tobytes()
+    path = tmp_path / "tagged.jpg"
+    Image.new("RGB", (400, 400), (128, 90, 60)).save(path, icc_profile=other, quality=95)
+
+    # Pillow may rewrite the profile on save, so the bytes read back are not
+    # necessarily the ones written. Name every profile in this test.
+    monkeypatch.setattr(imageops, "_icc_description", lambda icc: "Wide gamut test profile")
+
+    calls = []
+    real_convert = ImageCms.profileToProfile
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get("outputMode"))
+        return real_convert(*args, **kwargs)
+
+    monkeypatch.setattr(ImageCms, "profileToProfile", spy)
+
+    out = normalise(path)
+
+    assert calls == ["RGB"], "profileToProfile was never called, so the conversion was skipped"
+    assert out.mode == "RGB"
+
+
+def test_a_failing_icc_conversion_still_produces_an_export(tmp_path, monkeypatch):
+    """The fallback exists so a broken profile cannot stop a delivery.
+
+    It is deliberately silent, which is exactly why the test above has to prove
+    the good path is taken: without it, this fallback would hide a total
+    failure of colour management behind a green suite.
+    """
+    from PIL import ImageCms
+
+    other = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB", 2.2)).tobytes()
+    path = tmp_path / "tagged.jpg"
+    Image.new("RGB", (400, 400), (128, 90, 60)).save(path, icc_profile=other, quality=95)
+
+    # Pillow may rewrite the profile on save, so the bytes read back are not
+    # necessarily the ones written. Name every profile in this test.
+    monkeypatch.setattr(imageops, "_icc_description", lambda icc: "Wide gamut test profile")
+
+    def boom(*args, **kwargs):
+        raise OSError("profile transform failed")
+
+    monkeypatch.setattr(ImageCms, "profileToProfile", boom)
+
+    out = normalise(path)
+    assert out.mode == "RGB"
+    assert out.size == (400, 400)

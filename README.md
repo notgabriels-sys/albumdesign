@@ -1,141 +1,302 @@
 # Coverforge
 
-Local preflight and delivery-pack builder for release artwork.
+Preflight your release artwork, then export the whole per-platform delivery pack
+in one command.
+
+**Free browser tools, nothing to install:**
+[cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
+[LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
+[delivery check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
+[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
+[split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
+
+They run entirely in your browser. Nothing is uploaded, so unreleased masters
+stay on your machine.
+
+You finish a cover, and then comes the boring half: 3000×3000 for the
+distributor, 3000×3000 for Beatport, something under 2 MB for SoundCloud, a 9:16
+crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG,
+because one wrong file gets the release bounced a week before it drops.
+`coverforge` does that pass for you and tells you up front which targets your
+master can't legitimately reach.
+
+```
+$ coverforge check master.png
+master.png
+  3200x3200  RGBA  PNG  4.1 MB  vs 10 target(s)
+
+  ! has transparency; it will be flattened onto #ffffff. Most stores reject alpha
+    outright, so check the result looks right
+  - no ICC profile embedded; assuming sRGB
+
+  ok 10/10 targets clear: bandcamp, spotify, apple_music, beatport, soundcloud,
+     soundcloud_distro, instagram_post, instagram_story, web_thumb, archive
+
+$ coverforge build master.png -o delivery/ --name "Lack of Fate - Drift Protocol"
+master.png -> delivery
+  bandcamp          3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--bandcamp--3000x3000.jpg
+  spotify           3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--spotify--3000x3000.jpg
+  apple_music       3000x3000  jpeg q95   994 KB  lack-of-fate-drift-protocol--apple_music--3000x3000.jpg
+  beatport          3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--beatport--3000x3000.jpg
+  soundcloud        1400x1400  jpeg q90   264 KB  lack-of-fate-drift-protocol--soundcloud--1400x1400.jpg
+  soundcloud_distro 3000x3000  jpeg q92   844 KB  lack-of-fate-drift-protocol--soundcloud_distro--3000x3000.jpg
+  instagram_post    1080x1080  jpeg q90   183 KB  lack-of-fate-drift-protocol--instagram_post--1080x1080.jpg
+  instagram_story   1080x1920  jpeg q90   202 KB  lack-of-fate-drift-protocol--instagram_story--1080x1920.jpg
+  web_thumb           600x600  jpeg q85    75 KB  lack-of-fate-drift-protocol--web_thumb--600x600.jpg
+  archive           3000x3000  png        197 KB  lack-of-fate-drift-protocol--archive--3000x3000.png
+
+9 files written, worst finding: info
+```
+
+## Shipping a sample pack
+
+`tools/packcheck.py` is `coverforge check` for audio: the things a buyer judges
+you on are mechanical and easy to get wrong across 130 files by hand.
+
+```bash
+python tools/packcheck.py path/to/Duress_Vol1
+python tools/packcheck.py path/to/Duress_Vol1 --write-readme --title "Duress - Vol. 1"
+```
+
+It checks WAV 24-bit / 44.1 kHz, catches clipped and silent files, junk like
+`.DS_Store`, untrimmed one-shots, tonal material missing its key, loops without
+a BPM in the filename, and loops whose length is not a whole number of bars at
+their stated BPM. `--write-readme` generates the pack README with real file
+counts, and refuses while there are errors. `--quick` skips decoding audio.
+
+Exit codes match the rest of the repo: `0` clean, `1` findings, `2` bad usage.
 
 ## Install
 
-Use Python 3.11 or newer. From the repository root, install Coverforge with
-its development dependencies:
+Coverforge needs Python 3.11+ and Pillow. From the repository root:
 
 ```bash
-python3.11 -m pip install -e ".[dev]"
+uv venv && uv pip install -e '.[dev]'
+# or: python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
-## Use
+Then use `coverforge ...`, or `python -m coverforge ...` without installing the
+console entry point.
 
-Inspect the configured target definitions:
+## What it actually does to your pixels
+
+Every export goes through the same normalisation, once per master:
+
+- **EXIF rotation is baked in**, so a phone-shot or scanned element can't flip
+  later in someone else's renderer.
+- **Converted to sRGB** through the embedded ICC profile if there is one. CMYK
+  masters are converted too, with a warning, because the colour *will* shift and
+  you want to see that before a store does.
+- **Alpha is flattened** onto a colour you choose (`--flatten '#000000'`), never
+  silently dropped.
+- **Resized with Lanczos**: centre-crop for square targets, scale-to-fit with a
+  blurred backdrop for the 9:16 story.
+- **Encoded baseline, 4:4:4, sRGB-tagged.** Progressive JPEGs get rejected by
+  some delivery pipelines, and chroma subsampling smears exactly the hard-edged
+  typography that cover art is made of.
+- **Size caps are respected.** SoundCloud's 2 MB ceiling is enforced by bisecting
+  JPEG quality down to the highest value that fits, and if even quality 55 won't
+  fit you get told rather than shipped mush.
+
+## What it refuses to do
+
+It will not upscale your master to fake a spec. If a 1600px master is fed to a
+3000px target, that target is **skipped** with the reason printed. `--allow-upscale`
+overrides it when you've decided you don't care.
+
+Targets with a floor (`min_source`) are a harder no: below that, the target is
+skipped even with `--allow-upscale`, because the render would be upscaled or
+soft. Some of those floors are stricter than what the store documents, and one
+or two are ours entirely, so each target's note in `targets.toml` says whose
+number it is and why. The web checker at `docs/cover.html` reports the
+platform's published minimum instead, which is why the two do not always agree.
+
+## Commands
 
 ```bash
-coverforge targets
+coverforge targets                         # list target definitions
+coverforge check ART... [--strict]         # preflight; writes nothing
+coverforge build ART... -o DIR             # render a delivery pack
+coverforge sheet ART... -o SHEET.jpg       # quick single-JPEG variant grid
+coverforge contact-sheet ART... -o DIR     # JPEG + offline HTML review packet
+coverforge audit DELIVERY...               # validate expected delivery files
+coverforge verify DELIVERY...              # audit plus manifest checksums
+coverforge package DELIVERY... -o DIR      # validated handoff ZIP files
+coverforge manifest LEFT RIGHT             # compare two build captures
 ```
 
-Run a report-only preflight for an image. `check` reads the supplied image and
-prints findings; it writes no files:
+`contactsheet` is retained as an alias for `contact-sheet`.
+
+`ART` can be files or a directory. Point `build` at a folder of variants and
+each one gets its own output folder:
 
 ```bash
-coverforge check path/to/master.png
+coverforge build ~/art/ft007-variants/ -o delivery/ --group dsp
+# delivery/ft007-cover-v1/... delivery/ft007-cover-v2/... etc.
 ```
 
-Write a delivery pack to an explicit output directory:
+Useful flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--only spotify,bandcamp` | just these targets |
+| `--group dsp` | groups are `dsp`, `social`, `web`, `archive` |
+| `--name "Artist - Title"` | slugified into the output filenames |
+| `--flatten '#000000'` | colour behind transparency (default white) |
+| `--allow-upscale` | render targets larger than the master |
+| `--dry-run` | build/review packet: report the plan without writing |
+| `--strict` | check: exit non-zero on warnings, not just errors |
+| `--json` | machine-readable output from supported commands |
+
+Exit codes: `0` clean, `1` findings (errors, warnings under `--strict`, invalid
+deliveries, differences, or skipped targets), `2` bad usage or unreadable input.
+That makes pre-delivery automation straightforward:
 
 ```bash
-coverforge build path/to/master.png --name my-release -o build/my-release
+coverforge check final-master.tif --strict || exit 1
 ```
 
-Preview the build result without writing output:
+## Picking between variants
+
+For a quick visual pass, combine variants into one labelled JPEG:
 
 ```bash
-coverforge build path/to/master.png --name my-release -o build/my-release --dry-run
+coverforge sheet ~/art/ft011-variants/ \
+  --title "FT011 visual review" --columns 4 -o review/ft011.jpg
 ```
 
-The image argument can also be a directory. Use `--only` or `--group` to limit
-the selected targets.
-
-Build a review sheet to compare multiple master variants quickly:
+For a review packet that keeps the filename mapping visible, use:
 
 ```bash
-coverforge sheet path/to/variants -o review/lof-variants.jpg --columns 4 --title "Lack of Fate — Drift"
+coverforge contact-sheet ~/art/ft011-variants/ \
+  --title "FT011 visual review" --columns 4 -o review/ft011
 ```
 
-The command accepts a mix of image files and directories. It writes one JPEG
-file by default and is intended to support batch feedback loops before delivery.
+It writes exactly two files into a **new** directory that must sit outside every
+source image's own folder:
 
-For stronger feedback loops, build a review packet with a still image and an
-offline HTML index:
+- `CONTACT_SHEET.jpg`: a numbered, letterboxed preview grid
+- `CONTACT_SHEET.html`: an offline index mapping each number to its filename,
+  dimensions, and colour mode
 
-```bash
-coverforge contactsheet path/to/variants -o review/lof-variants-pack --columns 4 --cell-size 480 --title "Lack of Fate — Drift review"
-```
+`--dry-run` validates the images, layout, and output location without writing
+anything. `--cell-size`, `--columns`, and `--background '#rrggbb'` tune the
+packet. Source art is never copied, altered, or uploaded.
 
-The packet writes one folder containing:
+## Validating and packaging a delivery
 
-- `CONTACT_SHEET.jpg`
-- `CONTACT_SHEET.html`
-
-Validate completed delivery packs before sharing them with collaborators or labels:
+Validate expected files, filename structure, dimensions, and formats:
 
 ```bash
 coverforge audit build/my-release
 ```
 
-If you generated only a subset (`--only` / `--group`), use the same flags in
-`audit` to check that same subset only. The command validates expected files are
-present, filenames are parseable, and file dimensions/formats match the selected
-target definitions.
-
-Verify delivery integrity by comparing manifest checksums and byte sizes to the
-actual files on disk:
+If the build used `--only` or `--group`, select the same subset during the
+audit. To also compare byte counts and SHA-256 checksums against the manifest:
 
 ```bash
 coverforge verify build/my-release
 ```
 
-`verify` is the same as `audit` with manifest checksum validation enabled. Use
-`--json` if you need structured output for CI.
-
-Create a shareable package when a bundle is ready to hand over:
+Create a shareable package only after the same validation passes:
 
 ```bash
 coverforge package build/my-release -o release-packages
 ```
 
-`package` runs the same target validation as `audit`, then creates one zip file
-per delivered master and adds `COVERFORGE_PACKAGE.json` inside each archive. That
-file captures the audit summary and SHA-256 checksums for the included files, so
-you can confirm exactly what was sent before upload or handoff.
+Each ZIP includes `COVERFORGE_PACKAGE.json`, with the audit summary and hashes
+for the included files. `--force` can package a bundle with findings, but the
+command still exits non-zero so automation cannot mistake it for a clean pack.
 
-Use `--force` if you want to archive a bundle that has findings anyway.
-
-Compare two generated manifests (or bundle folders) to verify that nothing
-unexpected changed between versions:
+Compare two generated manifests or bundle folders when a revision arrives:
 
 ```bash
 coverforge manifest build/my-release-v1 build/my-release-v2
-```
-
-Pass `--json` if you need a structured diff payload for automation:
-
-```bash
 coverforge manifest build/my-release-v1 build/my-release-v2 --json
 ```
 
 ## What a build writes
 
 A non-dry-run build that can produce at least one selected target writes one
-rendered delivery file per produced target in the output directory. It also
-writes `DELIVERY.md`, a human-readable inventory, and `manifest.json`, the
-machine-readable capture. Skipped targets have no rendered file.
+rendered delivery file per produced target. It also writes `DELIVERY.md`, a
+human-readable inventory, and `manifest.json`, the machine-readable capture.
+Skipped targets have no rendered file.
 
-`check` is report-only and writes nothing. `build --dry-run` reports the
-planned result but writes no output directory, delivery files, `DELIVERY.md`,
-or `manifest.json`.
+`check` is report-only and writes nothing. `build --dry-run` reports the planned
+result but writes no output directory, delivery files, `DELIVERY.md`, or
+`manifest.json`.
 
-## Portable manifest boundary
+## What `manifest.json` is, and is not
 
-`manifest.json` uses schema version 1. For a valid slug it contains no local
-paths. It records the source SHA-256, every emitted output SHA-256, and a
-deterministic `capture_id`, with local byte counts and rendering facts. It is a
-capture of local bytes selected and emitted by this run only.
+The manifest uses schema version 1. For a valid name it contains no local paths,
+so it is safe to hand to someone else. It records the SHA-256 of the source and
+every emitted output, byte counts, rendering facts, and a deterministic
+`capture_id` derived from the rest of the payload.
 
-Coverforge does not upload files, determine rights, validate external
-acceptance, or guarantee destination compliance. The manifest is local
-evidence only, not proof of authorship, ownership, rights, approval, or
-release-readiness.
+That is a record of **the bytes this run read and wrote on your machine**. It is
+not proof of authorship, ownership, rights, approval, release-readiness, or
+external platform acceptance. Coverforge does not upload files or make those
+decisions for you.
 
-## Target definitions
+## The specs are yours to edit
 
-The built-in definitions are in `coverforge/targets.toml` and are editable.
-Use `--targets-file` to replace them or `--extra-targets` to merge changes.
-Destination requirements drift, so verify current requirements before
-delivery. These definitions configure a local workflow; they do not determine
-an external outcome.
+`coverforge/targets.toml` holds every built-in target. The numbers are a
+best-effort snapshot, and platforms change requirements without announcing it,
+so check them against what your distributor currently demands before relying on
+them.
+
+Adding a target is a few lines:
+
+```toml
+[targets.vinyl_sleeve]
+name = "Vinyl sleeve proof"
+group = "print"
+width = 3500
+height = 3500
+format = "png"
+min_source = 3500
+fit = "cover"
+notes = "Send to the pressing plant."
+```
+
+Keep your own set outside the repo and merge it on top of the built-ins:
+
+```bash
+coverforge build master.png -o out/ --extra-targets ~/.config/coverforge.toml
+```
+
+`--extra-targets` overrides matching keys and adds new ones; `--targets-file`
+replaces the built-in set entirely.
+
+## Development
+
+```bash
+uv pip install -e '.[dev]'
+python -m pytest tests -q
+```
+
+The browser tools in `docs/` have their own checks. They need Playwright and the
+image fixtures, which are generated rather than committed:
+
+```bash
+npm install playwright
+python tools/make_fixtures.py     # writes tools/fixtures/
+node tools/browser_test.js        # functional: parsing, loudness, checklist
+node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
+```
+
+`verify_lufs.py` and `verify_truepeak.py` check the loudness maths against the
+EBU Tech 3341 test signals independently of the browser.
+
+Two more run in CI and need nothing installed:
+
+```bash
+python tools/consistency_check.py       # cross-page invariants
+python tools/sync_artifacts.py --check  # are the published copies stale?
+```
+
+`consistency_check.py` asserts the things that have actually gone wrong: the
+rate table agreeing across every page that quotes it, no unverified payment link
+reaching a page, the cover tool and the checklist not contradicting each other,
+and no page making a network call, which is what "nothing is uploaded" means.
+Each check is there because that exact thing broke once.

@@ -1,0 +1,72 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: coverforge (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[dev]'
+      - run: python -m pytest tests -q
+      # Cross-page invariants: prices agreeing, no unverified payment link, the
+      # tools not contradicting each other, no page making a network call.
+      # Every check here corresponds to something that actually broke once.
+      - name: docs consistency
+        run: python tools/consistency_check.py
+      # The published artifact copies are derived, never hand-edited.
+      - name: artifact copies derive cleanly
+        run: python tools/sync_artifacts.py --out "$RUNNER_TEMP/artifacts"
+
+  maths:
+    name: loudness maths vs EBU Tech 3341
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install numpy scipy
+      # These check the BS.1770 gating and the 4x-oversampled true peak
+      # against known signals, independently of the browser.
+      - run: python tools/verify_lufs.py
+      - run: python tools/verify_truepeak.py
+
+  browser:
+    name: docs tools in a real browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install pillow
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      # Fixtures are generated, not committed.
+      - run: python tools/make_fixtures.py
+      - name: functional checks
+        run: node tools/browser_test.js
+      - name: accessibility checks
+        run: node tools/a11y_test.js

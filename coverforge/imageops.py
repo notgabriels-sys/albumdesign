@@ -91,9 +91,23 @@ def _icc_description(icc: bytes | None) -> str | None:
         return "unreadable ICC profile"
 
 
-def _srgb_profile_bytes() -> bytes:
-    """Build the standard sRGB profile embedded in exported artwork."""
-    return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+# ICC header bytes 24..35 hold the profile's creation date and time. littlecms
+# stamps that with the current clock, so a freshly built sRGB profile differs
+# between runs by a byte or two. That profile is embedded in every file we
+# write, which would make identical builds produce different bytes, different
+# output hashes, and a different manifest capture_id one second apart. The
+# field is informational, so zero it and keep builds reproducible.
+_ICC_DATETIME = slice(24, 36)
+
+
+def _srgb_profile_bytes() -> bytes | None:
+    try:
+        raw = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
+    except Exception:
+        return None
+    if len(raw) >= _ICC_DATETIME.stop:
+        raw[_ICC_DATETIME] = b"\x00" * 12
+    return bytes(raw)
 
 
 SRGB_BYTES = _srgb_profile_bytes()
@@ -131,20 +145,40 @@ def inspect(path: Path) -> SourceImage:
         raise ImageError(f"file not found: {path}") from None
     except UnidentifiedImageError:
         raise ImageError(f"not a readable image: {path}") from None
+    except Image.DecompressionBombError:
+        # A header can claim a pixel count far beyond what it could hold.
+        # Pillow refuses, and that refusal is an answer about the file, not a
+        # crash, so it exits like any other unreadable master.
+        raise ImageError(f"image header declares an implausible size: {path}") from None
     except OSError as exc:
         raise ImageError(f"could not read {path}: {exc}") from None
 
 
-def normalise(path: Path, flatten_colour: str = "#ffffff") -> Image.Image:
+def normalise(
+    path: Path, flatten_colour: str = "#ffffff", *, data: bytes | None = None
+) -> Image.Image:
     """Open a master and return a flat 8-bit sRGB RGB image.
 
     Handles EXIF rotation, ICC conversion, CMYK, and alpha flattening, which
     are the four things that quietly change how art looks between your screen
     and a store page.
+
+    Pass ``data`` to decode bytes already read from ``path``. The manifest
+    hashes the master, and hashing one read while decoding a second would let
+    the recorded digest describe bytes that were never rendered.
     """
+    source = io.BytesIO(data) if data is not None else path
     try:
-        with Image.open(path) as opened:
-            im = opened.convert("RGBA") if opened.mode in ALPHA_MODES else opened.copy()
+        with Image.open(source) as opened:
+            # Mode P carries its transparency in info, not in the mode, so
+            # testing the mode alone missed every transparent PNG-8 and GIF:
+            # they skipped the flatten below and had convert("RGB") paint the
+            # transparent pixels whatever colour sat at that palette index,
+            # while preflight had already promised the user a flatten onto
+            # their chosen background. inspect() reads transparency the same
+            # way, so the warning and the render now agree.
+            transparent = opened.mode in ALPHA_MODES or "transparency" in opened.info
+            im = opened.convert("RGBA") if transparent else opened.copy()
             icc = opened.info.get("icc_profile")
     except UnidentifiedImageError:
         raise ImageError(f"not a readable image: {path}") from None

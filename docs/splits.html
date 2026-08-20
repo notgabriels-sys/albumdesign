@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Split Sheet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Write down who owns what on a track, before anyone has to remember. Free, runs in your browser, nothing uploaded.">
+<link rel="canonical" href="https://notgabriels-sys.github.io/albumdesign/splits.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://notgabriels-sys.github.io/albumdesign/splits.html">
+<meta property="og:title" content="Split Sheet">
+<meta property="og:description" content="Write down who owns what on a track, before anyone has to remember. Free, runs in your browser, nothing uploaded.">
+<meta property="og:image" content="https://notgabriels-sys.github.io/albumdesign/share.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Preflight: free tools for releasing music, by Gabriel G Alonso, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --accent:#5a46e0;
+    --pass:#197e46; --warn:#946318; --fail:#c5362c;
+    --pass-bg:#e7f5ec; --warn-bg:#f7efdd; --fail-bg:#fbe8e6;
+    --shadow:0 1px 2px rgba(20,22,28,.06),0 8px 24px rgba(20,22,28,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+    --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}}
+  :root[data-theme="dark"]{
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --pass:#3bbd72; --warn:#d9a441; --fail:#e2564d;
+    --pass-bg:#11241a; --warn-bg:#2a2113; --fail-bg:#2a1514;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:22px}
+  .brand{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;letter-spacing:.3em;
+    font-size:15px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .tag{color:var(--muted);font-size:13.5px}
+  .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .priv::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:var(--pass);margin-right:7px;vertical-align:1px}
+  h1{font-size:clamp(25px,4.2vw,38px);line-height:1.08;margin:.1em 0 .3em;letter-spacing:-.02em;text-wrap:balance;max-width:22ch}
+  .lede{color:var(--muted);font-size:16px;max-width:62ch;margin:0 0 22px}
+
+  /* Not overflow:hidden. That clips the Remove buttons at the right edge out
+     of reach on a phone, which is the same bug the shop rates table had. The
+     .tscroll inside does the scrolling instead. */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--shadow);margin-bottom:16px}
+  .card > h2{margin:0;padding:14px 16px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+    align-items:center;gap:10px;flex-wrap:wrap}
+  .card .body{padding:14px 16px}
+  .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  label{display:block;font-size:12px;letter-spacing:.03em;color:var(--muted);margin-bottom:4px}
+  input,select{width:100%;font:inherit;font-size:14px;color:var(--ink);background:var(--surface-2);
+    border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:44px}
+  input:focus,select:focus{border-color:var(--accent)}
+  input[type=number]{font-variant-numeric:tabular-nums}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);font-weight:600}
+  td input,td select{min-height:40px;padding:7px 8px}
+  /* Scrolls on a phone, and is a focusable region so the Remove buttons at the
+     right edge stay reachable by keyboard instead of being clipped away. */
+  .tscroll{overflow-x:auto;border-radius:10px}
+  /* White on the accent fails contrast in dark mode, where the accent lightens. */
+  :root{--on-accent:#fff}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--on-accent:#0b0c10}}
+  :root[data-theme="dark"]{--on-accent:#0b0c10}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .rm{font:inherit;font-size:12px;color:var(--fail);background:none;border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;cursor:pointer;min-height:40px;white-space:nowrap}
+  .rm:hover{border-color:var(--fail)}
+
+  button.act{font:inherit;font-size:13.5px;font-weight:600;color:var(--ink);background:var(--surface-2);
+    border:1px solid var(--line);border-radius:9px;padding:11px 14px;cursor:pointer;min-height:44px}
+  button.act:hover{border-color:var(--accent);color:var(--accent)}
+  button.act.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+  button.act.primary:hover{filter:brightness(1.08);color:var(--on-accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+  .total{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-weight:700;
+    letter-spacing:.04em;padding:4px 9px;border-radius:7px;white-space:nowrap}
+  .total.pass{color:var(--pass);background:var(--pass-bg)}
+  .total.fail{color:var(--fail);background:var(--fail-bg)}
+
+  .note{color:var(--muted);font-size:12.5px;line-height:1.55;margin:10px 0 0}
+  .note b{color:var(--ink)}
+  .warnbox{border:1px solid var(--line);background:var(--warn-bg);color:var(--ink);
+    border-radius:10px;padding:11px 13px;font-size:13px;margin:0 0 14px}
+
+  footer{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;
+    gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  footer a:hover{text-decoration:underline}
+  .cta{margin-left:auto}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+  /* The printed sheet is the actual deliverable, so it gets real attention. */
+  @media print{
+    body{background:#fff;color:#000}
+    .wrap{max-width:none;padding:0}
+    .noprint,.priv,.tag,.lede,footer .cta{display:none!important}
+    .card{box-shadow:none;border:1px solid #999;break-inside:avoid;margin-bottom:12px}
+    .card > h2{border-bottom:1px solid #999;color:#000}
+    input,select{border:0;background:none;padding:2px 0;min-height:0;color:#000;
+      -webkit-appearance:none;appearance:none}
+    th,td{border-bottom:1px solid #ccc}
+    .sign{display:block!important}
+  }
+  .sign{display:none;margin-top:6px}
+  .sign td{height:52px;vertical-align:bottom}
+</style>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header>
+    <span class="brand">SPLIT<b>·</b>SHEET</span>
+    <span class="tag">agree it now, not after the money arrives</span>
+    <span class="priv">runs in your browser · nothing uploaded</span>
+  </header>
+
+  <main id="main">
+  <h1>Write down who owns what</h1>
+  <p class="lede">Two different things get split on every track, and people forget that. The
+    <b>composition</b> is what GEMA and other societies pay on. The <b>recording</b> is what GVL and
+    your distributor pay on. Fill both in, print it, get it signed while everyone is still friendly.</p>
+
+  <p class="warnbox noprint">This builds a document. It is not legal advice, and it is not
+    registration: registering with a society is a separate step you still have to do.</p>
+
+  <div class="card">
+    <h2>The track</h2>
+    <div class="body">
+      <div class="fields">
+        <div><label for="title">Track title</label><input id="title" placeholder="Drift Protocol"></div>
+        <div><label for="artist">Artist</label><input id="artist" placeholder="Lack of Fate"></div>
+        <div><label for="label">Label / release</label><input id="label" placeholder="Fate Through"></div>
+        <div><label for="isrc">ISRC (if assigned)</label><input id="isrc" placeholder="DE-XXX-26-00001"></div>
+        <div><label for="date">Date agreed</label><input id="date" type="date"></div>
+        <div><label for="place">Place</label><input id="place" placeholder="Berlin"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span>Composition: who wrote it</span><span class="total" id="wtotal">0%</span></h2>
+    <div class="body">
+      <div class="tscroll" role="region" tabindex="0" aria-label="Composition shares">
+        <table>
+          <thead><tr>
+            <th scope="col">Name</th><th scope="col">Role</th><th scope="col">Society / publisher</th>
+            <th scope="col" class="num">Share</th><th scope="col"><span class="sr-only">Remove</span></th>
+          </tr></thead>
+          <tbody id="writers"></tbody>
+        </table>
+      </div>
+      <div class="row noprint" style="margin-top:12px">
+        <button class="act" id="addw" type="button">Add writer</button>
+        <button class="act" id="evenw" type="button">Split evenly</button>
+      </div>
+      <p class="note">This is the song itself: the notes, the arrangement, the topline. In Germany
+        this is the <b>GEMA</b> side. Producers who materially shaped the composition usually belong
+        here, and that is exactly the conversation worth having in advance.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span>Recording: who made the master</span><span class="total" id="rtotal">0%</span></h2>
+    <div class="body">
+      <div class="tscroll" role="region" tabindex="0" aria-label="Recording shares">
+        <table>
+          <thead><tr>
+            <th scope="col">Name</th><th scope="col">Role</th><th scope="col">Society / rights holder</th>
+            <th scope="col" class="num">Share</th><th scope="col"><span class="sr-only">Remove</span></th>
+          </tr></thead>
+          <tbody id="performers"></tbody>
+        </table>
+      </div>
+      <div class="row noprint" style="margin-top:12px">
+        <button class="act" id="addr" type="button">Add performer</button>
+        <button class="act" id="evenr" type="button">Split evenly</button>
+      </div>
+      <p class="note">This is the specific recording. In Germany the neighbouring rights side is
+        <b>GVL</b>, where performers and the recording producer (often the label) collect from two
+        different pots. Master ownership is usually the label unless you agreed otherwise, so write
+        down what you actually agreed.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Signatures</h2>
+    <div class="body">
+      <p class="note noprint">Print this and have everyone sign. A signed sheet from the day you
+        agreed is worth more than four people's memories a year later.</p>
+      <table class="sign"><tbody id="sigs"></tbody></table>
+    </div>
+  </div>
+
+  <div class="row noprint" style="margin-top:18px">
+    <button class="act primary" id="print" type="button">Print / save as PDF</button>
+    <button class="act" id="copy" type="button">Copy as text</button>
+    <button class="act" id="reset" type="button">Clear</button>
+    <span class="note" id="live" role="status" aria-live="polite" style="margin:0"></span>
+  </div>
+
+  </main>
+  <footer>
+    <a href="index.html">← all tools</a>
+    <a href="impressum.html">Impressum</a>
+    <span>Split Sheet: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need the record finished? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var KEY="split-sheet-v1";
+  var WRITER_ROLES=["Music","Lyrics","Music & lyrics","Arrangement","Producer","Co-producer","Remixer"];
+  var PERF_ROLES=["Main artist","Featured artist","Performer","Producer","Recording producer / label",
+                  "Mix engineer","Mastering engineer"];
+
+  function row(tbody,roles,data){
+    data=data||{};
+    var tr=document.createElement("tr");
+    var name=document.createElement("input"); name.className="f-name"; name.placeholder="Full legal name";
+    name.value=data.name||""; name.setAttribute("aria-label","Name");
+    var role=document.createElement("select"); role.className="f-role"; role.setAttribute("aria-label","Role");
+    roles.forEach(function(r){var o=document.createElement("option");o.value=r;o.textContent=r;role.appendChild(o)});
+    if(data.role) role.value=data.role;
+    var soc=document.createElement("input"); soc.className="f-soc"; soc.placeholder="GEMA / GVL / none";
+    soc.value=data.soc||""; soc.setAttribute("aria-label","Society or publisher");
+    var pct=document.createElement("input"); pct.type="number"; pct.className="f-pct num";
+    pct.min="0"; pct.max="100"; pct.step="0.01"; pct.value=data.pct!==undefined?data.pct:"";
+    pct.setAttribute("aria-label","Share percent");
+    var del=document.createElement("button"); del.type="button"; del.className="rm noprint";
+    del.textContent="Remove"; del.setAttribute("aria-label","Remove this person");
+
+    [name,role,soc,pct].forEach(function(el){
+      var td=document.createElement("td");
+      if(el===pct) td.className="num";
+      td.appendChild(el); tr.appendChild(td);
+    });
+    var tdd=document.createElement("td"); tdd.className="noprint"; tdd.appendChild(del); tr.appendChild(tdd);
+    del.addEventListener("click",function(){tr.remove();update()});
+    tr.addEventListener("input",update);
+    tr.addEventListener("change",update);
+    tbody.appendChild(tr);
+    return tr;
+  }
+
+  function rows(tbody){return Array.prototype.slice.call(tbody.querySelectorAll("tr"))}
+  function readRow(tr){
+    return {
+      name:tr.querySelector(".f-name").value.trim(),
+      role:tr.querySelector(".f-role").value,
+      soc:tr.querySelector(".f-soc").value.trim(),
+      pct:parseFloat(tr.querySelector(".f-pct").value)||0
+    };
+  }
+  function sum(tbody){
+    return rows(tbody).reduce(function(t,tr){return t+(parseFloat(tr.querySelector(".f-pct").value)||0)},0);
+  }
+  function even(tbody){
+    var rs=rows(tbody); if(!rs.length) return;
+    // Distribute to 2dp and put the remainder on the first row, so it totals
+    // exactly 100 instead of 99.99 with three people.
+    var each=Math.floor(10000/rs.length)/100;
+    rs.forEach(function(tr){tr.querySelector(".f-pct").value=each.toFixed(2)});
+    var drift=+(100-each*rs.length).toFixed(2);
+    if(drift) rs[0].querySelector(".f-pct").value=(each+drift).toFixed(2);
+    update();
+  }
+
+  function badge(el,total){
+    var ok=Math.abs(total-100)<0.005;
+    el.className="total "+(ok?"pass":"fail");
+    el.textContent=(Math.round(total*100)/100)+"%"+(ok?"":", must total 100");
+  }
+
+  function signatures(){
+    var body=$("sigs"); body.innerHTML="";
+    var seen={}, people=[];
+    rows($("writers")).concat(rows($("performers"))).forEach(function(tr){
+      var n=tr.querySelector(".f-name").value.trim();
+      if(n&&!seen[n.toLowerCase()]){seen[n.toLowerCase()]=1;people.push(n)}
+    });
+    people.forEach(function(n){
+      var tr=document.createElement("tr");
+      tr.innerHTML="<td>"+esc(n)+"</td><td>Signature: ______________________________</td>"+
+                   "<td>Date: ______________</td>";
+      body.appendChild(tr);
+    });
+  }
+  function esc(s){return s.replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+
+  function update(){
+    badge($("wtotal"),sum($("writers")));
+    badge($("rtotal"),sum($("performers")));
+    signatures();
+    save();
+  }
+
+  function save(){
+    try{
+      localStorage.setItem(KEY,JSON.stringify({
+        meta:["title","artist","label","isrc","date","place"].reduce(function(o,k){o[k]=$(k).value;return o},{}),
+        writers:rows($("writers")).map(readRow),
+        performers:rows($("performers")).map(readRow)
+      }));
+    }catch(e){}
+  }
+  function load(){
+    var raw=null; try{raw=localStorage.getItem(KEY)}catch(e){}
+    var d=null; try{d=raw?JSON.parse(raw):null}catch(e){d=null}
+    if(d&&d.meta) Object.keys(d.meta).forEach(function(k){if($(k))$(k).value=d.meta[k]||""});
+    (d&&d.writers&&d.writers.length?d.writers:[{}]).forEach(function(w){row($("writers"),WRITER_ROLES,w)});
+    (d&&d.performers&&d.performers.length?d.performers:[{}]).forEach(function(p){row($("performers"),PERF_ROLES,p)});
+    if(!$("date").value) $("date").value=new Date().toISOString().slice(0,10);
+    update();
+  }
+
+  function asText(){
+    var m=["title","artist","label","isrc","date","place"].map(function(k){return $(k).value.trim()});
+    var out=["SPLIT SHEET","Track: "+(m[0]||"—"),"Artist: "+(m[1]||"—"),"Label: "+(m[2]||"—"),
+             "ISRC: "+(m[3]||"—"),"Agreed: "+(m[4]||"—")+(m[5]?", "+m[5]:""),"",
+             "COMPOSITION (GEMA side)"];
+    rows($("writers")).map(readRow).forEach(function(r){
+      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
+    out.push("  total "+(Math.round(sum($("writers"))*100)/100)+"%","","RECORDING (GVL side)");
+    rows($("performers")).map(readRow).forEach(function(r){
+      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
+    out.push("  total "+(Math.round(sum($("performers"))*100)/100)+"%","",
+             "Signed:", "");
+    rows($("sigs")).forEach(function(tr){out.push("  "+tr.cells[0].textContent+"   ______________________   date ____________")});
+    return out.join("\n");
+  }
+
+  $("addw").addEventListener("click",function(){row($("writers"),WRITER_ROLES);update()});
+  $("addr").addEventListener("click",function(){row($("performers"),PERF_ROLES);update()});
+  $("evenw").addEventListener("click",function(){even($("writers"))});
+  $("evenr").addEventListener("click",function(){even($("performers"))});
+  $("print").addEventListener("click",function(){
+    var bad=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
+    $("live").textContent = bad ? "Printing anyway, but a side does not total 100%." : "";
+    window.print();
+  });
+  $("copy").addEventListener("click",function(){
+    var t=asText();
+    var done=function(){$("live").textContent="Copied to the clipboard."};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(done,function(){fallback(t,done)});
+    } else fallback(t,done);
+  });
+  function fallback(t,done){
+    var ta=document.createElement("textarea"); ta.value=t;
+    ta.style.position="fixed"; ta.style.left="-9999px";
+    document.body.appendChild(ta); ta.select();
+    try{document.execCommand("copy");done()}catch(e){$("live").textContent="Could not copy automatically."}
+    document.body.removeChild(ta);
+  }
+  $("reset").addEventListener("click",function(){
+    try{localStorage.removeItem(KEY)}catch(e){}
+    $("writers").innerHTML=""; $("performers").innerHTML="";
+    ["title","artist","label","isrc","place"].forEach(function(k){$(k).value=""});
+    row($("writers"),WRITER_ROLES); row($("performers"),PERF_ROLES);
+    $("live").textContent="Cleared."; update();
+  });
+  ["title","artist","label","isrc","date","place"].forEach(function(k){
+    $(k).addEventListener("input",save);
+  });
+
+  load();
+})();
+</script>
+</html>

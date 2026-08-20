@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Studio Shop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
+<link rel="canonical" href="https://notgabriels-sys.github.io/albumdesign/shop.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://notgabriels-sys.github.io/albumdesign/shop.html">
+<meta property="og:title" content="Studio Shop">
+<meta property="og:description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
+<meta property="og:image" content="https://notgabriels-sys.github.io/albumdesign/share.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Preflight: free tools for releasing music, by Gabriel G Alonso, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --faint:#6a707f; --accent:#5a46e0; --accent-2:#7d5cf0;
+    --shadow:0 1px 2px rgba(20,22,28,.05),0 10px 30px rgba(20,22,28,.07);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{
+    --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+  a{color:inherit}
+  .top{display:flex;align-items:baseline;gap:16px;padding:22px 0;flex-wrap:wrap}
+  .brand{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:.34em;font-size:14px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .nav{margin-left:auto;display:flex;gap:18px;font-size:13.5px}
+  .nav a{color:var(--muted);text-decoration:none}
+  .nav a:hover{color:var(--accent)}
+  .hero{padding:30px 0 18px;border-top:1px solid var(--line)}
+  .eyebrow{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+  .hero h1{font-size:clamp(30px,5.5vw,52px);line-height:1.04;letter-spacing:-.03em;margin:.28em 0 .3em;text-wrap:balance;max-width:16ch}
+  .hero p{font-size:17px;color:var(--muted);max-width:58ch;margin:0}
+  section{padding:30px 0}
+  .label{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 16px;display:flex;align-items:center;gap:12px}
+  .label::after{content:"";flex:1;height:1px;background:var(--line)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:20px;box-shadow:var(--shadow)}
+  .card .kh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card h3{margin:0 0 4px;font-size:18px;letter-spacing:-.01em}
+  .price{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--accent);font-size:16px;white-space:nowrap}
+  .card p{margin:6px 0 16px;color:var(--muted);font-size:13.5px;flex:1}
+  .buy{display:inline-block;text-align:center;font-weight:600;font-size:14px;color:#fff;background:var(--accent);
+    border-radius:10px;padding:10px 16px;text-decoration:none}
+  .buy:hover{background:var(--accent-2)}
+  .buy.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  .buy.ghost:hover{border-color:var(--accent)}
+  .card .fine{margin:0 0 14px;color:var(--faint);font-size:12px;line-height:1.5;flex:none}
+  .soon{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.06em;color:var(--faint);
+    border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .payrow{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:14px}
+  .payrow .buy{flex:none}
+  .paynote{margin:0;color:var(--faint);font-size:12.5px;line-height:1.5;flex:1;min-width:240px}
+  .paylinks{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+  .paylabel{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint)}
+  .paylink{display:inline-block;font-size:13.5px;font-weight:600;color:var(--accent);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;text-decoration:none;min-height:44px;line-height:22px}
+  .paylink:hover{border-color:var(--accent)}
+  .svc{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{padding:12px 16px;border-bottom:1px solid var(--line);text-align:left}
+  th{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  td.n{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:700}
+  td .book{font-size:12.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
+  td .book:hover{text-decoration:underline}
+  tr:last-child td{border-bottom:0}
+  footer{padding:32px 0 50px;border-top:1px solid var(--line);color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+  footer a{color:var(--accent);text-decoration:none;font-weight:600}
+  footer .proj{margin-left:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.05em;color:var(--faint)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+  .svc{overflow:visible}
+  .tscroll{overflow-x:auto;border-radius:16px}
+  .nav a{display:inline-block;padding:6px 4px}
+  :root{--on-accent:#fff}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--on-accent:#0b0c10}}
+  :root[data-theme="dark"]{--on-accent:#0b0c10}
+  .buy{color:var(--on-accent)}
+
+</style>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <div class="top">
+    <span class="brand">STUDIO<b>·</b>SHOP</span>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="index.html#tools">Tools</a>
+      <a href="mailto:hologrampeoplemusic@gmail.com">Contact</a>
+    </nav>
+  </div>
+
+  <main id="main">
+  <div class="hero">
+    <span class="eyebrow">Mixing, mastering &amp; sounds</span>
+    <h1>Get your music finished, or grab the tools I use.</h1>
+    <p>Book mixing and mastering, or buy production resources you keep forever. Everything here is made by
+      someone who releases techno, not a content mill.</p>
+  </div>
+
+  <section>
+    <h2 class="label">Mixing &amp; mastering</h2>
+    <div class="svc"><div class="tscroll" role="region" aria-label="Mixing and mastering rates" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Service</th><th scope="col" style="text-align:right">Per track</th><th scope="col" style="text-align:right">4-track EP</th><th scope="col"><span class="sr-only">Book</span></th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Mastering</th><td class="n">€45</td><td class="n">€135</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mastering%20booking" aria-label="Book mastering">Book &#8594;</a></td></tr>
+          <tr><th scope="row">Mixing</th><td class="n">€160</td><td class="n">€480</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mixing%20booking" aria-label="Book mixing">Book &#8594;</a></td></tr>
+          <tr><th scope="row">Mix + master</th><td class="n">€190</td><td class="n">€570</td>
+            <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mix%20%2B%20master%20booking" aria-label="Book mix and master">Book &#8594;</a></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="payrow">
+      <a class="buy" href="mailto:hologrampeoplemusic@gmail.com?subject=Booking%20enquiry" aria-label="Start a booking by email">Start a booking</a>
+      <p class="paynote"><b>Prices on this page are the total.</b> As a Kleinunternehmer under §19
+        UStG I add no VAT, so the amount you see is the amount you pay. Send the brief first and we
+        agree the work before any money moves. Card and bank transfer both work, and an invoice
+        follows either way.</p>
+    </div>
+    <div class="paylinks">
+      <span class="paylabel" id="paylabel">Pay by card, one track</span>
+      <a class="paylink" href="https://buy.stripe.com/dRm28q3Z06fM6s27JTabK02"
+         aria-label="Pay for mastering of one track, 45 euro, by card">Mastering, pay €45</a>
+      <a class="paylink" href="https://buy.stripe.com/bJe5kC0MO5bI3fQ5BLabK03"
+         aria-label="Pay for mixing of one track, 160 euro, by card">Mixing, pay €160</a>
+      <a class="paylink" href="https://buy.stripe.com/00w8wOcvw6fMaIiggpabK04"
+         aria-label="Pay for mixing and mastering of one track, 190 euro, by card">Mix + master, pay €190</a>
+    </div>
+    <p class="paynote" style="margin-top:10px">EP rates are booked by email, not by these links, because
+      they depend on the number of tracks.</p>
+  </section>
+
+  <section>
+    <h2 class="label">Production resources</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="kh"><h3>Duress — Vol. 1</h3><span class="price">€18</span></div>
+        <p>Techno sample pack in the Lack of Fate world: raw, sub and distorted kicks, metallic
+          percussion and foley, textured hats, sub and rumble bass, dark stabs and drones, risers
+          and room tone, plus drum and top loops at 130 and 134 bpm. Key-labelled where it is
+          tonal. WAV, 24-bit, 44.1 kHz. Royalty-free for your own productions.</p>
+        <p class="fine"><b>In production.</b> Join the list and you get told the day it lands.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Duress%20Vol.%201">Email me when it drops</a>
+      </div>
+      <div class="card">
+        <div class="kh"><h3>Master Start</h3><span class="price">€15</span></div>
+        <p>My Bitwig master-bus chain, in the order I actually build it: trim, surgical EQ, tone EQ,
+          glue compression, saturation, dynamic EQ, stereo with a mono-safe low end, true-peak
+          limiting at -1 dBTP, metering left visible at the end. Two variants, streaming and club.</p>
+        <p class="fine"><b>A starting point, not a one-click master.</b> A fixed chain cannot master
+          every track. You are buying the signal flow and the reasoning, laid out so you can read it
+          and adapt it. In production.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Master%20Start">Email me when it drops</a>
+      </div>
+      <div class="card">
+        <div class="kh"><h3>Preset Pack</h3><span class="price">€12</span></div>
+        <p>Signature synth and FX patches from the Lack of Fate and Hologram People sessions.</p>
+        <p class="fine"><b>In production.</b> Contents are still being decided, so this one is
+          listed without a file list on purpose.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Preset%20Pack">Email me when it drops</a>
+      </div>
+    </div>
+  </section>
+
+  </main>
+  <footer>
+    <span>Studio Shop: Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <a href="impressum.html">Impressum</a>
+    <span class="proj">Fate Through · Lack of Fate · Hologram People</span>
+  </footer>
+</div>
+
+</html>

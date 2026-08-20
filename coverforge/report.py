@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
-from .build import BuildResult
+from .build import BuildResult, output_name, plan
 from .imageops import SourceImage, human_bytes
 from .preflight import ERROR, INFO, WARN, Finding
 from .specs import Target, TargetSet
@@ -32,7 +32,13 @@ def format_finding(finding: Finding, colour: bool) -> str:
     return f"  {prefix} {scope}{finding.message}"
 
 
-def format_check(src: SourceImage, findings: list[Finding], targets: list[Target], colour: bool) -> str:
+def format_check(
+    src: SourceImage,
+    findings: list[Finding],
+    targets: list[Target],
+    colour: bool,
+    allow_upscale: bool = False,
+) -> str:
     header = _paint(str(src.path), _BOLD, colour)
     lines = [
         f"{header}",
@@ -51,11 +57,21 @@ def format_check(src: SourceImage, findings: list[Finding], targets: list[Target
         lines.append("")
         lines += [format_finding(f, colour) for f in per_target]
 
-    blocked = {f.target for f in findings if f.level == ERROR}
-    passing = [t for t in targets if t.key not in blocked]
+    # Ask the builder what it would actually render, rather than counting
+    # anything without an error. Upscale-skipped targets are not "clear".
+    passing, skipped = plan(src, targets, findings, allow_upscale)
     lines.append("")
     tick = _paint("ok", "\033[32m", colour)
-    lines.append(f"  {tick} {len(passing)}/{len(targets)} targets clear: {', '.join(t.key for t in passing) or 'none'}")
+    lines.append(
+        f"  {tick} {len(passing)}/{len(targets)} targets clear: "
+        f"{', '.join(t.key for t in passing) or 'none'}"
+    )
+    if skipped:
+        mark = _paint(_SYMBOL[ERROR], _COLOUR[ERROR], colour)
+        lines.append(
+            f"  {mark} {len(skipped)} would be skipped by build: "
+            f"{', '.join(t.key for t, _ in skipped)}"
+        )
     return "\n".join(lines)
 
 
@@ -72,6 +88,15 @@ def format_build(result: BuildResult, colour: bool) -> str:
             f"  {output.target.key:<17} {output.target.dimensions:>9}  "
             f"{output.target.format:<4}{quality:<4} {human_bytes(output.bytes_written):>8}  "
             f"{output.path.name}{flag}"
+        )
+
+    # A dry run writes nothing, so there are no outputs to list. Show the plan
+    # instead, which is what --dry-run says it reports.
+    for target in result.planned if not result.outputs else []:
+        quality = " jpeg" if target.format == "jpeg" else f" {target.format}"
+        lines.append(
+            f"  would write  {target.key:<17} {target.dimensions:>9} {quality:<5} "
+            f"{output_name(result.slug, target)}"
         )
 
     for target, reason in result.skipped:
