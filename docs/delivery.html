@@ -396,20 +396,69 @@
       return 20*Math.log10(peak+1e-12);
     });
   }
-  // Consecutive samples pinned at full scale are what a clipped master looks
-  // like after the fact. One lone sample at 1.0 is not evidence of anything.
-  function clippedRuns(ab){
-    var runs=0;
-    for(var c=0;c<ab.numberOfChannels;c++){
-      var d=ab.getChannelData(c),run=0;
-      for(var i=0;i<d.length;i++){
-        // 32767/32768, which is full scale for a 16-bit file. The constant was
-        // a digit short at 0.99969, ten times further from full scale, so a
-        // master limited to -0.003 dBFS was reported as pinned at full scale.
-        if(Math.abs(d[i])>=0.999969){ run++; if(run===3) runs++ } else run=0;
-      }
+  // Consecutive source samples pinned at the integer limit are what a clipped
+  // PCM master looks like after the fact. decodeAudioData cannot be used for
+  // this check: it silently resamples to the browser's audio-device rate. That
+  // interpolation can turn a real flat-topped run into pairs of samples and
+  // can overshoot a near-full-scale run above 1.0. Read PCM container bytes so
+  // the result describes the submitted file rather than the browser device.
+  function clippedRuns(buf){
+    var b=new Uint8Array(buf),dv=new DataView(buf);
+    function tag(o){return o+4<=b.length?String.fromCharCode(b[o],b[o+1],b[o+2],b[o+3]):""}
+    function signed24(o,little){
+      var v=little?(b[o]|(b[o+1]<<8)|(b[o+2]<<16)):((b[o]<<16)|(b[o+1]<<8)|b[o+2]);
+      return (v&0x800000)?v-0x1000000:v;
     }
-    return runs;
+    function count(start,bytes,channels,bits,little,unsigned8){
+      var width=bits/8;
+      if(!channels||![1,2,3,4].includes(width)) return 0;
+      var frames=Math.floor(Math.min(bytes,b.length-start)/(width*channels));
+      var runs=new Array(channels).fill(0),found=0;
+      var hi=Math.pow(2,bits-1)-1,lo=-Math.pow(2,bits-1);
+      for(var frame=0;frame<frames;frame++){
+        for(var c=0;c<channels;c++){
+          var o=start+(frame*channels+c)*width,v;
+          if(width===1) v=unsigned8?b[o]-128:dv.getInt8(o);
+          else if(width===2) v=dv.getInt16(o,little);
+          else if(width===3) v=signed24(o,little);
+          else v=dv.getInt32(o,little);
+          if(v===hi||v===lo){ runs[c]++; if(runs[c]===3) found++ }
+          else runs[c]=0;
+        }
+      }
+      return found;
+    }
+    try{
+      if(tag(0)==="RIFF"&&tag(8)==="WAVE"){
+        var format=null,channels=0,bits=0,dataStart=0,dataBytes=0;
+        for(var o=12;o+8<=b.length;){
+          var id=tag(o),size=dv.getUint32(o+4,true);
+          if(id==="fmt "&&size>=16){
+            format=dv.getUint16(o+8,true);
+            channels=dv.getUint16(o+10,true);
+            bits=dv.getUint16(o+22,true);
+          } else if(id==="data"){
+            dataStart=o+8;dataBytes=size;
+          }
+          o+=8+size+(size&1);
+        }
+        return format===1&&dataStart?count(dataStart,dataBytes,channels,bits,true,bits===8):0;
+      }
+      if(tag(0)==="FORM"&&tag(8)==="AIFF"){
+        var ach=0,abits=0,soundStart=0,soundBytes=0;
+        for(var p=12;p+8<=b.length;){
+          var cid=tag(p),csz=dv.getUint32(p+4,false);
+          if(cid==="COMM"&&csz>=18){ach=dv.getUint16(p+8,false);abits=dv.getUint16(p+14,false)}
+          else if(cid==="SSND"&&csz>=8){
+            var offset=dv.getUint32(p+8,false);
+            soundStart=p+16+offset;soundBytes=Math.max(0,csz-8-offset);
+          }
+          p+=8+csz+(csz&1);
+        }
+        return soundStart?count(soundStart,soundBytes,ach,abits,false,false):0;
+      }
+    }catch(e){ return 0 }
+    return 0;
   }
 
   // One placeholder for "nothing was measured here", so an empty cell never has
@@ -450,7 +499,7 @@
           return truePeak(ab).catch(function(){return NaN}).then(function(tp){
             return {name:file.name,ok:true,format:h.format,rate:h.rate,bits:h.bits,
                     dur:ab.duration,ch:ab.numberOfChannels,lufs:lufs,tp:tp,
-                    clipped:clippedRuns(ab)};
+                    clipped:clippedRuns(buf)};
           });
         });
       });

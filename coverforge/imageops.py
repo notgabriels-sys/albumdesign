@@ -211,11 +211,13 @@ def _to_srgb(im: Image.Image, icc: bytes | None) -> Image.Image:
 
     try:
         source_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
-        converted = ImageCms.profileToProfile(
-            body, source_profile, ImageCms.createProfile("sRGB"), outputMode="RGB"
+        destination_profile = ImageCms.createProfile("sRGB")
+        body = ImageCms.profileToProfile(
+            body,
+            source_profile,
+            destination_profile,
+            outputMode="RGB",
         )
-        if converted is not None:
-            body = converted
     except Exception:
         # A broken or exotic profile shouldn't stop the export; a plain
         # convert is a worse but working approximation.
