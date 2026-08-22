@@ -89,6 +89,13 @@ def _normalise_manifest(
             "generated_by": payload.get("generated_by"),
             "slug": payload.get("slug"),
             "capture_id": payload.get("capture_id"),
+            # The boundary is the manifest's own disclaimer, the sentence that
+            # says these hashes identify bytes and do not establish ownership,
+            # rights or approval. It was never compared, so a copy whose
+            # disclaimer had been rewritten into the opposite claim diffed as
+            # identical. It sits inside the hashed payload, so it is part of
+            # what the capture id covers.
+            "boundary": payload.get("boundary"),
             "path": str(path),
         },
         {
@@ -165,6 +172,7 @@ def compare_manifests(
     generator_changed = left_meta["generated_by"] != right_meta["generated_by"]
     slug_changed = left_meta["slug"] != right_meta["slug"]
     capture_id_changed = left_meta["capture_id"] != right_meta["capture_id"]
+    boundary_changed = left_meta["boundary"] != right_meta["boundary"]
 
     output_issues = sorted(set(left_output_issues + right_output_issues))
     has_issues = bool(
@@ -172,6 +180,7 @@ def compare_manifests(
         or generator_changed
         or slug_changed
         or capture_id_changed
+        or boundary_changed
         or left_sources
         or changed_skipped
         or changed_findings
@@ -209,6 +218,7 @@ def compare_manifests(
             "generated_by_changed": generator_changed,
             "slug_changed": slug_changed,
             "capture_id_changed": capture_id_changed,
+            "boundary_changed": boundary_changed,
             "source": left_sources,
             "skipped": {
                 "left_count": len(left_skipped),

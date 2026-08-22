@@ -165,6 +165,12 @@ def format_manifest_diff(payload: dict) -> str:
         lines.append("  slug changed")
     if delta["capture_id_changed"]:
         lines.append("  capture_id changed")
+    if delta.get("boundary_changed"):
+        # Worth its own line rather than folding into "capture_id changed": the
+        # boundary is the sentence saying these hashes do not establish
+        # ownership, rights or approval, so a rewritten one is a claim being
+        # made on the manifest's authority.
+        lines.append("  boundary changed: the capture's own disclaimer differs")
 
     if delta["source"]:
         lines.append("")

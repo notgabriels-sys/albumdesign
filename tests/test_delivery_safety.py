@@ -196,3 +196,135 @@ class TestMalformedManifestDoesNotCrash:
         (bundle / "manifest.json").write_text("[]")
         assert main(["verify", str(bundle), "--only", "spotify,bandcamp"]) == 2
         assert "failed" in capsys.readouterr().err
+
+
+class TestTheManifestsOwnIntegrity:
+    """capture_id is a hash of the manifest's contents, so it can be checked.
+
+    Nothing checked it. Swap a delivery file, edit the manifest so its bytes and
+    sha256 match the swap, leave capture_id alone, and verify said ok. The
+    "hash-bound" claim only held against a manifest you already trusted, which
+    is exactly the case a portable manifest exists to remove.
+    """
+
+    def _edit(self, bundle, mutate):
+        path = bundle / "manifest.json"
+        payload = json.loads(path.read_text())
+        mutate(payload)
+        path.write_text(json.dumps(payload, indent=2))
+        return payload
+
+    def test_an_untouched_manifest_matches_its_own_token(self, bundle):
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        assert result.capture_id_mismatch is False
+        assert result.ok is True
+
+    def test_an_edited_manifest_is_caught(self, bundle):
+        self._edit(bundle, lambda p: p.__setitem__("slug", "someone-elses-record"))
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        assert result.capture_id_mismatch is True
+        assert result.ok is False
+
+    def test_rewriting_the_disclaimer_is_caught(self, bundle):
+        # The boundary says these hashes do not establish ownership, rights or
+        # approval. Inverting it is a claim made on the manifest's authority.
+        self._edit(
+            bundle,
+            lambda p: p.__setitem__(
+                "boundary", "This capture proves authorship and ownership."
+            ),
+        )
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        assert result.capture_id_mismatch is True
+        assert result.ok is False
+
+    def test_a_consistent_forgery_is_still_caught(self, bundle):
+        # The realistic attack: swap the file, then edit bytes and sha256 to
+        # match so every per-file check passes. Only the token disagrees.
+        victim = _swap_cover(bundle)
+        import hashlib
+
+        digest = hashlib.sha256(victim.read_bytes()).hexdigest()
+
+        def mutate(payload):
+            for entry in payload["outputs"]:
+                if entry["target"] == "spotify":
+                    entry["bytes"] = victim.stat().st_size
+                    entry["sha256"] = digest
+
+        self._edit(bundle, mutate)
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        assert not result.checksum_mismatches, "the forgery is internally consistent"
+        assert not result.bytes_mismatches
+        assert result.capture_id_mismatch is True
+        assert result.ok is False
+
+    def test_the_command_says_what_happened(self, bundle, capsys):
+        self._edit(bundle, lambda p: p.__setitem__("slug", "elsewhere"))
+        assert main(["verify", str(bundle), "--only", "spotify,bandcamp"]) == 1
+        assert "capture_id does not match" in capsys.readouterr().out
+
+    def test_a_manifest_without_a_token_is_not_a_mismatch(self, bundle):
+        # Older captures carry no capture_id. Nothing to check is not a failure.
+        self._edit(bundle, lambda p: p.pop("capture_id", None))
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        assert result.capture_id_mismatch is False
+        assert result.ok is True
+
+
+class TestTheDiffComparesTheDisclaimer:
+    def test_a_rewritten_boundary_is_not_identical(self, bundle, tmp_path):
+        from coverforge.manifest import compare_manifests, load_manifest
+
+        other = tmp_path / "copy"
+        other.mkdir()
+        payload = json.loads((bundle / "manifest.json").read_text())
+        payload["boundary"] = "This capture proves authorship and ownership."
+        (other / "manifest.json").write_text(json.dumps(payload, indent=2))
+
+        left, left_path = load_manifest(bundle / "manifest.json")
+        right, right_path = load_manifest(other / "manifest.json")
+        diff = compare_manifests(left, right, left_path, right_path)
+        assert diff["delta"]["boundary_changed"] is True
+        assert diff["identical"] is False
+
+
+class TestThePackageIsReproducible:
+    """The same bundle must package to the same bytes.
+
+    zf.write takes each member's mtime from the filesystem and zf.writestr
+    stamps time.localtime(), so two packages of one bundle seconds apart hashed
+    differently, and the difference moved with the local timezone. This repo
+    already zeroes the ICC creation timestamp for the same reason: a rebuild
+    that changes bytes has no stable identifier.
+    """
+
+    def test_two_packages_of_one_bundle_are_byte_identical(self, bundle, tmp_path):
+        import hashlib
+
+        digests = []
+        for name in ("first", "second"):
+            out = tmp_path / name
+            assert main(
+                ["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"]
+            ) == 0
+            zip_path = next(out.glob("*.zip"))
+            digests.append(hashlib.sha256(zip_path.read_bytes()).hexdigest())
+        assert digests[0] == digests[1]
+
+    def test_the_members_carry_no_wall_clock_time(self, bundle, tmp_path):
+        out = tmp_path / "pkg"
+        main(["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"])
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            stamps = {info.date_time for info in zf.infolist()}
+        assert stamps == {(1980, 1, 1, 0, 0, 0)}
+
+    def test_the_contents_are_still_readable(self, bundle, tmp_path):
+        out = tmp_path / "pkg"
+        main(["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"])
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            assert zf.testzip() is None
+            names = set(zf.namelist())
+            assert "manifest.json" in names
+            payload = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert payload["slug"] == "lof001"
