@@ -108,6 +108,29 @@ class TestTheAllowlistItself:
         # that is a question of who receives, not of how much.
         assert cc.VERIFIED_PAYMENT_HOSTS == {"buy.stripe.com", "paypal.me"}
 
+    def test_a_lookalike_host_does_not_inherit_the_allowlist(self):
+        # The membership test was `entry in url`, substring matching against
+        # the whole URL, which this file's own comment calls out as the
+        # sloppiness the check exists to prevent. Short entries make it worse:
+        # "paypal.me" sits inside "paypal.men". Found by trying it, not by
+        # reading it.
+        for host in (
+            "https://paypal.me.attacker.example/steal",
+            "https://notpaypal.men/steal",
+            "https://buy.stripe.com.attacker.example/x",
+            "https://paypal.me.evil.example./x",  # trailing dot is still a FQDN
+        ):
+            assert unverified(page(host)), host
+
+    def test_the_allowlist_is_not_matched_against_the_query_string(self):
+        assert unverified(page("https://evil.example/checkout?ref=paypal.me"))
+
+    def test_the_real_hosts_still_pass_with_and_without_www(self):
+        assert not unverified(page("https://paypal.me/gabrielgga00/45EUR"))
+        assert not unverified(page("https://www.paypal.me/gabrielgga00/45EUR"))
+        assert not unverified(page("https://PayPal.Me/gabrielgga00/45EUR"))
+        assert not unverified(page("https://buy.stripe.com/dRm28q3Z06fM6s27JTabK02"))
+
     def test_the_bare_paypal_domain_is_still_not_allowed(self):
         # paypal.me is verified. paypal.com is not, and the difference is the
         # whole basis above, so a substring match that let paypal.com through

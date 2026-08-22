@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import sys
+from urllib.parse import urlsplit
 from collections import Counter
 from pathlib import Path
 
@@ -81,6 +82,25 @@ _PAYPAL_ME_HREF = re.compile(
 _PAYPAL_ME_PATH = re.compile(r"^/([\d.,]+)([A-Za-z]{3})?/?$")
 
 
+def _host_is_verified(url: str) -> bool:
+    """Is this URL's host one of the verified ones, exactly?
+
+    The test used to be `host_string in url`, which is substring matching
+    against the whole URL, and this file's own comment further up calls that
+    out as the sloppiness the check exists to prevent. It let through
+    paypal.me.attacker.example, notpaypal.men, buy.stripe.com.evil.example and
+    any URL merely carrying "paypal.me" in a query string. Short entries make
+    it worse: "paypal.me" sits inside "paypal.men".
+
+    So parse the host and compare it whole, allowing only a leading "www.".
+    """
+    host = urlsplit(url).hostname or ""
+    host = host.lower().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    return host in VERIFIED_PAYMENT_HOSTS
+
+
 def unverified_payment_links(body: str) -> list[str]:
     """Payment links in `body` that nobody has read the objects behind.
 
@@ -92,7 +112,7 @@ def unverified_payment_links(body: str) -> list[str]:
         u
         for u in re.findall(r'href="(https?://[^"]+)"', body)
         if re.search(PAYMENT_PROVIDERS, u, re.I)
-        and not any(h in u for h in VERIFIED_PAYMENT_HOSTS)
+        and not _host_is_verified(u)
         and u not in NON_PAYMENT_PROVIDER_LINKS
     ]
 
