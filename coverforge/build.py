@@ -12,7 +12,7 @@ from typing import Mapping
 
 from . import imageops
 from .imageops import Encoded, SourceImage, human_bytes, slugify
-from .preflight import ERROR, Finding, check, cover_scale, worst_level
+from .preflight import ERROR, WARN, Finding, check, cover_scale, worst_level
 from .specs import Target
 
 
@@ -186,6 +186,24 @@ def build(
     if Path(slug).is_absolute() or "/" in slug or "\\" in slug:
         raise ValueError("slug must not be an absolute path or contain path separators")
     findings = check(src, targets, flatten_colour, allow_upscale)
+    # imageops builds the sRGB profile once at import and _encode_once embeds it
+    # only `if SRGB_BYTES`. When ImageCms cannot create one, that test silently
+    # skips, so every output shipped untagged and the build reported no warning
+    # at all: a clean run whose files were not what the run implies. Untagged
+    # artwork is interpreted differently from platform to platform, and this
+    # repo's byte-reproducibility guarantee rests on that profile being present
+    # with its timestamp zeroed. A conversion that did not happen is a warning
+    # that says so, never a silent success.
+    if imageops.SRGB_BYTES is None:
+        findings.append(
+            Finding(
+                WARN,
+                "srgb-profile-unavailable",
+                "no sRGB profile could be built here, so these files ship untagged. "
+                "Colour will drift between platforms and the output hashes will not "
+                "match a tagged build. Check that Pillow has working ImageCms.",
+            )
+        )
     result = BuildResult(source=src, slug=slug, out_dir=out_dir, findings=findings)
 
     renderable, skipped = plan(src, targets, findings, allow_upscale)
