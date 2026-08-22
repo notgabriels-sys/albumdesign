@@ -410,8 +410,14 @@ def test_cli_package_creates_delivery_zip(tmp_path, master):
         assert "manifest.json" in files
         summary = json.loads(zf.read("COVERFORGE_PACKAGE.json").decode("utf-8"))
 
-    assert summary["bundle"] == str(bundle)
+    # The folder's name, not its path. This file ships inside the zip that goes
+    # to the client, and str(bundle) put the invoking absolute path in it, so a
+    # normal `coverforge package ~/deliveries/ft011` handed over the home
+    # directory and the username. This assertion used to pin that leak in place.
+    assert summary["bundle"] == bundle.name
+    assert str(tmp_path) not in json.dumps(summary)
     assert summary["ok"] is True
+    assert summary["hashes_verified"] is True
     assert summary["checked_targets"] == [target.key for target in ALL_TARGETS]
     assert len(summary["files"]) == len(ALL_TARGETS) + 2
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +13,10 @@ from pathlib import Path
 from .audit import BundleAudit
 
 _PACKAGE_FILE = "COVERFORGE_PACKAGE.json"
+
+
+class PackageError(Exception):
+    """A package could not be written safely."""
 
 
 @dataclass
@@ -43,8 +49,32 @@ def build_package(audit_result: BundleAudit, zip_path: Path) -> PackageResult:
     """Create a zip package for one audited delivery folder."""
     files: list[dict[str, str | int]] = []
 
-    with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+    # A plain open follows a symlink at the destination. A dangling link is not
+    # caught by the exists() test that picks the file name either, so a link to
+    # a path outside the output directory had a multi-megabyte zip written
+    # through it. O_NOFOLLOW fails on the link instead.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(zip_path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise PackageError(
+                f"{zip_path} is a symlink; refusing to write through it. "
+                "Remove it or package into a clean directory."
+            ) from None
+        raise PackageError(f"could not write {zip_path}: {exc}") from None
+
+    skipped_links: list[str] = []
+    with os.fdopen(fd, "wb") as raw, zipfile.ZipFile(
+        raw, mode="w", compression=zipfile.ZIP_DEFLATED
+    ) as zf:
         for child in sorted(audit_result.bundle.iterdir()):
+            # is_file() follows the link, so a symlink planted in a delivery
+            # folder had its target's contents copied into a zip meant to be
+            # handed to a client. Name it in the summary rather than shipping it.
+            if child.is_symlink():
+                skipped_links.append(child.name)
+                continue
             if not child.is_file():
                 continue
             if child.name == _PACKAGE_FILE:
@@ -61,7 +91,12 @@ def build_package(audit_result: BundleAudit, zip_path: Path) -> PackageResult:
 
         package_summary = {
             "coverforge": "package",
-            "bundle": str(audit_result.bundle),
+            # The folder's name, not its path. str(bundle) put the invoking
+            # absolute path into a file that ships to the client, so a normal
+            # `coverforge package ~/deliveries/ft011` handed over the home
+            # directory and the username. manifest.json was already path-free;
+            # this file was the hole in that promise.
+            "bundle": audit_result.bundle.name,
             "slug": audit_result.slug,
             "ok": audit_result.ok,
             "checked_targets": audit_result.checked_targets,
@@ -71,7 +106,13 @@ def build_package(audit_result: BundleAudit, zip_path: Path) -> PackageResult:
             "missing_files": audit_result.missing_files,
             "dimension_mismatches": audit_result.dimension_mismatches,
             "format_mismatches": audit_result.format_mismatches,
+            # Both were absent, so a bundle whose bytes contradicted its
+            # manifest shipped a summary with no trace of it.
+            "bytes_mismatches": audit_result.bytes_mismatches,
+            "checksum_mismatches": audit_result.checksum_mismatches,
+            "hashes_verified": audit_result.hashes_verified,
             "manifest_present": audit_result.manifest_present,
+            "skipped_symlinks": skipped_links,
             "files": files,
         }
         zf.writestr(

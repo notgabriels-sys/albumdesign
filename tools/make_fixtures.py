@@ -134,6 +134,51 @@ _write_clipped(d / "rel_near_fs_44100_16.wav", 44100, 3, 32760)
 _write_clipped(d / "rel_at_fs_44100_16.wav", 44100, 3, 32767)
 
 
+# WAVE_FORMAT_EXTENSIBLE is what most DAWs write for 24-bit and for anything
+# above stereo. The clipping scanner only accepted format code 1, so a clipped
+# 24-bit master, the ordinary delivery file, came back as "no runs of samples
+# pinned at full scale". The wave module cannot write this header, so build it
+# by hand: fmt of 40 bytes, code 0xFFFE, PCM in the SubFormat GUID.
+def _write_extensible(path, rate, secs, clip_value, bits=24, channels=2):
+    width = bits // 8
+    frames = bytearray()
+    peak = 2 ** (bits - 1) - 1
+    for i in range(int(rate * secs)):
+        v = int(1.2 * math.sin(2 * math.pi * 1000 * i / rate) * peak)
+        v = max(-clip_value, min(clip_value, v))
+        frames += v.to_bytes(width, "little", signed=True) * channels
+    block = width * channels
+    fmt = struct.pack(
+        "<HHIIHHHHI",
+        0xFFFE, channels, rate, rate * block, block, bits,
+        22,      # cbSize
+        bits,    # wValidBitsPerSample
+        0x3,     # dwChannelMask, front left + front right
+    ) + b"\x01\x00" + b"\x00\x00\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71"
+    body = b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt
+    body += b"data" + struct.pack("<I", len(frames)) + bytes(frames)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+
+
+# A 32-bit float WAV, the other export a DAW hands you. Full scale is 1.0, so
+# there is no integer limit to compare against and the old scanner skipped it.
+def _write_float(path, rate, secs, amp, channels=2):
+    frames = bytearray()
+    for i in range(int(rate * secs)):
+        v = max(-1.0, min(1.0, 1.2 * math.sin(2 * math.pi * 1000 * i / rate) * amp))
+        frames += struct.pack("<f", v) * channels
+    block = 4 * channels
+    fmt = struct.pack("<HHIIHH", 3, channels, rate, rate * block, block, 32)
+    body = b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt
+    body += b"data" + struct.pack("<I", len(frames)) + bytes(frames)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+
+
+_write_extensible(d / "rel_ext24_clipped_44100.wav", 44100, 2, 8388607)
+_write_extensible(d / "rel_ext24_clean_44100.wav", 44100, 2, 8000000)
+_write_float(d / "rel_float32_clipped_44100.wav", 44100, 2, 1.0)
+
+
 # BS.1770 defines channel weights for mono, stereo, quad and 5.1 only, so a
 # 3-channel file cannot be measured for loudness. It used to sit inside a
 # "Ready to deliver" verdict with a blank LUFS cell and nothing said.

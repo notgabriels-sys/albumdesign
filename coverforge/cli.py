@@ -19,7 +19,7 @@ from .imageops import (
     is_image_path,
     slugify,
 )
-from .package import PackageResult, build_package
+from .package import PackageError, PackageResult, build_package
 from .preflight import ERROR, WARN, check, worst_level
 from .sheet import build_sheet
 from .manifest import compare_manifests, load_manifest
@@ -365,7 +365,7 @@ def cmd_audit(args) -> int:
 
     try:
         results = run_audit(bundles, targets, verify_hashes=verify_hashes)
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, FileNotFoundError, TypeError) as exc:
         print(f"audit failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
@@ -379,6 +379,17 @@ def cmd_audit(args) -> int:
     for result in results:
         marker = "ok" if result.ok else "findings"
         print(f"{marker}: {result.bundle} (slug={result.slug or 'unknown'})")
+        # The exit code used to be built only from the individual lists, so a
+        # bundle that is not ok for a reason none of them covers, above all a
+        # missing manifest, printed "findings" and still exited 0. A script
+        # gating on the status saw a pass.
+        if not result.ok:
+            exit_code = EXIT_FINDINGS
+        if not result.manifest_present:
+            print(
+                "  no manifest.json: nothing here was checked against a "
+                "recorded hash, so this is unverified rather than clean"
+            )
         if result.missing_targets:
             print(f"  missing: {', '.join(result.missing_targets)}")
             exit_code = EXIT_FINDINGS
@@ -436,8 +447,14 @@ def cmd_package(args) -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        results = run_audit([Path(raw) for raw in args.deliveries], targets)
-    except (ValueError, FileNotFoundError) as exc:
+        # Hash every file before packaging. This defaulted to False, so package
+        # ran a weaker check than verify and then wrote its verdict into
+        # COVERFORGE_PACKAGE.json: a bundle whose cover had been swapped failed
+        # verify and still shipped a zip stamped "ok": true.
+        results = run_audit(
+            [Path(raw) for raw in args.deliveries], targets, verify_hashes=True
+        )
+    except (ValueError, FileNotFoundError, TypeError) as exc:
         print(f"package failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
@@ -462,7 +479,11 @@ def cmd_package(args) -> int:
 
         path = _next_zip_name(out_root, base)
 
-        packages.append(build_package(audit_result, path))
+        try:
+            packages.append(build_package(audit_result, path))
+        except PackageError as exc:
+            print(f"package failed: {exc}", file=sys.stderr)
+            return EXIT_USAGE
 
     if args.json:
         payload = {

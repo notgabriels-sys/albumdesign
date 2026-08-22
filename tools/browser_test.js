@@ -297,6 +297,50 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   // separate LOOK state is for a track that could not be measured at all.
   ok(d.rows[0][7] === 'CHECK', `and it breaks the ceiling as well (${d.rows[0][7]})`);
 
+  // WAVE_FORMAT_EXTENSIBLE is what most DAWs write for 24-bit, and the scanner
+  // used to accept format code 1 only. A clipped 24-bit master, the ordinary
+  // delivery file, was reported as holding no pinned samples.
+  d = await runDelivery(['rel_ext24_clipped_44100.wav']);
+  ok(dcheck(d, 'clipping').pill === 'WARN',
+    `a clipped 24-bit extensible WAV is caught (${dcheck(d, 'clipping').pill}: ${dcheck(d, 'clipping').msg})`);
+  d = await runDelivery(['rel_ext24_clean_44100.wav']);
+  ok(dcheck(d, 'clipping').pill === 'PASS',
+    `and a clean one still passes (${dcheck(d, 'clipping').pill})`);
+
+  // Float WAVs have no integer ceiling, so full scale is 1.0.
+  d = await runDelivery(['rel_float32_clipped_44100.wav']);
+  ok(dcheck(d, 'clipping').pill === 'WARN',
+    `a clipped 32-bit float WAV is caught (${dcheck(d, 'clipping').pill})`);
+
+  // Containers no encoder here can write, handed straight to the scanner. The
+  // point of each is that it must come back null, meaning "not examined",
+  // rather than 0, which the release check reads as "measured, none found".
+  console.log('\n=== the clipping scan must decline what it cannot read ===');
+  await page.goto('file://' + path.join(DOCS, 'delivery.html'));
+  const clip = await page.evaluate(() => {
+    const buf = (bytes) => new Uint8Array(bytes).buffer;
+    const ascii = s => [...s].map(c => c.charCodeAt(0));
+    const u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255];
+    // A RIFF/WAVE whose fmt code is one the scanner does not decode (0x0011,
+    // IMA ADPCM). It has a data chunk, so the old code would fall to its 0.
+    const adpcm = [...ascii('RIFF'), ...u32(36), ...ascii('WAVE'),
+      ...ascii('fmt '), ...u32(16), 0x11, 0x00, 2, 0, ...u32(44100), ...u32(176400), 4, 0, 16, 0,
+      ...ascii('data'), ...u32(8), 0, 0, 0, 0, 0, 0, 0, 0];
+    // AIFC: the compression type sits behind a code the scanner does not read.
+    const aifc = [...ascii('FORM'), 0, 0, 0, 32, ...ascii('AIFC'),
+      ...ascii('SSND'), 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0];
+    return {
+      adpcm: window.__clippedRuns(buf(adpcm)),
+      aifc: window.__clippedRuns(buf(aifc)),
+      mp3: window.__clippedRuns(buf([0xff, 0xfb, 0x90, 0x00, 1, 2, 3, 4, 5, 6, 7, 8])),
+      empty: window.__clippedRuns(buf([1, 2, 3])),
+    };
+  });
+  ok(clip.adpcm === null, `a WAV in a codec it cannot decode is unexamined, not clean (${clip.adpcm})`);
+  ok(clip.aifc === null, `an AIFC is unexamined, not clean (${clip.aifc})`);
+  ok(clip.mp3 === null, `an MP3 has no integer full scale to pin against (${clip.mp3})`);
+  ok(clip.empty === null, `and so is a file too short to hold a header (${clip.empty})`);
+
   // BS.1770 weights only mono, stereo, quad and 5.1, so a 3-channel file has no
   // loudness. It used to show a blank LUFS cell, a green OK, and no mention.
   d = await runDelivery(['rel_3channel_44100_24.wav']);

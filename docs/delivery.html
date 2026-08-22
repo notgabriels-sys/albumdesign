@@ -409,20 +409,34 @@
       var v=little?(b[o]|(b[o+1]<<8)|(b[o+2]<<16)):((b[o]<<16)|(b[o+1]<<8)|b[o+2]);
       return (v&0x800000)?v-0x1000000:v;
     }
-    function count(start,bytes,channels,bits,little,unsigned8){
+    // null means "this file was never examined", which is not the same as zero
+    // runs found. Returning 0 for a format the scanner cannot read is how a
+    // 24-bit extensible WAV, the ordinary export from most DAWs, was told it
+    // held no samples pinned at full scale when nobody had looked.
+    function count(start,bytes,channels,bits,little,unsigned8,isFloat){
       var width=bits/8;
-      if(!channels||![1,2,3,4].includes(width)) return 0;
+      if(!channels) return null;
+      if(isFloat){ if(width!==4&&width!==8) return null }
+      else if(![1,2,3,4].includes(width)) return null;
       var frames=Math.floor(Math.min(bytes,b.length-start)/(width*channels));
       var runs=new Array(channels).fill(0),found=0;
       var hi=Math.pow(2,bits-1)-1,lo=-Math.pow(2,bits-1);
       for(var frame=0;frame<frames;frame++){
         for(var c=0;c<channels;c++){
-          var o=start+(frame*channels+c)*width,v;
-          if(width===1) v=unsigned8?b[o]-128:dv.getInt8(o);
-          else if(width===2) v=dv.getInt16(o,little);
-          else if(width===3) v=signed24(o,little);
-          else v=dv.getInt32(o,little);
-          if(v===hi||v===lo){ runs[c]++; if(runs[c]===3) found++ }
+          var o=start+(frame*channels+c)*width,v,at;
+          if(isFloat){
+            v=width===4?dv.getFloat32(o,little):dv.getFloat64(o,little);
+            // Float files carry no integer ceiling, so full scale is 1.0 and
+            // anything at or past it is pinned.
+            at=v>=1||v<=-1;
+          } else {
+            if(width===1) v=unsigned8?b[o]-128:dv.getInt8(o);
+            else if(width===2) v=dv.getInt16(o,little);
+            else if(width===3) v=signed24(o,little);
+            else v=dv.getInt32(o,little);
+            at=(v===hi||v===lo);
+          }
+          if(at){ runs[c]++; if(runs[c]===3) found++ }
           else runs[c]=0;
         }
       }
@@ -437,12 +451,18 @@
             format=dv.getUint16(o+8,true);
             channels=dv.getUint16(o+10,true);
             bits=dv.getUint16(o+22,true);
+            // WAVE_FORMAT_EXTENSIBLE is a wrapper: the real format code is the
+            // first two bytes of the SubFormat GUID. Most DAWs write 24-bit and
+            // anything above stereo this way, so refusing to unwrap it meant
+            // refusing to examine the commonest delivery file there is.
+            if(format===0xfffe&&size>=40) format=dv.getUint16(o+32,true);
           } else if(id==="data"){
             dataStart=o+8;dataBytes=size;
           }
           o+=8+size+(size&1);
         }
-        return format===1&&dataStart?count(dataStart,dataBytes,channels,bits,true,bits===8):0;
+        if(!dataStart||(format!==1&&format!==3)) return null;
+        return count(dataStart,dataBytes,channels,bits,true,format===1&&bits===8,format===3);
       }
       if(tag(0)==="FORM"&&tag(8)==="AIFF"){
         var ach=0,abits=0,soundStart=0,soundBytes=0;
@@ -455,10 +475,13 @@
           }
           p+=8+csz+(csz&1);
         }
-        return soundStart?count(soundStart,soundBytes,ach,abits,false,false):0;
+        return soundStart?count(soundStart,soundBytes,ach,abits,false,false,false):null;
       }
-    }catch(e){ return 0 }
-    return 0;
+      // AIFC holds compressed or float data behind a compression type this
+      // scanner does not decode, and a lossy file has no integer full scale to
+      // pin against at all. Both are unexamined, not clean.
+    }catch(e){ return null }
+    return null;
   }
 
   // One placeholder for "nothing was measured here", so an empty cell never has
@@ -572,7 +595,7 @@
       // 0 dBFS produces it legitimately. A measurement that did not happen is
       // also a warning: a green OK on a row whose peak column reads blank is
       // the tool claiming a check it never ran.
-      var soft = r.clipped>0 || !isFinite(r.tp) || r.lufs==null || !isFinite(r.lufs);
+      var soft = r.clipped>0 || r.clipped==null || !isFinite(r.tp) || r.lufs==null || !isFinite(r.lufs);
       var st = bad ? "fail" : (soft ? "warn" : "pass");
       var label = bad ? "CHECK" : (soft ? "LOOK" : "OK");
       tr.innerHTML="<td class='name' title='"+esc(r.name)+"'>"+esc(r.name)+"</td>"+
@@ -679,10 +702,18 @@
           ? tpKnown.length+" of "+good.length+" tracks measured, and those sit under the ceiling that applies. The rest could not be measured"
         : "every track sits under the ceiling that applies to it");
 
-      var clipped=good.filter(function(r){return r.clipped>0});
-      add("clipping", clipped.length?"warn":"pass",
+      // Only a track whose samples were actually read can be called clean. The
+      // scanner reads PCM and float WAV and uncompressed AIFF; everything else
+      // comes back unexamined, and saying nothing about that is how a clipped
+      // master passed.
+      var clipKnown=good.filter(function(r){return r.clipped!=null});
+      var clipped=clipKnown.filter(function(r){return r.clipped>0});
+      add("clipping", clipped.length?"warn":(clipKnown.length<good.length?"warn":"pass"),
         clipped.length ? clipped.length+" track"+(clipped.length===1?"":"s")+" hold three or more samples pinned at full scale: "+
           clipped.map(function(r){return r.name}).join(", ")+". That is usually a limiter driven too hard"
+        : !clipKnown.length ? "these files hold no samples this tool can read, so clipping has not been checked. It reads PCM and float WAV, and uncompressed AIFF"
+        : clipKnown.length<good.length
+          ? clipKnown.length+" of "+good.length+" tracks were scanned and hold no pinned samples. The rest are in a format this tool cannot read for clipping"
         : "no runs of samples pinned at full scale");
     }
 
@@ -726,6 +757,11 @@
   // resemble an MPEG sync. Handing it buffers directly is the only way to
   // cover those, and it exposes nothing a reader of this page cannot see.
   window.__header=header;
+  // Same seam, same reason: the cases that matter most for the clipping scan
+  // are containers no encoder in the test environment can write. Handing it
+  // buffers is the only way to prove it declines them instead of reporting a
+  // file it never read as clean.
+  window.__clippedRuns=clippedRuns;
 })();
 </script>
 
