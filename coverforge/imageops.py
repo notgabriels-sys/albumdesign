@@ -212,12 +212,19 @@ def _to_srgb(im: Image.Image, icc: bytes | None) -> Image.Image:
     try:
         source_profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
         destination_profile = ImageCms.createProfile("sRGB")
-        body = ImageCms.profileToProfile(
+        converted = ImageCms.profileToProfile(
             body,
             source_profile,
             destination_profile,
             outputMode="RGB",
         )
+        # profileToProfile returns None when it converts in place. It does not
+        # with inPlace=False, so this is a guard rather than a live bug, but
+        # without it a None would escape the try and reach .convert() below as
+        # an AttributeError instead of taking the documented fallback.
+        if converted is None:
+            raise ValueError("colour conversion returned nothing")
+        body = converted
     except Exception:
         # A broken or exotic profile shouldn't stop the export; a plain
         # convert is a worse but working approximation.

@@ -385,6 +385,11 @@ def cmd_audit(args) -> int:
         # gating on the status saw a pass.
         if not result.ok:
             exit_code = EXIT_FINDINGS
+        if result.capture_id_mismatch:
+            print(
+                "  capture_id does not match the manifest contents: the file "
+                "has been edited since it was written"
+            )
         if not result.manifest_present:
             print(
                 "  no manifest.json: nothing here was checked against a "
