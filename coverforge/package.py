@@ -14,6 +14,11 @@ from .audit import BundleAudit
 
 _PACKAGE_FILE = "COVERFORGE_PACKAGE.json"
 
+# The zip format's own epoch. Any fixed value works; this one is the earliest
+# a zip can represent, so it reads as "deliberately not a timestamp" rather
+# than as a date someone might trust.
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+
 
 class PackageError(Exception):
     """A package could not be written safely."""
@@ -81,7 +86,17 @@ def build_package(audit_result: BundleAudit, zip_path: Path) -> PackageResult:
                 continue
 
             arcname = child.name
-            zf.write(child, arcname=arcname)
+            # Write through an explicit ZipInfo with a fixed timestamp. zf.write
+            # takes the member's mtime from the filesystem and zf.writestr
+            # stamps time.localtime(), so two packages of the same bundle
+            # seconds apart hashed differently, and the difference moved with
+            # the local timezone. This repo zeroes the ICC creation timestamp
+            # for the same reason: a rebuild that changes bytes has no stable
+            # identifier. The manifest inside carries the real facts.
+            info = zipfile.ZipInfo(arcname, date_time=_ZIP_EPOCH)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            zf.writestr(info, child.read_bytes())
             data = {
                 "name": arcname,
                 "bytes": child.stat().st_size,
@@ -115,8 +130,11 @@ def build_package(audit_result: BundleAudit, zip_path: Path) -> PackageResult:
             "skipped_symlinks": skipped_links,
             "files": files,
         }
+        summary_info = zipfile.ZipInfo(_PACKAGE_FILE, date_time=_ZIP_EPOCH)
+        summary_info.compress_type = zipfile.ZIP_DEFLATED
+        summary_info.external_attr = 0o644 << 16
         zf.writestr(
-            _PACKAGE_FILE, json.dumps(package_summary, indent=2, sort_keys=True)
+            summary_info, json.dumps(package_summary, indent=2, sort_keys=True)
         )
 
     return PackageResult(

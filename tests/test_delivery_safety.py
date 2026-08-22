@@ -287,3 +287,44 @@ class TestTheDiffComparesTheDisclaimer:
         diff = compare_manifests(left, right, left_path, right_path)
         assert diff["delta"]["boundary_changed"] is True
         assert diff["identical"] is False
+
+
+class TestThePackageIsReproducible:
+    """The same bundle must package to the same bytes.
+
+    zf.write takes each member's mtime from the filesystem and zf.writestr
+    stamps time.localtime(), so two packages of one bundle seconds apart hashed
+    differently, and the difference moved with the local timezone. This repo
+    already zeroes the ICC creation timestamp for the same reason: a rebuild
+    that changes bytes has no stable identifier.
+    """
+
+    def test_two_packages_of_one_bundle_are_byte_identical(self, bundle, tmp_path):
+        import hashlib
+
+        digests = []
+        for name in ("first", "second"):
+            out = tmp_path / name
+            assert main(
+                ["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"]
+            ) == 0
+            zip_path = next(out.glob("*.zip"))
+            digests.append(hashlib.sha256(zip_path.read_bytes()).hexdigest())
+        assert digests[0] == digests[1]
+
+    def test_the_members_carry_no_wall_clock_time(self, bundle, tmp_path):
+        out = tmp_path / "pkg"
+        main(["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"])
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            stamps = {info.date_time for info in zf.infolist()}
+        assert stamps == {(1980, 1, 1, 0, 0, 0)}
+
+    def test_the_contents_are_still_readable(self, bundle, tmp_path):
+        out = tmp_path / "pkg"
+        main(["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"])
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            assert zf.testzip() is None
+            names = set(zf.namelist())
+            assert "manifest.json" in names
+            payload = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert payload["slug"] == "lof001"
