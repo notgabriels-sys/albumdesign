@@ -117,6 +117,41 @@ def unverified_payment_links(body: str) -> list[str]:
     ]
 
 
+def verified_payment_anchors(body: str) -> list[tuple[str, str]]:
+    """Every (url, visible text) anchor pointing at a verified payment host.
+
+    The href pattern deliberately matches `unverified_payment_links` rather
+    than requiring a path after the host. The old one was
+    `href="https?://([^"/]+)/[^"]*"`, which needs a slash, so a link with no
+    path or only a query string was treated as verified by that function and
+    then skipped here, reaching a page promising an amount that nothing had
+    checked. That is the EUR 1,200 shape arrived at from a different direction.
+    """
+    return [
+        (url, re.sub(r"<[^>]+>", "", text).strip())
+        for url, text in re.findall(
+            r'<a\b[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>', body, re.S
+        )
+        if _host_is_verified(url)
+    ]
+
+
+def unchecked_payment_links(body: str) -> list[str]:
+    """Verified payment links that the anchor scan never reached.
+
+    Two regexes decide whether a payment link gets its price checked: the one
+    that finds hrefs and the one that pairs an anchor with its text. If they
+    ever disagree, a link is silently exempt and the run still prints all
+    checks passed, because a loop over nothing emits nothing. That is the
+    failure this repo keeps rediscovering, so compare them rather than trust
+    that they agree.
+    """
+    hrefs = {
+        u for u in re.findall(r'href="(https?://[^"]+)"', body) if _host_is_verified(u)
+    }
+    return sorted(hrefs - {url for url, _ in verified_payment_anchors(body)})
+
+
 def paypal_amount_mismatches(body: str, table_text: str) -> list[str]:
     """PayPal.Me links whose URL amount is not a price the page charges.
 
@@ -264,15 +299,20 @@ def main() -> int:
     # EUR 1,200 for a different service. The amount a customer is promised has
     # to be one the rate table on the same page states.
     for name, body in src.items():
-        anchors = re.findall(
-            r'<a\b[^>]*href="https?://([^"/]+)/[^"]*"[^>]*>(.*?)</a>', body, re.S
+        # A loop over nothing emits nothing, so a page whose links this scan
+        # cannot see would report no failures rather than reporting that it saw
+        # no links. Name that case before iterating.
+        missed = unchecked_payment_links(body)
+        check(
+            f"{name} has no payment link the price check cannot reach",
+            not missed,
+            f"{missed} matched the href scan but not the anchor scan, so nothing "
+            f"checked what they promise",
         )
-        for host, text in anchors:
-            if not any(h in host for h in VERIFIED_PAYMENT_HOSTS):
-                continue
-            quoted = re.findall(r"€\s?([\d.,]+)", re.sub(r"<[^>]+>", "", text))
+        for _url, text in verified_payment_anchors(body):
+            quoted = re.findall(r"€\s?([\d.,]+)", text)
             check(
-                f"{name} card link '{re.sub(r'<[^>]+>', '', text).strip()}' quotes an amount from its table",
+                f"{name} card link '{text}' quotes an amount from its table",
                 bool(quoted) and all(f"€{a}" in "".join(tables.get(name, [])) for a in quoted),
                 f"quoted {quoted}, table has {tables.get(name, [])}. A card link must name a price "
                 f"the page charges, or name none at all",

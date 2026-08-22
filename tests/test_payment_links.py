@@ -158,6 +158,48 @@ class TestTheCheckIsNotTriviallyTrue:
         assert unverified(body) == ["https://www.paypal.com/ncp/payment/ABC123XYZ"]
 
 
+class TestNoPaymentLinkEscapesThePriceCheck:
+    """Two regexes decided whether a link got its price checked, and they
+    disagreed.
+
+    The anchor scan required a slash after the host. A link with no path, or
+    with only a query string, was therefore accepted as verified by the href
+    scan and then skipped by the price check, so a button reading "Pay EUR 99"
+    on a page quoting nothing of the sort raised no failure at all. A loop over
+    nothing emits nothing, and the run still printed all checks passed.
+
+    Found by comparing the two scans against each other, not by reading them.
+    """
+
+    def _anchor(self, href: str) -> str:
+        return f'<a href="{href}">Pay &#8364;99</a>'
+
+    def test_a_link_with_no_path_is_price_checked(self):
+        assert cc.verified_payment_anchors(self._anchor("https://buy.stripe.com"))
+
+    def test_a_link_with_only_a_query_string_is_price_checked(self):
+        assert cc.verified_payment_anchors(self._anchor("https://buy.stripe.com?s=abc"))
+
+    def test_a_normal_link_is_still_price_checked(self):
+        assert cc.verified_payment_anchors(self._anchor("https://buy.stripe.com/abc"))
+
+    def test_a_lookalike_host_is_not_treated_as_a_payment_anchor(self):
+        assert not cc.verified_payment_anchors(
+            self._anchor("https://buy.stripe.com.evil.example/x")
+        )
+
+    def test_the_two_scans_agree_on_the_real_pages(self):
+        for page_path in (ROOT / "docs").glob("*.html"):
+            body = page_path.read_text(encoding="utf-8")
+            assert cc.unchecked_payment_links(body) == [], page_path.name
+
+    def test_a_link_the_anchor_scan_cannot_reach_is_reported(self):
+        # An href with no closing anchor is seen by one scan and not the other.
+        # Whatever it promises, nothing would check it.
+        body = '<a href="https://buy.stripe.com/abc">Pay &#8364;99'
+        assert cc.unchecked_payment_links(body) == ["https://buy.stripe.com/abc"]
+
+
 class TestAPayPalLinkChargesWhatTheButtonSays:
     """The amount check, which is why paypal.me is allowed at all.
 
