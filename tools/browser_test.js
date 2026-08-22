@@ -520,6 +520,58 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   });
   ok(blank === '', `an untouched empty row raises nothing (got "${blank}")`);
 
+  // ---- a collaborator's name is attacker-shaped text ----
+  // The rule in CLAUDE.md: any page echoing user text escapes the apostrophe
+  // too, and a browser test asserts the rendered result carries no handler.
+  // splits.html echoes names in two places, the signature block through
+  // innerHTML + esc() and the row-problem line through textContent, and had no
+  // such test. Proved non-vacuous by trimming esc() back to & alone, the same
+  // trim that shipped in delivery.html: that injects a live IMG[onerror] into
+  // the signature block and fires a real dialog.
+  console.log('\n=== a hostile name cannot execute from the split sheet ===');
+  {
+    let dialogs = 0;
+    const xp = await browser.newPage();
+    xp.on('dialog', async d => { dialogs++; await d.dismiss(); });
+    await xp.goto('file://' + path.join(DOCS, 'splits.html'));
+    await xp.waitForTimeout(200);
+
+    for (const name of [
+      `a' onmouseover='alert(1)' x='`,
+      `<img src=x onerror="alert(1)">`,
+      `"><script>alert(1)</script>`,
+    ]) {
+      const r = await xp.evaluate((name) => {
+        const tb = document.getElementById('writers');
+        tb.innerHTML = '';
+        document.getElementById('addw').click();
+        document.getElementById('addw').click();
+        const rows = [...tb.querySelectorAll('tr')];
+        rows[0].querySelector('.f-name').value = name;
+        rows[0].querySelector('.f-pct').value = '50';
+        // a second row with no share, so the row-problem line renders too
+        rows[1].querySelector('.f-name').value = name;
+        rows[1].querySelector('.f-pct').value = '';
+        rows[0].dispatchEvent(new Event('input', { bubbles: true }));
+        const handlers = [...document.querySelectorAll('*')]
+          .filter(el => [...el.attributes].some(a => /^on/i.test(a.name)));
+        return {
+          shownAsText: document.getElementById('sigs').textContent.includes(name),
+          injected: !!document.querySelector('#sigs img, #sigs script, #rowissues img, #rowissues script'),
+          handlers: handlers.length,
+        };
+      }, name);
+      await xp.hover('#sigs').catch(() => {});
+      await xp.waitForTimeout(80);
+      const label = JSON.stringify(name);
+      ok(r.shownAsText, `${label} appears as literal text in the signature block`);
+      ok(!r.injected, `${label} creates no element in either echo path`);
+      ok(r.handlers === 0, `${label} creates no inline handler (${r.handlers} found)`);
+    }
+    ok(dialogs === 0, `no hostile name executed anything (${dialogs} dialogs)`);
+    await xp.close();
+  }
+
   ok(errs.length === 0, `no uncaught page errors during functional tests${errs.length ? ' -> ' + errs.join(' | ') : ''}`);
 
   await browser.close();
