@@ -96,6 +96,8 @@
     letter-spacing:.04em;padding:4px 9px;border-radius:7px;white-space:nowrap}
   .total.pass{color:var(--pass);background:var(--pass-bg)}
   .total.fail{color:var(--fail);background:var(--fail-bg)}
+  .rowissues{color:var(--fail);font-weight:600}
+  .rowissues:empty{display:none}
 
   .note{color:var(--muted);font-size:12.5px;line-height:1.55;margin:10px 0 0}
   .note b{color:var(--ink)}
@@ -220,6 +222,7 @@
     <button class="act" id="reset" type="button">Clear</button>
     <span class="note" id="live" role="status" aria-live="polite" style="margin:0"></span>
   </div>
+  <p class="note rowissues" id="rowissues" role="status" aria-live="polite"></p>
 
   </main>
   <footer>
@@ -290,10 +293,37 @@
     update();
   }
 
-  function badge(el,total){
-    var ok=Math.abs(total-100)<0.005;
+  // parseFloat(x)||0 turns anything unreadable into a zero and adds it in
+  // silently, so three separate invalid sheets totalled exactly 100 and were
+  // badged pass: 150 with -50, a third writer whose share was unparseable, and
+  // a named person whose share was never filled in. This is the document that
+  // decides who GEMA and GVL pay. A share nobody entered is not a zero share,
+  // and a total is not a verdict on rows the total never read.
+  function problems(tbody){
+    var out=[];
+    rows(tbody).forEach(function(tr,i){
+      var name=tr.querySelector(".f-name").value.trim();
+      var raw=tr.querySelector(".f-pct").value.trim();
+      var who=name||("row "+(i+1));
+      // A row nobody has touched yet is a blank form, not a mistake.
+      if(!name&&!raw) return;
+      if(!raw){ out.push(who+" has no share"); return; }
+      var v=parseFloat(raw);
+      if(!isFinite(v)){ out.push(who+" has a share that is not a number"); return; }
+      if(v<0){ out.push(who+" has a negative share"); return; }
+      if(!name) out.push(raw+"% has no name against it");
+    });
+    return out;
+  }
+
+  function badge(el,total,probs){
+    probs=probs||[];
+    var totals=Math.abs(total-100)<0.005;
+    var ok=totals&&!probs.length;
     el.className="total "+(ok?"pass":"fail");
-    el.textContent=(Math.round(total*100)/100)+"%"+(ok?"":", must total 100");
+    var why=probs.length?(", "+probs.length+" row"+(probs.length>1?"s":"")+" to fix")
+                        :(totals?"":", must total 100");
+    el.textContent=(Math.round(total*100)/100)+"%"+why;
   }
 
   function signatures(){
@@ -314,8 +344,15 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 
   function update(){
-    badge($("wtotal"),sum($("writers")));
-    badge($("rtotal"),sum($("performers")));
+    var wp=problems($("writers")), rp=problems($("performers"));
+    badge($("wtotal"),sum($("writers")),wp);
+    badge($("rtotal"),sum($("performers")),rp);
+    // Name the actual rows. A pill reading "100%, 1 row to fix" tells you a
+    // sheet is wrong without telling you where, and this one is printed and
+    // signed.
+    var all=wp.map(function(m){return "Composition: "+m})
+              .concat(rp.map(function(m){return "Recording: "+m}));
+    $("rowissues").textContent=all.length?all.join(". ")+".":"";
     signatures();
     save();
   }
@@ -360,8 +397,11 @@
   $("evenw").addEventListener("click",function(){even($("writers"))});
   $("evenr").addEventListener("click",function(){even($("performers"))});
   $("print").addEventListener("click",function(){
-    var bad=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
-    $("live").textContent = bad ? "Printing anyway, but a side does not total 100%." : "";
+    var probs=problems($("writers")).concat(problems($("performers")));
+    var offTotal=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
+    $("live").textContent = probs.length
+      ? "Printing anyway, but "+probs.length+" row"+(probs.length>1?"s":"")+" could not be read as a share."
+      : (offTotal ? "Printing anyway, but a side does not total 100%." : "");
     window.print();
   });
   $("copy").addEventListener("click",function(){

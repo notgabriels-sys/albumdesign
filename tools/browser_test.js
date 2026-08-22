@@ -468,6 +468,58 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     ok(tpq.says, 'the reading tells you the ceiling was never checked');
   }
 
+  // ---- split sheet: a share nobody entered is not a zero share ----
+  // splits.html had no functional coverage at all, and it is the document that
+  // decides who GEMA and GVL pay. readRow and sum both used
+  // parseFloat(x)||0, which turns anything unreadable into a zero and adds it
+  // in silently, so three invalid sheets totalled exactly 100 and were badged
+  // pass. All three are proved here against the real page.
+  console.log('\n=== split sheet totals only count shares it could read ===');
+  await page.goto('file://' + path.join(DOCS, 'splits.html'));
+  await page.waitForTimeout(200);
+  const split = async (vals) => page.evaluate((vals) => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    for (let i = 0; i < vals.length; i++) document.getElementById('addw').click();
+    [...tb.querySelectorAll('tr')].forEach((tr, i) => {
+      tr.querySelector('.f-name').value = 'Person ' + (i + 1);
+      tr.querySelector('.f-pct').value = vals[i];
+    });
+    tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+    const b = document.getElementById('wtotal');
+    return {
+      pass: b.className.includes('pass'),
+      text: b.textContent.trim(),
+      issues: document.getElementById('rowissues').textContent.trim(),
+    };
+  }, vals);
+
+  let sp = await split(['50', '50']);
+  ok(sp.pass, `an honest 50/50 still passes (${sp.text})`);
+  ok(sp.issues === '', 'a valid sheet reports no row problems');
+
+  sp = await split(['150', '-50']);
+  ok(!sp.pass, `150 and -50 does not pass just because it totals 100 (${sp.text})`);
+  ok(/negative/i.test(sp.issues), `it names the negative share -> "${sp.issues}"`);
+
+  sp = await split(['50', '50', 'abc']);
+  ok(!sp.pass, `a third writer whose share cannot be read does not pass (${sp.text})`);
+  ok(/Person 3/.test(sp.issues), `it names the row -> "${sp.issues}"`);
+
+  sp = await split(['100', '']);
+  ok(!sp.pass, `a named person with no share entered does not pass (${sp.text})`);
+  ok(/Person 2/.test(sp.issues), `it names the person -> "${sp.issues}"`);
+
+  // A blank form is someone starting work, not a mistake to shout about.
+  const blank = await page.evaluate(() => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    document.getElementById('addw').click();
+    tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+    return document.getElementById('rowissues').textContent.trim();
+  });
+  ok(blank === '', `an untouched empty row raises nothing (got "${blank}")`);
+
   ok(errs.length === 0, `no uncaught page errors during functional tests${errs.length ? ' -> ' + errs.join(' | ') : ''}`);
 
   await browser.close();
