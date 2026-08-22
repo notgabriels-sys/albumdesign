@@ -657,3 +657,56 @@ class TestEveryDifferenceStopsTwoManifestsBeingIdentical:
         assert other != payload, f"{kind} did not actually change the payload"
         diff = compare_manifests(payload, other, bundle, bundle)
         assert diff["identical"] is False, kind
+
+
+class TestVerifyExitsNonZeroWhenNothingWasVerified:
+    """The text-mode exit gate had no test, and it is the one scripts read.
+
+    `if not result.ok: exit_code = EXIT_FINDINGS` in the verify command was
+    added because a bundle that is not ok for a reason none of the individual
+    lists covers, above all a missing manifest, printed "findings" and still
+    exited 0. Removing that line again leaves every test passing, because the
+    per-list gates below it fire for every case the suite exercises.
+
+    Reproduced before writing this: a complete bundle with only manifest.json
+    deleted prints the "no manifest.json" line either way, and exits 1 with the
+    gate and 0 without it. The human output says findings while the status says
+    pass, which is the worse half of the two.
+    """
+
+    @pytest.fixture
+    def unmanifested(self, tmp_path, master):
+        # Every target present and correct, so no per-list gate can fire and
+        # mask the one being tested.
+        out = tmp_path / "complete"
+        build(inspect(master), TARGETS, out_dir=out, slug="lof001")
+        (out / "manifest.json").unlink()
+        return out
+
+    def test_text_mode_exits_non_zero(self, unmanifested, capsys):
+        # Scoped to the targets actually built. Without --only, verify checks
+        # all ten and the eight absent ones fire missing_targets, which masks
+        # the gate under test. That is the same shadowing this whole class is
+        # about, and it caught this test out before it caught anything else.
+        code = main(["verify", str(unmanifested), "--only", "spotify,bandcamp"])
+        out = capsys.readouterr().out
+        assert "no manifest.json" in out, "it did not even notice"
+        assert code != 0, "printed findings and exited 0; a script would call this a pass"
+
+    def test_json_mode_exits_non_zero_too(self, unmanifested, capsys):
+        code = main(
+            ["verify", str(unmanifested), "--only", "spotify,bandcamp", "--json"]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["bundles"][0]["ok"] is False
+        assert code != 0
+
+    def test_the_lists_really_are_empty_so_nothing_else_masks_it(self, unmanifested):
+        # If a per-list gate fired here the test above would pass for the wrong
+        # reason, exactly as the suite did before.
+        result = run_audit([unmanifested], TARGETS, verify_hashes=True)[0]
+        assert result.missing_targets == []
+        assert result.malformed_files == []
+        assert result.missing_files == []
+        assert result.manifest_present is False
+        assert result.ok is False
