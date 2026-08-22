@@ -12,6 +12,7 @@ so what it embeds leaves the machine.
 
 from __future__ import annotations
 
+import copy
 import json
 import zipfile
 from pathlib import Path
@@ -22,6 +23,7 @@ from PIL import Image
 from coverforge import imageops
 from coverforge.audit import BundleAudit, run_audit
 from coverforge.build import build
+from coverforge.manifest import compare_manifests
 from coverforge.cli import main
 from coverforge.imageops import ImageError, inspect
 from coverforge.preflight import ERROR, WARN, check
@@ -579,3 +581,79 @@ class TestEveryFailureBlocksOkOnItsOwn:
         # reporting but is not a defect in what was delivered. Pinned so the
         # decision is visible rather than incidental.
         assert _clean_audit(extra_targets=["stray.jpg"]).ok is True
+
+
+# One payload edit per difference category compare_manifests reports, each
+# touching nothing else so no sibling term can mask it.
+def _one_difference(payload, kind):
+    p = copy.deepcopy(payload)
+    if kind == "schema_changed":
+        p["schema_version"] = (p.get("schema_version") or 0) + 1
+    elif kind == "generator_changed":
+        p["generated_by"] = "something else"
+    elif kind == "slug_changed":
+        p["slug"] = "a-different-slug"
+    elif kind == "capture_id_changed":
+        p["capture_id"] = "0" * 64
+    elif kind == "left_sources":
+        p["source"]["sha256"] = "1" * 64
+    elif kind == "changed_skipped":
+        p["skipped"] = list(p["skipped"]) + [{"target": "beatport", "reason": "test"}]
+    elif kind == "changed_findings":
+        p["findings"] = list(p["findings"]) + [
+            {"level": "info", "code": "test", "message": "test", "target": None}
+        ]
+    elif kind == "added_outputs":
+        extra = copy.deepcopy(p["outputs"][0])
+        extra["target"] = "a-target-that-was-not-there"
+        p["outputs"] = list(p["outputs"]) + [extra]
+    elif kind == "removed_outputs":
+        p["outputs"] = list(p["outputs"])[:-1]
+    elif kind == "changed_outputs":
+        p["outputs"][0]["bytes"] = (p["outputs"][0]["bytes"] or 0) + 1
+    else:
+        raise AssertionError(f"unknown difference kind {kind}")
+    return p
+
+
+_DIFFERENCE_KINDS = [
+    "schema_changed",
+    "generator_changed",
+    "slug_changed",
+    "capture_id_changed",
+    "left_sources",
+    "changed_skipped",
+    "changed_findings",
+    "added_outputs",
+    "removed_outputs",
+    "changed_outputs",
+]
+
+
+class TestEveryDifferenceStopsTwoManifestsBeingIdentical:
+    """Each term in has_issues is pinned separately.
+
+    Found by mutation, the same way as the audit one. Ten of the twelve terms
+    could be removed from has_issues with every manifest test still passing:
+    only boundary_changed and output_issues were pinned, and both of those had
+    been added deliberately. So a build that dropped, say, added_outputs would
+    have reported two manifests with different output lists as "identical
+    captures", and the suite would not have said a word.
+
+    The code was correct. Nothing would have noticed if it stopped being.
+    """
+
+    @pytest.fixture
+    def payload(self, bundle):
+        return json.loads((bundle / "manifest.json").read_text())
+
+    def test_a_manifest_is_identical_to_itself(self, payload, bundle):
+        diff = compare_manifests(payload, copy.deepcopy(payload), bundle, bundle)
+        assert diff["identical"] is True
+
+    @pytest.mark.parametrize("kind", _DIFFERENCE_KINDS)
+    def test_one_difference_is_enough(self, payload, bundle, kind):
+        other = _one_difference(payload, kind)
+        assert other != payload, f"{kind} did not actually change the payload"
+        diff = compare_manifests(payload, other, bundle, bundle)
+        assert diff["identical"] is False, kind
