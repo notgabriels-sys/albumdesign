@@ -23,7 +23,7 @@ from coverforge.audit import run_audit
 from coverforge.build import build
 from coverforge.cli import main
 from coverforge.imageops import ImageError, inspect
-from coverforge.preflight import ERROR, WARN
+from coverforge.preflight import ERROR, WARN, check
 from coverforge.specs import load_targets
 
 TARGETS = [t for t in load_targets(None, None) if t.key in {"spotify", "bandcamp"}]
@@ -454,3 +454,56 @@ class TestAnUntaggedBuildSaysSo:
         for output in result.outputs:
             with Image.open(output.path) as im:
                 assert not im.info.get("icc_profile"), output.path.name
+
+
+class TestAColourTransformThatDidNotHappenSaysSo:
+    """The tool told the user a conversion would happen, then did not.
+
+    inspect() records 'unreadable ICC profile' when a profile will not parse.
+    preflight then emitted `tagged 'unreadable ICC profile'; will be converted
+    to sRGB` at INFO, promising a transform it had already established was
+    impossible, and _to_srgb failed on the same profile and quietly plain
+    converted. Nothing corrected the promise.
+
+    Proved by instrumenting the real path: profileToProfile was attempted zero
+    times, because the profile fails to load before the transform is reached.
+    """
+
+    @pytest.fixture
+    def broken_icc(self, tmp_path):
+        path = tmp_path / "broken.png"
+        Image.new("RGB", (4000, 4000), (10, 120, 60)).save(
+            path, icc_profile=b"NOTAPROFILE" * 45
+        )
+        return path
+
+    def test_an_unreadable_profile_is_a_warning_not_a_promise(self, broken_icc):
+        findings = check(inspect(broken_icc), TARGETS, "#ffffff", False)
+        icc = [f for f in findings if f.code in ("icc", "icc-unreadable")]
+        assert icc, "nothing said anything about the profile at all"
+        assert icc[0].code == "icc-unreadable"
+        assert icc[0].level == WARN
+        assert "will be converted" not in icc[0].message
+
+    def test_the_build_reports_the_transform_it_could_not_do(self, broken_icc, tmp_path):
+        result = build(inspect(broken_icc), TARGETS, out_dir=tmp_path / "b", slug="x")
+        codes = [f.code for f in result.findings if f.level == WARN]
+        assert "colour-transform-degraded" in codes
+
+    def test_a_clean_master_says_none_of_this(self, master, tmp_path):
+        result = build(inspect(master), TARGETS, out_dir=tmp_path / "c", slug="x")
+        codes = [f.code for f in result.findings]
+        assert "colour-transform-degraded" not in codes
+        assert "icc-unreadable" not in codes
+
+    def test_the_build_still_delivers(self, broken_icc, tmp_path):
+        # Degraded colour is worse than converted colour, not a reason to
+        # refuse to produce anything.
+        result = build(inspect(broken_icc), TARGETS, out_dir=tmp_path / "d", slug="x")
+        assert result.outputs
+        assert all(f.level != ERROR for f in result.findings)
+
+    def test_normalise_reports_nothing_when_it_had_nothing_to_report(self, master):
+        notes: list[str] = []
+        imageops.normalise(master, notes=notes)
+        assert notes == []
