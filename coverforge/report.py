@@ -149,7 +149,9 @@ def format_manifest_diff(payload: dict) -> str:
     if left["slug"] or right["slug"]:
         lines.append(f"  slug: {left['slug']} -> {right['slug']}")
 
-    lines.append(f"  source outputs: {left['outputs_count']} -> {right['outputs_count']}")
+    # "source outputs" read as a count of something belonging to the source
+    # image. It is the number of delivery files the capture recorded.
+    lines.append(f"  outputs: {left['outputs_count']} -> {right['outputs_count']}")
 
     if payload["identical"]:
         lines.append("")
