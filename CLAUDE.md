@@ -243,15 +243,40 @@ to correct a wrong attribution, not as grounds for a new hard claim.
   client money should reach. notgabriels@gmail.com is his personal account and
   does not belong on the shop. Both are his statement, not something read here.
 
-  Nothing about either has been verified. The PayPal MCP server has returned
-  `Unauthorized` on every attempt, and in later sessions it has not been
-  connected at all, so no PayPal button goes on the page. Knowing the address
-  an account sits under says nothing about what a button would charge, which is
-  the whole lesson of the Stripe links below.
+  The PayPal MCP server has returned `Unauthorized` on every attempt, and in
+  several sessions it has not been connected at all. It has still never been
+  read. Knowing the address an account sits under says nothing about what a
+  button would charge, which is the whole lesson of the Stripe links below.
 
   Gabriel saying card payment is fine by him was a decision about what he wants
   to accept, never evidence the mechanism existed. Reading the objects is what
   found both the €1,200 link and the €160-plus-VAT pair.
+
+  **Three PayPal buttons went on the shop on 22 August 2026 anyway, and the
+  reason they could is worth understanding before touching them.** They are
+  PayPal.Me links, `paypal.me/gabrielgga00/45EUR` and the other two rates. A
+  PayPal.Me link states its amount and currency in the URL path, documented by
+  PayPal, so there is no stored object holding a different number. That is the
+  entire basis: not that the account was read, but that this link shape has
+  nothing left to read. `paypal_amount_mismatches()` in `consistency_check.py`
+  asserts each URL amount against the rate table on the same page, and fails on
+  an amount the table does not quote, a missing currency, a non-euro currency,
+  and a bare handle with no amount at all. All four were proved to fail before
+  the buttons shipped.
+
+  So `paypal.me` is on VERIFIED_PAYMENT_HOSTS and `paypal.com` deliberately is
+  not. Do not add `paypal.com/ncp/` links, the current hosted-payment-link
+  shape: those put the amount back in an object nobody here can read, which is
+  exactly the setup that hid the €1,200 charge. A test asserts they still fail.
+
+  **What is still only his word: the handle.** `paypal.me` is blocked by the
+  egress proxy and the API still will not authorise, so nothing confirms
+  `gabrielgga00` sits on the business account rather than the personal one. He
+  said he read it out of the merchant dashboard while signed in to the business
+  account, and `/mep/` is merchant-side, which personal accounts do not get.
+  That is corroboration, not verification. It is a question of who receives,
+  which is his to answer, not of how much, which is checked. If he ever says
+  money landed in the wrong account, the handle is the thing to change.
 - GVL catalogue table and the Förderantrag both have blanks only he can fill:
   real release dates, ISRCs, which tracks were actually released, real bio
   facts and real costs. Do not guess any of them.

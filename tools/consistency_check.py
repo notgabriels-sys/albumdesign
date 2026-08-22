@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import sys
+from urllib.parse import urlsplit
 from collections import Counter
 from pathlib import Path
 
@@ -34,9 +35,27 @@ DOCS = ROOT / "docs"
 # links that were there before, both EUR 160 tax-exclusive at URLs that were
 # the test slugs with test_ removed, are deactivated.
 #
+# paypal.me went on this list on 22 August 2026, on a different basis, and the
+# difference is the whole reason it is allowed. A PayPal.Me link carries its
+# amount and currency in the URL path (paypal.me/<handle>/45EUR requests EUR
+# 45.00), documented by PayPal itself. There is no stored object holding a
+# second, different amount, so the failure that put a live EUR 1,200 charge
+# behind a EUR 25 label cannot take this shape: the amount is on the face of
+# the link, and paypal_amount_mismatches() below asserts it against the rate
+# table on the same page.
+#
+# What is NOT established here: which of Gabriel's two PayPal accounts the
+# handle sits on. paypal.me is blocked by the egress proxy and the PayPal MCP
+# server has returned 401 on every attempt, so the handle rests on his
+# statement that he read it out of the merchant dashboard while signed in to
+# the business account. That is a recipient question, not an amount question.
+#
+# Do not extend this to paypal.com/ncp/ or any other PayPal link shape. Those
+# put the amount back in a stored object nobody here can read.
+#
 # Adding a host here is a claim that someone read the objects. Do not add one
 # because a link looks right.
-VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com"}
+VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com", "paypal.me"}
 
 # Some links name a payment provider without being able to take money: the
 # privacy statement a data protection notice has to cite, for instance. Those
@@ -47,12 +66,39 @@ NON_PAYMENT_PROVIDER_LINKS: set[str] = {
     "https://stripe.com/privacy",
 }
 
-# Providers whose links must be read before they can ship. PayPal is on this
-# list while its account stays unreadable from here: the MCP server has never
-# authorised, so no amount or tax treatment behind a PayPal link has been seen,
-# and a link on the page would be exactly the remembered-URL mistake that put a
-# live EUR 1,200 charge on the shop under a EUR 25 label.
+# Providers whose links must be read before they can ship. paypal stays in this
+# pattern even though paypal.me is now verified: the pattern is what drags a
+# link into the check at all, and VERIFIED_PAYMENT_HOSTS is what lets one
+# through. Keeping paypal here is what makes a paypal.com/ncp/ link fail.
 PAYMENT_PROVIDERS = r"(stripe|paypal|gumroad|lemonsqueezy|ko-fi|buymeacoffee)"
+
+# Every PayPal.Me href on a page, with whatever follows the handle. Matching
+# the bare handle too is deliberate: paypal.me/<handle> with no amount opens a
+# box the payer types into, so a button labelled "Mastering, pay EUR 45"
+# pointing at one promises a price it does not request.
+_PAYPAL_ME_HREF = re.compile(
+    r'href="https?://(?:www\.)?paypal\.me/([^"/]+)(/[^"]*)?"', re.I
+)
+_PAYPAL_ME_PATH = re.compile(r"^/([\d.,]+)([A-Za-z]{3})?/?$")
+
+
+def _host_is_verified(url: str) -> bool:
+    """Is this URL's host one of the verified ones, exactly?
+
+    The test used to be `host_string in url`, which is substring matching
+    against the whole URL, and this file's own comment further up calls that
+    out as the sloppiness the check exists to prevent. It let through
+    paypal.me.attacker.example, notpaypal.men, buy.stripe.com.evil.example and
+    any URL merely carrying "paypal.me" in a query string. Short entries make
+    it worse: "paypal.me" sits inside "paypal.men".
+
+    So parse the host and compare it whole, allowing only a leading "www.".
+    """
+    host = urlsplit(url).hostname or ""
+    host = host.lower().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    return host in VERIFIED_PAYMENT_HOSTS
 
 
 def unverified_payment_links(body: str) -> list[str]:
@@ -66,9 +112,84 @@ def unverified_payment_links(body: str) -> list[str]:
         u
         for u in re.findall(r'href="(https?://[^"]+)"', body)
         if re.search(PAYMENT_PROVIDERS, u, re.I)
-        and not any(h in u for h in VERIFIED_PAYMENT_HOSTS)
+        and not _host_is_verified(u)
         and u not in NON_PAYMENT_PROVIDER_LINKS
     ]
+
+
+def verified_payment_anchors(body: str) -> list[tuple[str, str]]:
+    """Every (url, visible text) anchor pointing at a verified payment host.
+
+    The href pattern deliberately matches `unverified_payment_links` rather
+    than requiring a path after the host. The old one was
+    `href="https?://([^"/]+)/[^"]*"`, which needs a slash, so a link with no
+    path or only a query string was treated as verified by that function and
+    then skipped here, reaching a page promising an amount that nothing had
+    checked. That is the EUR 1,200 shape arrived at from a different direction.
+    """
+    return [
+        (url, re.sub(r"<[^>]+>", "", text).strip())
+        for url, text in re.findall(
+            r'<a\b[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>', body, re.S
+        )
+        if _host_is_verified(url)
+    ]
+
+
+def unchecked_payment_links(body: str) -> list[str]:
+    """Verified payment links that the anchor scan never reached.
+
+    Two regexes decide whether a payment link gets its price checked: the one
+    that finds hrefs and the one that pairs an anchor with its text. If they
+    ever disagree, a link is silently exempt and the run still prints all
+    checks passed, because a loop over nothing emits nothing. That is the
+    failure this repo keeps rediscovering, so compare them rather than trust
+    that they agree.
+    """
+    hrefs = {
+        u for u in re.findall(r'href="(https?://[^"]+)"', body) if _host_is_verified(u)
+    }
+    return sorted(hrefs - {url for url, _ in verified_payment_anchors(body)})
+
+
+def paypal_amount_mismatches(body: str, table_text: str) -> list[str]:
+    """PayPal.Me links whose URL amount is not a price the page charges.
+
+    The amount sits in the path rather than in a stored object, so unlike a
+    Stripe link this one can be checked from here. Three ways it can be wrong,
+    and all three have to fail: an amount the rate table never quotes, a
+    missing currency so the charge depends on an account setting nobody on the
+    page can see, and a currency that is not the one the prices are written in.
+
+    Takes the table text rather than reading it, so a test can hand it a page
+    that does not exist. Checking only the real shop proves the shop is clean,
+    never that the check would catch a dirty one.
+    """
+    problems: list[str] = []
+    for handle, path in _PAYPAL_ME_HREF.findall(body):
+        matched = _PAYPAL_ME_PATH.match(path or "")
+        if not matched:
+            problems.append(
+                f"paypal.me/{handle}{path or ''} requests no fixed amount, so the payer "
+                f"types their own while the button names a price"
+            )
+            continue
+        amount, currency = matched.group(1), matched.group(2)
+        if not currency:
+            problems.append(
+                f"paypal.me/{handle}/{amount} names no currency, so what it charges "
+                f"depends on the account's default rather than on this page"
+            )
+        elif currency.upper() != "EUR":
+            problems.append(
+                f"paypal.me/{handle} link charges {amount} {currency.upper()} "
+                f"while the page quotes euros"
+            )
+        elif f"€{amount}" not in table_text:
+            problems.append(
+                f"paypal.me/{handle} link charges €{amount}, which the rate table does not quote"
+            )
+    return problems
 
 # An em dash is never used in prose written for Gabriel. A few uses are not
 # prose and stay: the glyph alone as a string, standing in for a value that has
@@ -178,19 +299,36 @@ def main() -> int:
     # EUR 1,200 for a different service. The amount a customer is promised has
     # to be one the rate table on the same page states.
     for name, body in src.items():
-        anchors = re.findall(
-            r'<a\b[^>]*href="https?://([^"/]+)/[^"]*"[^>]*>(.*?)</a>', body, re.S
+        # A loop over nothing emits nothing, so a page whose links this scan
+        # cannot see would report no failures rather than reporting that it saw
+        # no links. Name that case before iterating.
+        missed = unchecked_payment_links(body)
+        check(
+            f"{name} has no payment link the price check cannot reach",
+            not missed,
+            f"{missed} matched the href scan but not the anchor scan, so nothing "
+            f"checked what they promise",
         )
-        for host, text in anchors:
-            if not any(h in host for h in VERIFIED_PAYMENT_HOSTS):
-                continue
-            quoted = re.findall(r"€\s?([\d.,]+)", re.sub(r"<[^>]+>", "", text))
+        for _url, text in verified_payment_anchors(body):
+            quoted = re.findall(r"€\s?([\d.,]+)", text)
             check(
-                f"{name} card link '{re.sub(r'<[^>]+>', '', text).strip()}' quotes an amount from its table",
+                f"{name} card link '{text}' quotes an amount from its table",
                 bool(quoted) and all(f"€{a}" in "".join(tables.get(name, [])) for a in quoted),
                 f"quoted {quoted}, table has {tables.get(name, [])}. A card link must name a price "
                 f"the page charges, or name none at all",
             )
+
+    print("\n=== every PayPal.Me link charges what the URL says and the table quotes ===")
+    # The one payment link whose amount can be read from here without the
+    # provider's API, because PayPal.Me puts it in the path. Nothing else on
+    # this page can be verified that directly, so verify it.
+    for name, body in src.items():
+        mismatches = paypal_amount_mismatches(body, "".join(tables.get(name, [])))
+        check(
+            f"{name} PayPal links charge amounts the page quotes in euros",
+            not mismatches,
+            f"{mismatches}",
+        )
 
     print("\n=== tax position stated the same way wherever it appears ===")
     vat_pages = {n: b for n, b in src.items() if re.search(r"VAT|UStG", b)}
