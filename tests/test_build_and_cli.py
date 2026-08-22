@@ -548,9 +548,9 @@ def test_manifest_hashes_the_bytes_it_actually_rendered(master, tmp_path, monkey
     Image.new("RGB", (3000, 3000), (0, 255, 0)).save(replacement, format="PNG")
     original = imageops_module.normalise
 
-    def swap_then_decode(path, flatten_colour="#ffffff", *, data=None):
+    def swap_then_decode(path, flatten_colour="#ffffff", *, data=None, notes=None):
         Path(path).write_bytes(replacement.getvalue())
-        return original(path, flatten_colour, data=data)
+        return original(path, flatten_colour, data=data, notes=notes)
 
     # Captured before the swap: this is what the manifest must certify, because
     # these are the bytes the build read and decoded.

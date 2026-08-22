@@ -14,6 +14,11 @@ from .specs import Target
 
 READABLE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp", ".gif"}
 
+# What _icc_description records when a profile will not parse. preflight has
+# to recognise this exact value to warn instead of promising a transform that
+# cannot happen, so it is named here rather than spelled twice.
+UNREADABLE_ICC = "unreadable ICC profile"
+
 ALPHA_MODES = {"RGBA", "LA", "PA"}
 HIGH_DEPTH_MODES = {"I", "F", "I;16", "I;16B", "I;16L"}
 
@@ -88,7 +93,7 @@ def _icc_description(icc: bytes | None) -> str | None:
         profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
         return (ImageCms.getProfileDescription(profile) or "").strip() or None
     except Exception:
-        return "unreadable ICC profile"
+        return UNREADABLE_ICC
 
 
 # ICC header bytes 24..35 hold the profile's creation date and time. littlecms
@@ -155,7 +160,11 @@ def inspect(path: Path) -> SourceImage:
 
 
 def normalise(
-    path: Path, flatten_colour: str = "#ffffff", *, data: bytes | None = None
+    path: Path,
+    flatten_colour: str = "#ffffff",
+    *,
+    data: bytes | None = None,
+    notes: list[str] | None = None,
 ) -> Image.Image:
     """Open a master and return a flat 8-bit sRGB RGB image.
 
@@ -166,6 +175,11 @@ def normalise(
     Pass ``data`` to decode bytes already read from ``path``. The manifest
     hashes the master, and hashing one read while decoding a second would let
     the recorded digest describe bytes that were never rendered.
+
+    Pass ``notes`` to hear about colour handling that degraded. The sRGB
+    transform falls back to a plain convert when a profile will not load or the
+    transform fails, which shifts colour, and until this existed the caller had
+    no way to learn it had happened.
     """
     source = io.BytesIO(data) if data is not None else path
     try:
@@ -186,7 +200,7 @@ def normalise(
         raise ImageError(f"could not read {path}: {exc}") from None
 
     im = ImageOps.exif_transpose(im) or im
-    im = _to_srgb(im, icc)
+    im = _to_srgb(im, icc, notes)
 
     if im.mode in ALPHA_MODES:
         background = Image.new("RGB", im.size, flatten_colour)
@@ -197,7 +211,9 @@ def normalise(
     return im.convert("RGB")
 
 
-def _to_srgb(im: Image.Image, icc: bytes | None) -> Image.Image:
+def _to_srgb(
+    im: Image.Image, icc: bytes | None, notes: list[str] | None = None
+) -> Image.Image:
     """Convert into sRGB, preserving alpha across the transform."""
     if not icc:
         return im if im.mode in ALPHA_MODES else im.convert("RGB")
@@ -225,9 +241,16 @@ def _to_srgb(im: Image.Image, icc: bytes | None) -> Image.Image:
         if converted is None:
             raise ValueError("colour conversion returned nothing")
         body = converted
-    except Exception:
+    except Exception as exc:
         # A broken or exotic profile shouldn't stop the export; a plain
-        # convert is a worse but working approximation.
+        # convert is a worse but working approximation. It is still an
+        # approximation, so say so rather than letting the caller believe the
+        # transform it was promised actually ran.
+        if notes is not None:
+            notes.append(
+                f"the colour transform into sRGB failed ({exc.__class__.__name__}), "
+                f"so the pixels were converted without it and the colours may shift"
+            )
         body = body.convert("RGB")
 
     body = body.convert("RGB")

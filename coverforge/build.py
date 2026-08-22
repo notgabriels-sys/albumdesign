@@ -223,7 +223,12 @@ def build(
     result.source_sha256 = hashlib.sha256(raw).hexdigest()
 
     # Decode and colour-manage once, then resize per target.
-    normalised = imageops.normalise(src.path, flatten_colour, data=raw)
+    colour_notes: list[str] = []
+    normalised = imageops.normalise(
+        src.path, flatten_colour, data=raw, notes=colour_notes
+    )
+    for note in colour_notes:
+        result.findings.append(Finding(WARN, "colour-transform-degraded", note))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for target in renderable:
