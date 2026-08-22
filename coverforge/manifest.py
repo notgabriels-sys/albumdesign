@@ -45,6 +45,10 @@ def _normalise_outputs(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any
     issues: list[str] = []
     raw_outputs = payload.get("outputs", [])
     if raw_outputs is None:
+        # Not the same as a capture with no outputs. Returning silently meant
+        # two manifests whose outputs array was unreadable compared as
+        # identical captures, which is a verdict on something never read.
+        issues.append("outputs is null, so no outputs could be read")
         return outputs, issues
     if not isinstance(raw_outputs, list):
         raise TypeError("manifest outputs must be a list")
@@ -70,18 +74,32 @@ def _normalise_outputs(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any
 def _normalise_manifest(
     payload: dict[str, Any], path: Path
 ) -> tuple[dict[str, Any], dict[str, str | Any], dict[str, str | Any], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    # A section that is the wrong shape was replaced with an empty one and
+    # nothing recorded it, so damage on both sides cancelled out and the diff
+    # called the pair identical. Name each one instead.
+    structure_issues: list[str] = []
+
     source = payload.get("source")
+    if source is not None and not isinstance(source, dict):
+        structure_issues.append("source is not an object")
     if not isinstance(source, dict):
         source = {}
 
     outputs, output_issues = _normalise_outputs(payload)
+
     skipped = payload.get("skipped")
+    if skipped is not None and not isinstance(skipped, list):
+        structure_issues.append("skipped is not a list")
     if not isinstance(skipped, list):
         skipped = []
 
     findings = payload.get("findings")
+    if findings is not None and not isinstance(findings, list):
+        structure_issues.append("findings is not a list")
     if not isinstance(findings, list):
         findings = []
+
+    output_issues = output_issues + structure_issues
 
     return (
         {

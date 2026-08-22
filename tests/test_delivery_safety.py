@@ -328,3 +328,78 @@ class TestThePackageIsReproducible:
             assert "manifest.json" in names
             payload = json.loads(zf.read("manifest.json").decode("utf-8"))
         assert payload["slug"] == "lof001"
+
+
+class TestAMalformedManifestIsNotIdentical:
+    """Damage on both sides used to cancel out.
+
+    Sections of the wrong shape were replaced with empty ones and nothing
+    recorded it, so two manifests whose outputs array was unreadable compared
+    as "identical captures" with exit 0. Neither had been read.
+    """
+
+    def _damage(self, path):
+        payload = json.loads(path.read_text())
+        payload["outputs"] = None
+        payload["source"] = "master.png"
+        payload["findings"] = "see notes"
+        path.write_text(json.dumps(payload, indent=2))
+
+    def _diff(self, left, right):
+        from coverforge.manifest import compare_manifests, load_manifest
+
+        lp, lpath = load_manifest(left)
+        rp, rpath = load_manifest(right)
+        return compare_manifests(lp, rp, lpath, rpath)
+
+    def test_two_damaged_manifests_are_not_identical(self, bundle, tmp_path):
+        other = tmp_path / "copy"
+        other.mkdir()
+        (other / "manifest.json").write_text((bundle / "manifest.json").read_text())
+        self._damage(bundle / "manifest.json")
+        self._damage(other / "manifest.json")
+
+        diff = self._diff(bundle / "manifest.json", other / "manifest.json")
+        assert diff["identical"] is False
+        assert diff["delta"]["output_issues"]
+
+    def test_each_damaged_section_is_named(self, bundle, tmp_path):
+        other = tmp_path / "copy"
+        other.mkdir()
+        (other / "manifest.json").write_text((bundle / "manifest.json").read_text())
+        self._damage(bundle / "manifest.json")
+        self._damage(other / "manifest.json")
+
+        issues = " ".join(self._diff(bundle / "manifest.json", other / "manifest.json")["delta"]["output_issues"])
+        assert "outputs is null" in issues
+        assert "source is not an object" in issues
+        assert "findings is not a list" in issues
+
+    def test_the_command_exits_non_zero(self, bundle, tmp_path, capsys):
+        other = tmp_path / "copy"
+        other.mkdir()
+        (other / "manifest.json").write_text((bundle / "manifest.json").read_text())
+        self._damage(bundle / "manifest.json")
+        self._damage(other / "manifest.json")
+
+        code = main(["manifest", str(bundle / "manifest.json"), str(other / "manifest.json")])
+        out = capsys.readouterr().out
+        assert code != 0
+        assert "identical captures" not in out
+
+    def test_two_healthy_manifests_are_still_identical(self, bundle, tmp_path):
+        other = tmp_path / "copy"
+        other.mkdir()
+        (other / "manifest.json").write_text((bundle / "manifest.json").read_text())
+        diff = self._diff(bundle / "manifest.json", other / "manifest.json")
+        assert diff["identical"] is True
+        assert not diff["delta"]["output_issues"]
+
+    def test_the_outputs_line_is_not_called_source_outputs(self, bundle, tmp_path, capsys):
+        other = tmp_path / "copy"
+        other.mkdir()
+        (other / "manifest.json").write_text((bundle / "manifest.json").read_text())
+        main(["manifest", str(bundle / "manifest.json"), str(other / "manifest.json")])
+        out = capsys.readouterr().out
+        assert "source outputs:" not in out
+        assert "outputs:" in out
