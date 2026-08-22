@@ -18,10 +18,12 @@ import zipfile
 import pytest
 from PIL import Image
 
+from coverforge import imageops
 from coverforge.audit import run_audit
 from coverforge.build import build
 from coverforge.cli import main
 from coverforge.imageops import ImageError, inspect
+from coverforge.preflight import ERROR, WARN
 from coverforge.specs import load_targets
 
 TARGETS = [t for t in load_targets(None, None) if t.key in {"spotify", "bandcamp"}]
@@ -403,3 +405,52 @@ class TestAMalformedManifestIsNotIdentical:
         out = capsys.readouterr().out
         assert "source outputs:" not in out
         assert "outputs:" in out
+
+
+class TestAnUntaggedBuildSaysSo:
+    """The sRGB profile is built once at import and embedded only `if
+    SRGB_BYTES`. When ImageCms cannot create one that test silently skips, so
+    every output shipped untagged while the build reported no warning at all.
+
+    Two things rest on that profile being there. Untagged artwork is
+    interpreted differently from platform to platform, which is the whole
+    reason this tool converts colour. And the repo's byte-reproducibility
+    guarantee assumes the profile is embedded with its timestamp zeroed, so a
+    silently untagged build changes every hash with nothing to explain why.
+    """
+
+    def _build(self, master, tmp_path, name):
+        return build(inspect(master), TARGETS, out_dir=tmp_path / name, slug="lof001")
+
+    def test_a_normal_build_tags_its_outputs_and_says_nothing(self, master, tmp_path):
+        result = self._build(master, tmp_path, "tagged")
+        with Image.open(result.outputs[0].path) as im:
+            assert im.info.get("icc_profile")
+        assert not [f for f in result.findings if f.code == "srgb-profile-unavailable"]
+
+    def test_an_untagged_build_warns(self, master, tmp_path, monkeypatch):
+        monkeypatch.setattr(imageops, "SRGB_BYTES", None)
+        result = self._build(master, tmp_path, "untagged")
+        warned = [f for f in result.findings if f.code == "srgb-profile-unavailable"]
+        assert warned, "an untagged build reported nothing"
+        assert warned[0].level == WARN
+
+    def test_the_warning_is_not_an_error_that_blocks_the_build(
+        self, master, tmp_path, monkeypatch
+    ):
+        # Untagged output is worse than tagged, not unusable. The files still
+        # have to be written, or a machine without ImageCms could not deliver
+        # at all.
+        monkeypatch.setattr(imageops, "SRGB_BYTES", None)
+        result = self._build(master, tmp_path, "still_writes")
+        assert result.outputs
+        assert all(f.level != ERROR for f in result.findings)
+
+    def test_the_untagged_files_really_carry_no_profile(self, master, tmp_path, monkeypatch):
+        # The warning has to describe what actually happened, not stand in for
+        # a check nobody made.
+        monkeypatch.setattr(imageops, "SRGB_BYTES", None)
+        result = self._build(master, tmp_path, "verify_untagged")
+        for output in result.outputs:
+            with Image.open(output.path) as im:
+                assert not im.info.get("icc_profile"), output.path.name
