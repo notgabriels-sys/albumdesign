@@ -312,6 +312,29 @@ def main() -> int:
     check("robots.txt points at the sitemap",
           SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
 
+    # docs/ is the web root: every file in it is served to the public. A plan
+    # and a design spec were once committed to docs/superpowers/ and published,
+    # agent instructions and all, and nothing failed because the sitemap check
+    # only looks at .html. Name what belongs here and reject the rest, so the
+    # next stray directory is a red CI run rather than a live page.
+    PUBLISHABLE = {".html", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".xml", ".txt", ".webmanifest"}
+    # .nojekyll is a GitHub Pages control file, not content: it stops Jekyll
+    # processing the directory. Named here rather than allowing every
+    # extensionless file, which would let a README back in.
+    ALLOWED_BY_NAME = {".nojekyll"}
+    strays = sorted(
+        str(p.relative_to(DOCS))
+        for p in DOCS.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() not in PUBLISHABLE
+        and p.name not in ALLOWED_BY_NAME
+    )
+    check("docs/ holds nothing but publishable assets", not strays,
+          f"{strays} - docs/ is the public web root; notes and specs belong outside it")
+    nested = sorted(str(p.relative_to(DOCS)) for p in DOCS.iterdir() if p.is_dir())
+    check("docs/ has no subdirectories", not nested,
+          f"{nested} - the site is flat; a directory here publishes whatever is inside it")
+
     print()
     if failures:
         print(f"{len(failures)} of {checks} checks FAILED:")
