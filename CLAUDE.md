@@ -120,6 +120,27 @@ which made them useless as gates. Keep them asserting.
   every track sat under its ceiling, with the column blank above the sentence.
   Same shape in three other checks. A result nobody measured is a warning that
   says so, never a pass.
+- **A conversion that did not happen is not a conversion.** `imageops` swallows
+  six exceptions, and two of them were reporting success over work that never
+  ran. `_srgb_profile_bytes` returning None made `_encode_once` skip the
+  `if SRGB_BYTES` embed, so every output shipped untagged with no warning at
+  all, which also silently breaks the byte-reproducibility guarantee above.
+  And `preflight` promised `will be converted to sRGB` for a profile
+  `inspect()` had already recorded as unreadable, while `_to_srgb` failed on
+  that same profile and plain-converted: `profileToProfile` was attempted zero
+  times. Both now warn, and the build still delivers, because degraded colour
+  is worse than converted colour rather than a reason to produce nothing.
+
+  The other four swallows were checked on 22 August 2026 and are fine, so that
+  does not need redoing. `_icc_description` reports what it could not read,
+  `inspect` and `normalise` raise `ImageError` from typed excepts, and the EXIF
+  default to upright is harmless because `short_edge` is orientation-invariant
+  and the rotation is disclosed. `package.py` and `specs.py` are clean.
+  One thing was deliberately left: `getattr(os, "O_NOFOLLOW", 0)` silently
+  drops the symlink guard on a platform without that constant, while the
+  comment claims the write will fail on a link. It is live on linux and a test
+  proves it fires, so this is a note, not a bug to fix on a tool with no
+  Windows story.
 - **An eleven-bit MPEG sync word is not evidence of an MP3.** It turns up in
   arbitrary binary about every 2 KB, so a blind 200 KB scan claimed `.m4a` and
   `.ogg` files as MP3 with a sample rate read off a coincidence, in both
