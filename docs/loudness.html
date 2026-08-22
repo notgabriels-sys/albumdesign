@@ -90,6 +90,8 @@
     letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1}
   .metric .u{color:var(--muted);font-size:12px;margin-top:5px}
   .metric.flag .v{color:var(--fail)}
+  .metric.unknown .v{color:var(--warn)}
+  .metric.unknown .u{color:var(--warn)}
 
   .card{background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);overflow:hidden}
   .card h4,.card .cardhead{margin:0;padding:12px 15px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
@@ -444,7 +446,13 @@
           : "No audio above -70 LUFS in this file, so there is nothing to measure.");
       }
       // A true-peak failure must not throw away loudness numbers we already have.
-      return truePeak(ab).catch(function(){return NaN})
+      // truePeak() builds an OfflineAudioContext, which throws synchronously
+      // when it refuses the oversampled rate, and a synchronous throw happens
+      // before there is a promise to attach .catch to. So the whole analysis
+      // reported "Analysis failed on this file" while the LUFS figure sat
+      // measured and discarded, which is the opposite of what this comment
+      // promises. Promise.resolve().then() turns the throw into a rejection.
+      return Promise.resolve().then(function(){return truePeak(ab)}).catch(function(){return NaN})
         .then(function(tp){ render(ab,LUFS,tp,momMax,shMax,LRA,declaredRate); });
     }).catch(function(){ say("Analysis failed on this file. A stereo WAV works best."); });
   }
@@ -474,16 +482,21 @@
     // stricter half was advice the tool never applied: a club master at -1.5
     // LUFS and -1.5 dBTP passed silently, in exactly the case the rule targets.
     var tpCeiling = LUFS>-14 ? -2 : -1;
-    var tpFlag = tp > tpCeiling;
+    // NaN > -1 is false, so an unmeasurable true peak used to render exactly
+    // like one comfortably under the ceiling: the card read "-" with no flag
+    // and the reading said nothing. A result nobody measured is a warning that
+    // says so, never a pass. Same defect the delivery page had.
+    var tpKnown = isFinite(tp);
+    var tpFlag = tpKnown && tp > tpCeiling;
     var metrics=[
       {k:"Integrated",v:fmt(LUFS),u:"LUFS",flag:false},
-      {k:"True peak",v:fmt(tp),u:"dBTP"+(tpFlag?" · over "+tpCeiling:""),flag:tpFlag},
+      {k:"True peak",v:fmt(tp),u:tpKnown?("dBTP"+(tpFlag?" · over "+tpCeiling:"")):"not measured",flag:tpFlag,unknown:!tpKnown},
       {k:"Loudness range",v:fmt(LRA),u:"LU"},
       {k:"Short-term max",v:fmt(shMax),u:"LUFS"},
       {k:"Duration",v:mmss(ab.duration),u:(ab.numberOfChannels===1?"mono":ab.numberOfChannels===2?"stereo":ab.numberOfChannels+" ch")+(declaredRate?" · "+(declaredRate/1000)+"k":"")}
     ];
     $("metrics").innerHTML=metrics.map(function(m){
-      return "<div class='metric"+(m.flag?" flag":"")+"'><div class='k'>"+m.k+"</div><div class='v'>"+m.v+"</div><div class='u'>"+m.u+"</div></div>";
+      return "<div class='metric"+(m.flag?" flag":"")+(m.unknown?" unknown":"")+"'><div class='k'>"+m.k+"</div><div class='v'>"+m.v+"</div><div class='u'>"+m.u+"</div></div>";
     }).join("");
 
     // reading
@@ -493,6 +506,7 @@
     else if(LUFS>-16) msg="At <b>"+fmt(LUFS)+" LUFS</b> this is close to streaming reference, a sensible target for a modern master.";
     else msg="At <b>"+fmt(LUFS)+" LUFS</b> this is on the quiet side for streaming. It will keep all its dynamics, and some services will turn it up.";
     if(ab.numberOfChannels===1) msg+=" This is a <b>mono</b> file. BS.1770 sums the channels, so identical material in stereo reads 3.0 LU louder. The platforms measure it the same way, so the gain figures below are still right.";
+    if(!tpKnown) msg+=" <b>True peak could not be measured</b> on this file, so nothing here tells you whether it clears the "+tpCeiling+" dBTP ceiling. Check it in your DAW before you send it.";
     if(tpFlag) msg+=" Your true peak is <b>"+fmt(tp)+" dBTP</b>, above the "+tpCeiling+" dBTP ceiling"+(tpCeiling===-2?" that applies because this master is louder than -14 LUFS":"")+", which can distort after lossy encoding. Pull the ceiling down.";
     $("read").innerHTML=msg;
 

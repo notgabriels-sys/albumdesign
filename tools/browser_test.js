@@ -422,6 +422,104 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   pct = await page.textContent('#pct');
   ok(/^0 \//.test(pct), `reset clears progress (${pct})`);
 
+  // ---- a true peak that could not be measured must say so ----
+  // Two defects, both proved in this browser before being fixed. truePeak()
+  // builds an OfflineAudioContext, which throws synchronously when it refuses
+  // the oversampled rate; a synchronous throw happens before there is a promise
+  // to attach .catch to, so the whole run reported "Analysis failed on this
+  // file" and threw away a LUFS figure it had already measured. And with an
+  // async rejection tp is NaN, where NaN > ceiling is false, so the card
+  // rendered "-" with no flag: identical to a peak safely under the ceiling.
+  //
+  // Breaking the oversampled context is how the failure actually reaches this
+  // code, so break exactly that rather than stubbing the function out.
+  console.log('\n=== an unmeasurable true peak is a warning, not a silent pass ===');
+  {
+    const broken = await browser.newPage();
+    await broken.addInitScript(() => {
+      const Real = window.OfflineAudioContext;
+      window.OfflineAudioContext = function (ch, len, rate) {
+        if (rate > 100000) throw new Error('sample rate not supported');
+        return new Real(ch, len, rate);
+      };
+    });
+    await broken.goto('file://' + path.join(DOCS, 'loudness.html'));
+    await broken.setInputFiles('#file', path.join(FIX, 'sine_-23dBFS.wav'));
+    await broken.waitForSelector('#results.show', { timeout: 60000 });
+    await broken.waitForTimeout(300);
+    const tpq = await broken.evaluate(() => {
+      const el = [...document.querySelectorAll('.metric')]
+        .find(e => e.querySelector('.k').textContent.trim() === 'True peak');
+      const lu = [...document.querySelectorAll('.metric')]
+        .find(e => e.querySelector('.k').textContent.trim() === 'Integrated');
+      return {
+        unit: el.querySelector('.u').textContent.trim(),
+        unknown: el.classList.contains('unknown'),
+        lufs: lu.querySelector('.v').textContent.trim(),
+        says: /could not be measured/i.test(document.getElementById('read').textContent),
+      };
+    });
+    await broken.close();
+    ok(Math.abs(parseFloat(tpq.lufs) - (-23.0)) <= 0.3,
+      `a true-peak failure keeps the loudness it already measured (${tpq.lufs} LUFS)`);
+    ok(/not measured/i.test(tpq.unit),
+      `the true peak cell says it was not measured ("${tpq.unit}")`);
+    ok(tpq.unknown, 'the unmeasured true peak is marked, not left looking clear');
+    ok(tpq.says, 'the reading tells you the ceiling was never checked');
+  }
+
+  // ---- split sheet: a share nobody entered is not a zero share ----
+  // splits.html had no functional coverage at all, and it is the document that
+  // decides who GEMA and GVL pay. readRow and sum both used
+  // parseFloat(x)||0, which turns anything unreadable into a zero and adds it
+  // in silently, so three invalid sheets totalled exactly 100 and were badged
+  // pass. All three are proved here against the real page.
+  console.log('\n=== split sheet totals only count shares it could read ===');
+  await page.goto('file://' + path.join(DOCS, 'splits.html'));
+  await page.waitForTimeout(200);
+  const split = async (vals) => page.evaluate((vals) => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    for (let i = 0; i < vals.length; i++) document.getElementById('addw').click();
+    [...tb.querySelectorAll('tr')].forEach((tr, i) => {
+      tr.querySelector('.f-name').value = 'Person ' + (i + 1);
+      tr.querySelector('.f-pct').value = vals[i];
+    });
+    tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+    const b = document.getElementById('wtotal');
+    return {
+      pass: b.className.includes('pass'),
+      text: b.textContent.trim(),
+      issues: document.getElementById('rowissues').textContent.trim(),
+    };
+  }, vals);
+
+  let sp = await split(['50', '50']);
+  ok(sp.pass, `an honest 50/50 still passes (${sp.text})`);
+  ok(sp.issues === '', 'a valid sheet reports no row problems');
+
+  sp = await split(['150', '-50']);
+  ok(!sp.pass, `150 and -50 does not pass just because it totals 100 (${sp.text})`);
+  ok(/negative/i.test(sp.issues), `it names the negative share -> "${sp.issues}"`);
+
+  sp = await split(['50', '50', 'abc']);
+  ok(!sp.pass, `a third writer whose share cannot be read does not pass (${sp.text})`);
+  ok(/Person 3/.test(sp.issues), `it names the row -> "${sp.issues}"`);
+
+  sp = await split(['100', '']);
+  ok(!sp.pass, `a named person with no share entered does not pass (${sp.text})`);
+  ok(/Person 2/.test(sp.issues), `it names the person -> "${sp.issues}"`);
+
+  // A blank form is someone starting work, not a mistake to shout about.
+  const blank = await page.evaluate(() => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    document.getElementById('addw').click();
+    tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+    return document.getElementById('rowissues').textContent.trim();
+  });
+  ok(blank === '', `an untouched empty row raises nothing (got "${blank}")`);
+
   ok(errs.length === 0, `no uncaught page errors during functional tests${errs.length ? ' -> ' + errs.join(' | ') : ''}`);
 
   await browser.close();
