@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from coverforge import imageops
-from coverforge.audit import run_audit
+from coverforge.audit import BundleAudit, run_audit
 from coverforge.build import build
 from coverforge.cli import main
 from coverforge.imageops import ImageError, inspect
@@ -507,3 +508,74 @@ class TestAColourTransformThatDidNotHappenSaysSo:
         notes: list[str] = []
         imageops.normalise(master, notes=notes)
         assert notes == []
+
+
+# Every field name that must, on its own, stop a bundle being certified ok.
+_BLOCKING_LISTS = [
+    "missing_targets",
+    "malformed_files",
+    "missing_files",
+    "bytes_mismatches",
+    "checksum_mismatches",
+    "dimension_mismatches",
+    "format_mismatches",
+]
+
+
+def _clean_audit(**overrides):
+    """A BundleAudit with nothing wrong with it, plus whatever is overridden."""
+    fields = dict(
+        bundle=Path("delivery"),
+        slug="lof001",
+        checked_targets=["spotify"],
+        present_targets=["spotify"],
+        missing_targets=[],
+        extra_targets=[],
+        malformed_files=[],
+        missing_files=[],
+        bytes_mismatches=[],
+        checksum_mismatches=[],
+        dimension_mismatches=[],
+        format_mismatches=[],
+        manifest_present=True,
+        capture_id_mismatch=False,
+        hashes_verified=True,
+    )
+    fields.update(overrides)
+    return BundleAudit(**fields)
+
+
+class TestEveryFailureBlocksOkOnItsOwn:
+    """Each condition in ok() is pinned separately, because the suite could not
+    tell if one were dropped.
+
+    Found by mutation, not by reading: removing any one of the seven list
+    terms from the ok() disjunction left all 41 tests passing. The existing
+    checksum test asserts `ok is False` after swapping a delivered file, but
+    the swap also changes the byte count, so bytes_mismatches fires and masks
+    the term the test is named for. That is exactly the failure this repo has
+    a note about, on the function that certifies a bundle to a client.
+
+    The code was correct throughout. What was missing was anything that would
+    notice if it stopped being.
+    """
+
+    def test_a_clean_audit_is_ok(self):
+        assert _clean_audit().ok is True
+
+    @pytest.mark.parametrize("field", _BLOCKING_LISTS)
+    def test_each_failure_list_blocks_ok_alone(self, field):
+        # One field set, everything else clean, so nothing else can mask it.
+        assert _clean_audit(**{field: ["something wrong"]}).ok is False, field
+
+    def test_a_missing_manifest_blocks_ok_alone(self):
+        assert _clean_audit(manifest_present=False).ok is False
+
+    def test_a_capture_id_mismatch_blocks_ok_alone(self):
+        assert _clean_audit(capture_id_mismatch=True).ok is False
+
+    def test_extra_targets_alone_do_not_block(self):
+        # Deliberately not blocking: an extra file in the folder is worth
+        # reporting but is not a defect in what was delivered. Pinned so the
+        # decision is visible rather than incidental.
+        assert _clean_audit(extra_targets=["stray.jpg"]).ok is True
