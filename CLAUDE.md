@@ -103,6 +103,17 @@ which made them useless as gates. Keep them asserting.
   escaped the apostrophe; the delivery copy had been trimmed. Any new page that
   echoes a file name escapes `'` too, and a browser test asserts the rendered
   cell carries no handler.
+
+  All seven pages were checked against this on 22 August 2026, so it does not
+  need redoing. Only two put user text into markup: `delivery.html` (file names,
+  fixed and tested) and `splits.html` (collaborator names, through `esc()` in the
+  signature block and `textContent` in the row-problem line, both now tested).
+  `cover.html` and `loudness.html` read files but never echo the name into
+  markup: cover's `innerHTML` is fed only by its own literals plus a format
+  string that is one of PNG/JPEG/WEBP/GIF/BMP/TIFF/unknown, and loudness prints
+  the name through `textContent`. The other three take no input at all. Both
+  splits tests were proved to bite by trimming `esc()` back to `&` alone, which
+  injects a live `IMG[onerror]` and fires a real dialog.
 - **Do not let a check pass on a measurement that did not happen.** The
   delivery page filtered its over-the-ceiling list on `isFinite` while scoring
   the check `pass`, so a release whose true peaks all failed to measure was told
