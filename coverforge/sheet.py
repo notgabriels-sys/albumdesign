@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -113,9 +114,19 @@ def build_sheet(
             draw.text((x + 6, label_top + 6), text, fill=text_color, font=font)
 
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Render to memory, then write through the same guard the delivery files
+    # use. Image.save() opens the path plainly, so a symlink sitting at -o was
+    # followed and whatever it pointed at was overwritten with a JPEG. Proved by
+    # destroying a text file that way before this was fixed.
+    buf = io.BytesIO()
     sheet.save(
-        out, format="JPEG", quality=90, optimize=True, progressive=False, subsampling=0
+        buf, format="JPEG", quality=90, optimize=True, progressive=False, subsampling=0
     )
+    # Imported here rather than at module scope: build imports sheet for the
+    # --sheet flag, so a top-level import would be circular.
+    from .build import write_new_bytes
+
+    write_new_bytes(out, buf.getvalue())
 
     return SheetResult(
         out=out,
