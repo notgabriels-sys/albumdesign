@@ -846,11 +846,13 @@ def main() -> int:
     # So compare against what the card itself records it was drawn with. The
     # headline is compared with any trailing full stop removed, because that is
     # what the generator draws.
+    eyebrows = 0
     for name, filename in referenced.items():
         alt = html.unescape(
             _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
         )
-        headline = png_text(DOCS / filename).get("preflight:headline")
+        drawn = png_text(DOCS / filename)
+        headline = drawn.get("preflight:headline")
         check(
             f"{name}'s preview alt text quotes the headline on the card",
             headline is not None and headline.rstrip(".") in alt,
@@ -858,11 +860,48 @@ def main() -> int:
             f"what a screen reader gets instead of the image, so it has to "
             f"describe the image that is actually there",
         )
+        # And the eyebrow, which is the other thing the card prints in words.
+        #
+        # Comparing only the headline was not enough. Renaming the pages moved
+        # every eyebrow and left six alt texts naming a card that no longer
+        # exists: "Preflight Coverforge" over a card reading ALBUM COVER SIZE
+        # CHECKER, with all 340 checks green, because the headlines had not
+        # moved and the headline was the only thing anything read. That is the
+        # impressum alt-text defect again, one field along, and it is the same
+        # lesson as the card that recorded two of the three strings it drew:
+        # enumerate what the thing actually draws.
+        #
+        # Whether an eyebrow was drawn is read off the card, not re-derived
+        # from the page's name, so this cannot disagree with the generator
+        # about which cards have one.
+        eyebrow = drawn.get("preflight:eyebrow")
+        if eyebrow is not None:
+            eyebrows += 1
+            check(
+                f"{name}'s preview alt text names the card's eyebrow",
+                eyebrow.lower() in alt.lower(),
+                f"the card prints {eyebrow!r} beside the wordmark, the alt "
+                f"reads {alt!r}; a reader who cannot see the card is being "
+                f"given the name of a different one",
+            )
+
         check(
             f"{name}'s preview alt text names who made it",
             "Gabriel G Alonso" in alt,
             f"alt {alt!r}",
         )
+
+    # Skipping on a missing key means the generator dropping the key takes the
+    # whole family with it and nothing says so, which is how the price-promise
+    # scan sat dead through 129 green checks. Only the landing card has no
+    # eyebrow, so zero of them means the recording stopped, not that the cards
+    # stopped having one.
+    check(
+        "the eyebrow scan fired at all",
+        eyebrows > 0,
+        "no card records the eyebrow it drew, so nothing compared any alt text "
+        "against it; rerun tools/make_share_card.py",
+    )
 
 
     print("\n=== the README advertises the site that actually exists ===")

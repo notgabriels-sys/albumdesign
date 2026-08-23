@@ -167,6 +167,23 @@ def test_every_shipped_card_records_its_page(page, filename):
 
 
 @pytest.mark.parametrize("page,filename", sorted(msc.CARDS.items()))
+def test_the_eyebrow_is_recorded_exactly_where_it_is_drawn(page, filename):
+    """The card records whether it printed an eyebrow, and what it printed.
+
+    The alt text on every page describes the card, and consistency_check.py
+    reads this key to decide whether the alt has to name an eyebrow at all. If
+    the generator stopped recording it, that check would go silently dead on
+    every card at once, which is the failure it exists to catch.
+    """
+    eyebrow = _png_text(DOCS / filename).get("preflight:eyebrow")
+    if page == "index.html":
+        assert eyebrow is None, "the landing card draws no eyebrow"
+    else:
+        title, _headline, _description = msc.read(page)
+        assert eyebrow == title.upper()
+
+
+@pytest.mark.parametrize("page,filename", sorted(msc.CARDS.items()))
 def test_every_shipped_card_would_redraw_identically(page, filename, tmp_path):
     """The committed file is the file the current generator produces.
 

@@ -143,6 +143,7 @@ def draw_card(page: str, out: Path) -> None:
 
     img = Image.new("RGB", (W, H), GROUND)
     d = ImageDraw.Draw(img)
+    eyebrow_text: str | None = None
 
     # A rule in the accent colour, the one piece of the site's identity that
     # survives being shrunk to a thumbnail.
@@ -184,7 +185,8 @@ def draw_card(page: str, out: Path) -> None:
             raise ValueError(
                 f"{page}: the title {title!r} is too long for the card's eyebrow"
             )
-        d.text((left, 99), title.upper(), font=eyebrow, fill=ACCENT)
+        eyebrow_text = title.upper()
+        d.text((left, 99), eyebrow_text, font=eyebrow, fill=ACCENT)
 
     # The headline is the page's h1, at the largest size that still leaves room
     # for the description underneath. Sized by measuring, not by counting
@@ -236,6 +238,19 @@ def draw_card(page: str, out: Path) -> None:
     meta.add_itxt("preflight:title", title)
     meta.add_itxt("preflight:headline", headline)
     meta.add_itxt("preflight:description", description)
+    # Whether the eyebrow was drawn, and the exact string if it was.
+    #
+    # The alt text on each page describes the card, and it named an eyebrow the
+    # cards had stopped drawing: six pages said "Preflight Coverforge" and the
+    # like, months after the titles moved, and every check passed because the
+    # alt was only ever compared against the headline. A screen reader was
+    # handed the name of a picture that is not there.
+    #
+    # The condition is recorded rather than left for the checker to re-derive
+    # from `page != "index.html"`, because a condition restated in two files is
+    # a condition that can drift apart. The checker asks the card what it drew.
+    if eyebrow_text is not None:
+        meta.add_itxt("preflight:eyebrow", eyebrow_text)
 
     # optimize=True keeps each one well under the 5 MB most scrapers fetch.
     img.save(out, "PNG", optimize=True, pnginfo=meta)
