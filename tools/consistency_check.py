@@ -530,12 +530,55 @@ def main() -> int:
             "no byline found at all, so the footer markup has drifted",
         )
 
+    # The shop signs itself the same way, in a slightly different sentence, and
+    # was signing itself "Studio Shop" while calling itself Mixing and
+    # Mastering Rates. It is the page money is spent on, so it is the last one
+    # that should introduce itself under a name found nowhere else.
+    shop_name = page_identity(src["shop.html"])["name"]
+    shop_signed = re.search(r"<span>([^<]*): Gabriel G Alonso", src["shop.html"])
+    if shop_signed:
+        bylines += 1
+    check(
+        "shop.html signs its footer with its own name",
+        shop_signed is not None and shop_signed.group(1) == shop_name,
+        f"the page is called {shop_name!r}, its footer byline reads "
+        f"{shop_signed.group(1)!r}" if shop_signed else
+        "no byline found at all, so the footer markup has drifted",
+    )
+
     check(
         "the footer-byline scan fired at all",
-        bylines == len(TOOL_PAGES),
-        f"found a byline on {bylines} of {len(TOOL_PAGES)} tool pages, so the "
+        bylines == len(TOOL_PAGES) + 1,
+        f"found a byline on {bylines} of {len(TOOL_PAGES) + 1} pages, so the "
         f"markup this reads has drifted and the check is comparing nothing",
     )
+
+    # No page calls anything by a name the rename retired.
+    #
+    # The checks above compare a name against a page's title wherever a name
+    # sits in a link or a byline. Prose is not either of those: cover.html's
+    # opening sentence read "Coverforge checks size, shape, format and colour",
+    # which is the CLI's name and the page's own former title, and nothing on
+    # the site says it any more. A visitor met a product name in the first
+    # sentence that appears nowhere else on the page they are reading.
+    #
+    # Only the four retired names that are not substrings of a current title
+    # are listed, so this cannot fire on "Release Delivery Check" containing
+    # "Delivery Check". The comparison is case-sensitive on purpose: prose
+    # like "the cover and loudness checkers" is ordinary English, not a name.
+    RETIRED_NAMES = ("Coverforge", "Loudness Check", "Release Preflight",
+                     "Studio Shop")
+    for page, body in src.items():
+        prose = re.sub(r"<(script|style)\b.*?</\1>", " ", body, flags=re.S | re.I)
+        prose = re.sub(r"<[^>]+>", " ", prose)
+        found = sorted({n for n in RETIRED_NAMES if n in prose})
+        check(
+            f"{page} uses no name the site has retired",
+            not found,
+            f"{found}; the rename left these behind, and a page that calls "
+            f"itself or a sibling by one is offering a name a reader will not "
+            f"find anywhere else",
+        )
 
     print("\n=== structured data says what the page itself says ===")
     # No page carried any. Five distinct free tools and a rate card were being

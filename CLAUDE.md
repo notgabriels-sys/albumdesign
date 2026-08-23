@@ -360,6 +360,25 @@ which made them useless as gates. Keep them asserting.
   running anything. Same as the crop and the bars through the headline: look
   at the output. Six checks added, 353 to 359, both failure modes proved.
 
+- **Then the shop and the cover page were still doing it in prose.** Sweeping
+  the rendered text rather than the links found two more: `shop.html` signed
+  its footer `Studio Shop` while calling itself Mixing and Mastering Rates, on
+  the one page money is spent on, and `cover.html`'s opening sentence read
+  `Coverforge checks size, shape, format and colour`, which is the CLI's name
+  and that page's own former title and appears nowhere else on the site.
+
+  Links and bylines are checked against the title. Prose is neither, so the
+  four retired names that are not substrings of a current one are now asserted
+  to appear on no page: `Coverforge`, `Loudness Check`, `Release Preflight`,
+  `Studio Shop`. Case-sensitive, because "the cover and loudness checkers" is
+  ordinary English and not a name. Only four, because `Delivery Check` and
+  `Split Sheet` are inside `Release Delivery Check` and `Split Sheet Maker`
+  and a ban on them would fire on the correct text.
+
+  The sweep that found them was a script stripping `<script>`, `<style>` and
+  tags and printing the surrounding 80 characters of every hit. Most hits were
+  those substrings and were false. Two were not, and neither sat in a link.
+
 - **`verify_truepeak.py` does gate, measured 23 August 2026.** Its sibling was
   recorded as swept and this one never was. Six mutations, all caught: each of
   the four expectations moved on its own, the oversampling dropped entirely,
