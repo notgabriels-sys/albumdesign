@@ -218,6 +218,23 @@ _EM_DASH_OK = (
 _EM_DASH_SMUGGLED = re.compile(r'\+\s*["\']—["\']|["\']—["\']\s*\+')
 
 
+# Text that promises someone a payment of a named amount: a button, a link, a
+# span, or a sentence. Deliberately wider than the payment-anchor scan above,
+# because the EUR 25 / EUR 1,200 mismatch was a *label* problem, and a label
+# does not have to sit on a link to mislead.
+PRICE_PROMISE = re.compile(
+    r">\s*([^<>]{0,60}?\bpay(?:s|ing)?\b[^<>]{0,60}?€\s?[\d.,]+[^<>]{0,20})<", re.I
+)
+
+
+def price_promises(body: str) -> list[str]:
+    return PRICE_PROMISE.findall(body)
+
+
+def promised_amounts(body: str) -> list[str]:
+    return [a for label in price_promises(body) for a in re.findall(r"€\s?([\d.,]+)", label)]
+
+
 def _em_dash_allowed(line: str) -> bool:
     if _EM_DASH_SMUGGLED.search(line):
         return False
@@ -281,9 +298,16 @@ def main() -> int:
     print("\n=== a page naming a price must not contradict the rate table ===")
     # A button saying "Pay X" while the table says something else is the exact
     # shape of the EUR 25 / EUR 1,200 mismatch.
+    #
+    # This fired zero times across the whole site. The pattern was
+    # `>\s*(Pay[^<]{0,40})<`, anchored to a capital Pay at the start of the
+    # text, and the shop's buttons read "Mastering, pay EUR 45". It matched
+    # only the two section labels, which name no amount, so the inner loop
+    # never ran and a check written for the wrong-checkout bug had never once
+    # executed. Counted before fixing: 0 firings, 6 after.
     for name, body in src.items():
-        buttons = re.findall(r">\s*(Pay[^<]{0,40})<", body)
-        for label in buttons:
+        promises = price_promises(body)
+        for label in promises:
             amounts = re.findall(r"€\s?([\d.,]+)", label)
             for amount in amounts:
                 in_table = f"€{amount}" in "".join(tables.get(name, []))
@@ -293,6 +317,18 @@ def main() -> int:
                     "a button naming an amount the page does not otherwise quote is how the "
                     "wrong-checkout bug looked",
                 )
+        # The sibling scans below already name the case where a loop sees
+        # nothing. This one did not, which is why its going dead was silent.
+        # A page that carries a payment link but promises no price in words is
+        # possible; a page that carries one and whose scan sees nothing at all
+        # is the regex having drifted off the markup again.
+        if verified_payment_anchors(body):
+            check(
+                f"{name} price-promise scan reaches its payment buttons",
+                bool(promises),
+                "the page has payment links but no button text naming a price was "
+                "seen, so nothing compared a promise against the table",
+            )
 
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged

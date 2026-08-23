@@ -253,6 +253,27 @@ which made them useless as gates. Keep them asserting.
   delivers, in the same spirit as the imageops fix: disclose rather than
   refuse. `tests/test_packcheck.py` is new, and runs under the existing pytest
   CI step, so the tool is no longer unguarded.
+- **A check that has never fired is not a check.** `consistency_check.py`
+  carries one written for the EUR 25 / EUR 1,200 wrong-checkout bug, comparing
+  a button's promised price against the page's own rate table. Its pattern was
+  `>\s*(Pay[^<]{0,40})<`, anchored to a capital `Pay` at the start of the
+  text, and the shop's buttons read `Mastering, pay €45`. It matched only the
+  two section labels, which name no amount, so the inner loop never ran.
+  Counted directly: **0 firings across the whole site before, 6 after.** The
+  suite had been reporting `all 129 consistency checks passed` with that family
+  contributing nothing.
+
+  The money path was never exposed, because the card-link scan beside it does
+  fire on all six buttons. The defect was a dead net, not a hole. But a dead
+  check in a 129-check suite is exactly what "a green suite is not evidence a
+  guard is guarding" means, and the count is the only evidence any family ran.
+
+  Its two sibling scans already name the case where a loop sees nothing; this
+  one did not, which is why going dead was silent. It now does: a page carrying
+  a payment link whose price-promise scan sees nothing at all fails, because
+  that is the regex having drifted off the markup again. The scan is also
+  deliberately wider than the payment-anchor one, since the original mismatch
+  was a *label* problem and a label does not have to sit on a link to mislead.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
