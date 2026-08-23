@@ -19,7 +19,9 @@ from __future__ import annotations
 import html
 import json
 import re
+import struct
 import sys
+import zlib
 from urllib.parse import urlsplit
 from collections import Counter
 from pathlib import Path
@@ -277,6 +279,50 @@ def structured_data(body: str) -> list[dict]:
 def _meta(body: str, pattern: str) -> str:
     m = re.search(pattern, body)
     return html.unescape(m.group(1)) if m else ""
+
+
+def png_text(path: Path) -> dict[str, str]:
+    """The text chunks in a PNG, read out of the raw bytes.
+
+    Deliberately not Pillow, even though Pillow is installed here. The point of
+    this check is that make_share_card.py and this file agree by both being
+    right rather than by sharing code, and a check that trusts the same library
+    the generator wrote with can only confirm that library round-trips.
+
+    Handles tEXt and iTXt, compressed or not. zTXt is not emitted by the
+    generator, so a card carrying one is a card something else wrote.
+    """
+    raw = path.read_bytes()
+    if raw[:8] != b"\x89PNG\r\n\x1a\n":
+        return {}
+    found: dict[str, str] = {}
+    i = 8
+    while i + 8 <= len(raw):
+        (length,) = struct.unpack(">I", raw[i : i + 4])
+        kind = raw[i + 4 : i + 8]
+        data = raw[i + 8 : i + 8 + length]
+        i += 12 + length
+        if kind == b"IEND":
+            break
+        if kind == b"tEXt" and b"\x00" in data:
+            keyword, text = data.split(b"\x00", 1)
+            found[keyword.decode("latin-1")] = text.decode("latin-1")
+        elif kind == b"iTXt" and b"\x00" in data:
+            keyword, rest = data.split(b"\x00", 1)
+            if len(rest) < 2:
+                continue
+            compressed, rest = rest[0], rest[2:]
+            if rest.count(b"\x00") < 2:
+                continue
+            _lang, rest = rest.split(b"\x00", 1)
+            _translated, text = rest.split(b"\x00", 1)
+            if compressed:
+                try:
+                    text = zlib.decompress(text)
+                except zlib.error:
+                    continue
+            found[keyword.decode("latin-1")] = text.decode("utf-8", "replace")
+    return found
 
 
 def page_identity(body: str) -> dict[str, str]:
@@ -643,6 +689,47 @@ def main() -> int:
         f"{orphans}; a card nothing points at is a card nobody will ever see, "
         f"and it publishes at a URL anyway",
     )
+
+    # A card is a picture of what a page says, and nothing tied the picture to
+    # the page. Editing loudness.html's h1 left its card showing the old
+    # headline and all 250 checks passed, because they asserted the file
+    # existed and was unique, never that it said what the page says. That is
+    # the drift this file exists to catch, one level down, in the checks this
+    # file added an hour earlier.
+    #
+    # Each card now carries the exact strings it was drawn from, and those are
+    # read back out of the raw PNG bytes rather than through Pillow.
+    for name, filename in own_card.items():
+        text = png_text(DOCS / filename)
+        drawn_from = text.get("preflight:page")
+        check(
+            f"{filename} records the page it was drawn from",
+            drawn_from is not None,
+            "no source recorded; rerun tools/make_share_card.py, because a card "
+            "with nothing tying it to a page can go stale invisibly",
+        )
+        if drawn_from is None:
+            continue
+        check(
+            f"{filename} was drawn from {name}",
+            drawn_from == name,
+            f"records {drawn_from!r}",
+        )
+        says = page_identity(src[name])
+        head = _meta(src[name], r"<h1[^>]*>(.*?)</h1>")
+        head = html.unescape(re.sub(r"<[^>]+>", "", head)).strip()
+        check(
+            f"{filename} shows {name}'s current headline",
+            text.get("preflight:headline") == head,
+            f"card was drawn from {text.get('preflight:headline')!r}, page now "
+            f"says {head!r}; rerun tools/make_share_card.py",
+        )
+        check(
+            f"{filename} shows {name}'s current description",
+            text.get("preflight:description") == says["description"],
+            f"card was drawn from {text.get('preflight:description')!r}, page "
+            f"now says {says['description']!r}; rerun tools/make_share_card.py",
+        )
 
     # The alt describes the card, not the page, and those differ for the one
     # page that borrows another's card. Checking it against its own title

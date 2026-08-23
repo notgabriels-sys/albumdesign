@@ -27,6 +27,7 @@ import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+from PIL.PngImagePlugin import PngInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -193,8 +194,23 @@ def draw_card(page: str, out: Path) -> None:
     w = d.textlength("Gabriel G Alonso", font=foot)
     d.text((PAD + w, 554), "  ·  mixing & mastering, Berlin", font=foot, fill=MUTED)
 
+    # The card carries the exact strings it was drawn from.
+    #
+    # Without this a card is a picture of a claim with nothing tying it to the
+    # claim. Editing a page's h1 left its card showing the old headline and the
+    # whole suite still passed, because the checks asserted the file existed
+    # and was unique, never that it said what the page says. That is the same
+    # drift this file exists to prevent, one level down.
+    #
+    # consistency_check.py reads these back out of the raw bytes rather than
+    # importing this module, so the two agree by both being right.
+    meta = PngInfo()
+    meta.add_itxt("preflight:page", page)
+    meta.add_itxt("preflight:headline", headline)
+    meta.add_itxt("preflight:description", description)
+
     # optimize=True keeps each one well under the 5 MB most scrapers fetch.
-    img.save(out, "PNG", optimize=True)
+    img.save(out, "PNG", optimize=True, pnginfo=meta)
     print(f"  wrote {out.name} ({out.stat().st_size:,} bytes, {W}x{H})  {page}")
 
 
