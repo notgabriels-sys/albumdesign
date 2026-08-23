@@ -19,7 +19,9 @@ from __future__ import annotations
 import html
 import json
 import re
+import struct
 import sys
+import zlib
 from urllib.parse import urlsplit
 from collections import Counter
 from pathlib import Path
@@ -237,11 +239,27 @@ def promised_amounts(body: str) -> list[str]:
     return [a for label in price_promises(body) for a in re.findall(r"€\s?([\d.,]+)", label)]
 
 
-# The Impressum is the one page with no structured data, deliberately. It is a
-# legal notice carrying his residential address, and putting that address into
-# a machine-readable graph is a decision about his personal data, not an SEO
-# improvement. Everything else on the site describes a tool or a service.
-NO_STRUCTURED_DATA = {"impressum.html"}
+# Pages that deliberately carry no structured data, and why. This used to be a
+# bare set holding one name, with the reason in a comment above it. A set with
+# no reasons attached is how a deliberate exemption becomes an oversight nobody
+# can tell apart from a mistake, so each one now carries its own, and the check
+# prints it when it fires.
+NO_STRUCTURED_DATA = {
+    "impressum.html": "it holds a residential address, and a machine-readable "
+    "graph is a different thing from a legal notice",
+    "404.html": "it is an error state, not a thing; describing it in the graph "
+    "would assert that a page exists at whatever URL was mistyped",
+}
+
+# Pages that borrow the site card rather than having their own. Neither is a
+# page anyone links to on purpose, so a card built from its own headline would
+# be a card nobody ever sees.
+BORROWS_SITE_CARD = {"impressum.html", "404.html"}
+
+# Pages kept out of sitemap.xml on purpose. The sitemap is a list of pages
+# worth indexing, and an error page is the one page that must never be one:
+# indexed, it competes in search with the pages it exists to rescue people to.
+NOT_IN_SITEMAP = {"404.html"}
 
 _JSON_LD = re.compile(
     r'<script type="application/ld\+json">(.*?)</script>', re.S
@@ -261,6 +279,50 @@ def structured_data(body: str) -> list[dict]:
 def _meta(body: str, pattern: str) -> str:
     m = re.search(pattern, body)
     return html.unescape(m.group(1)) if m else ""
+
+
+def png_text(path: Path) -> dict[str, str]:
+    """The text chunks in a PNG, read out of the raw bytes.
+
+    Deliberately not Pillow, even though Pillow is installed here. The point of
+    this check is that make_share_card.py and this file agree by both being
+    right rather than by sharing code, and a check that trusts the same library
+    the generator wrote with can only confirm that library round-trips.
+
+    Handles tEXt and iTXt, compressed or not. zTXt is not emitted by the
+    generator, so a card carrying one is a card something else wrote.
+    """
+    raw = path.read_bytes()
+    if raw[:8] != b"\x89PNG\r\n\x1a\n":
+        return {}
+    found: dict[str, str] = {}
+    i = 8
+    while i + 8 <= len(raw):
+        (length,) = struct.unpack(">I", raw[i : i + 4])
+        kind = raw[i + 4 : i + 8]
+        data = raw[i + 8 : i + 8 + length]
+        i += 12 + length
+        if kind == b"IEND":
+            break
+        if kind == b"tEXt" and b"\x00" in data:
+            keyword, text = data.split(b"\x00", 1)
+            found[keyword.decode("latin-1")] = text.decode("latin-1")
+        elif kind == b"iTXt" and b"\x00" in data:
+            keyword, rest = data.split(b"\x00", 1)
+            if len(rest) < 2:
+                continue
+            compressed, rest = rest[0], rest[2:]
+            if rest.count(b"\x00") < 2:
+                continue
+            _lang, rest = rest.split(b"\x00", 1)
+            _translated, text = rest.split(b"\x00", 1)
+            if compressed:
+                try:
+                    text = zlib.decompress(text)
+                except zlib.error:
+                    continue
+            found[keyword.decode("latin-1")] = text.decode("utf-8", "replace")
+    return found
 
 
 def page_identity(body: str) -> dict[str, str]:
@@ -443,8 +505,7 @@ def main() -> int:
             check(
                 f"{name} deliberately carries no structured data",
                 not _JSON_LD.search(body),
-                "it holds a residential address, and putting that into a "
-                "machine-readable graph is a decision about his data",
+                NO_STRUCTURED_DATA[name],
             )
             continue
 
@@ -550,6 +611,64 @@ def main() -> int:
     )
 
 
+    print("\n=== every page carries an icon, and the icons exist ===")
+    # There was no favicon at all: nine pages, no icon file, so every tab
+    # showed the browser's blank document glyph and every page load fired a
+    # 404 for /favicon.ico. Someone who leaves the loudness tool open in a
+    # crowded tab strip could not find it again, which is the whole job of the
+    # thing.
+    #
+    # Three files, because one format does not cover it: SVG for anything
+    # current, .ico for Windows shell icons and old Safari, and a 180px PNG
+    # for an iOS home screen.
+    ICONS = {
+        'rel="icon" href="favicon.svg"': "favicon.svg",
+        'rel="icon" href="favicon.ico"': "favicon.ico",
+        'rel="apple-touch-icon" href="apple-touch-icon.png"': "apple-touch-icon.png",
+    }
+    icon_firings = 0
+    for name, body in src.items():
+        for marker, filename in ICONS.items():
+            icon_firings += 1
+            check(
+                f"{name} links {filename}",
+                marker in body,
+                "a page with no icon is a tab nobody can find again",
+            )
+    check(
+        "the icon scan fired at all",
+        icon_firings > 0,
+        "zero pages examined, so the markers have drifted off the markup",
+    )
+    for filename in ICONS.values():
+        check(
+            f"{filename} is in docs/",
+            (DOCS / filename).is_file(),
+            "every page asks for it, so its absence is a 404 on every page load",
+        )
+
+    print("\n=== the Preflight wordmark is one wordmark ===")
+    # Each tool page has its own wordmark (LOUDNESS-CHECK and so on), but the
+    # pages that carry the site's own name have to spell it the same way. The
+    # 404 page was written with a third variant, PRE<b>.</b>FLIGHT, next to the
+    # PRE<b>FLIGHT</b> that index.html and impressum.html already used. Nothing
+    # caught it, because a wordmark is markup rather than a claim.
+    marks = {
+        name: m.group(0)
+        for name, body in src.items()
+        if (m := re.search(r'<span class="brand">PRE.{0,12}FLIGHT.{0,12}</span>', body))
+    }
+    check(
+        "at least one page carries the Preflight wordmark",
+        bool(marks),
+        "none found, so the pattern has drifted off the markup",
+    )
+    check(
+        "every page spelling out Preflight spells it the same way",
+        len(set(marks.values())) <= 1,
+        f"{ {n: m for n, m in marks.items()} }",
+    )
+
     print("\n=== every page previews as itself ===")
     # All eight pages pointed at one share.png. A link to the split sheet
     # posted anywhere previewed as "Free tools for releasing music", which
@@ -576,9 +695,14 @@ def main() -> int:
             f"points at {filename}, which is not there, so the preview is blank",
         )
 
-    # The Impressum is the one page that shares the site card. It is a legal
-    # notice, not something anyone posts a link to on purpose.
-    own_card = {n: c for n, c in referenced.items() if n != "impressum.html"}
+    own_card = {n: c for n, c in referenced.items() if n not in BORROWS_SITE_CARD}
+    for name in BORROWS_SITE_CARD:
+        check(
+            f"{name} borrows the site card rather than having its own",
+            referenced.get(name) == "share.png",
+            f"points at {referenced.get(name)!r}; if it has earned its own card, "
+            f"take it out of BORROWS_SITE_CARD rather than leaving both true",
+        )
     check(
         "no two pages share a preview image",
         len(set(own_card.values())) == len(own_card),
@@ -602,18 +726,76 @@ def main() -> int:
         f"and it publishes at a URL anyway",
     )
 
-    # The alt describes the card, not the page, and those differ for the one
-    # page that borrows another's card. Checking it against its own title
-    # failed the Impressum for correctly describing the site card it points at.
-    owner = {filename: page for page, filename in own_card.items()}
-    for name, filename in referenced.items():
-        alt = _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
-        shown = page_identity(src[owner[filename]])["name"]
+    # A card is a picture of what a page says, and nothing tied the picture to
+    # the page. Editing loudness.html's h1 left its card showing the old
+    # headline and all 250 checks passed, because they asserted the file
+    # existed and was unique, never that it said what the page says. That is
+    # the drift this file exists to catch, one level down, in the checks this
+    # file added an hour earlier.
+    #
+    # Each card now carries the exact strings it was drawn from, and those are
+    # read back out of the raw PNG bytes rather than through Pillow.
+    for name, filename in own_card.items():
+        text = png_text(DOCS / filename)
+        drawn_from = text.get("preflight:page")
         check(
-            f"{name}'s preview alt text describes the card it points at",
-            shown in alt and "Gabriel G Alonso" in alt,
-            f"alt {alt!r} does not name {shown!r}; the alt is what a screen "
-            f"reader gets instead of the image, so it has to match the image",
+            f"{filename} records the page it was drawn from",
+            drawn_from is not None,
+            "no source recorded; rerun tools/make_share_card.py, because a card "
+            "with nothing tying it to a page can go stale invisibly",
+        )
+        if drawn_from is None:
+            continue
+        check(
+            f"{filename} was drawn from {name}",
+            drawn_from == name,
+            f"records {drawn_from!r}",
+        )
+        says = page_identity(src[name])
+        head = _meta(src[name], r"<h1[^>]*>(.*?)</h1>")
+        head = html.unescape(re.sub(r"<[^>]+>", "", head)).strip()
+        check(
+            f"{filename} shows {name}'s current headline",
+            text.get("preflight:headline") == head,
+            f"card was drawn from {text.get('preflight:headline')!r}, page now "
+            f"says {head!r}; rerun tools/make_share_card.py",
+        )
+        check(
+            f"{filename} shows {name}'s current description",
+            text.get("preflight:description") == says["description"],
+            f"card was drawn from {text.get('preflight:description')!r}, page "
+            f"now says {says['description']!r}; rerun tools/make_share_card.py",
+        )
+
+    # The alt describes the card, not the page, and those differ for the pages
+    # that borrow another's card. Checking it against its own title failed the
+    # Impressum for correctly describing the site card it points at.
+    #
+    # The first version compared the alt against the owner page's title, which
+    # is far too weak a test: "Preflight" is a substring of almost any sentence
+    # about this site. It passed impressum.html while that page's alt still
+    # described the card as it looked before the cards were redrawn, so a
+    # screen reader there was given an image that no longer existed.
+    #
+    # So compare against what the card itself records it was drawn with. The
+    # headline is compared with any trailing full stop removed, because that is
+    # what the generator draws.
+    for name, filename in referenced.items():
+        alt = html.unescape(
+            _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
+        )
+        headline = png_text(DOCS / filename).get("preflight:headline")
+        check(
+            f"{name}'s preview alt text quotes the headline on the card",
+            headline is not None and headline.rstrip(".") in alt,
+            f"the card reads {headline!r}, the alt reads {alt!r}; the alt is "
+            f"what a screen reader gets instead of the image, so it has to "
+            f"describe the image that is actually there",
+        )
+        check(
+            f"{name}'s preview alt text names who made it",
+            "Gabriel G Alonso" in alt,
+            f"alt {alt!r}",
         )
 
 
@@ -807,9 +989,21 @@ def main() -> int:
               img.startswith(SITE) and (DOCS / img[len(SITE):]).exists(), img)
 
     listed = re.findall(r"<loc>([^<]+)</loc>", (DOCS / "sitemap.xml").read_text(encoding="utf-8"))
-    check("the sitemap lists every page and no others",
-          sorted(listed) == sorted(SITE + n for n in src),
-          f"{sorted(set(listed) ^ {SITE + n for n in src})}")
+    indexable = {n for n in src if n not in NOT_IN_SITEMAP}
+    check("the sitemap lists every indexable page and no others",
+          sorted(listed) == sorted(SITE + n for n in indexable),
+          f"{sorted(set(listed) ^ {SITE + n for n in indexable})}")
+    # Excluding a page from the sitemap is not the same as asking not to be
+    # indexed, and a crawler that reaches the error page by following a broken
+    # link never consults the sitemap at all. Both have to be true.
+    for name in NOT_IN_SITEMAP:
+        check(f"{name} is kept out of the sitemap on purpose",
+              SITE + name not in listed,
+              "an indexed error page competes in search with the pages it "
+              "exists to rescue people to")
+        check(f"{name} also asks crawlers not to index it",
+              '<meta name="robots" content="noindex">' in src[name],
+              "out of the sitemap is not the same as out of the index")
     check("robots.txt points at the sitemap",
           SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
 
