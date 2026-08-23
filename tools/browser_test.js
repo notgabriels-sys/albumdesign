@@ -188,6 +188,32 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   const tidalRow = m.rows.find(t => /Tidal/.test(t));
   ok(!/turned up/.test(tidalRow), `Tidal does not assert a boost -> "${tidalRow}"`);
 
+  // The label is computed from the unclamped difference, so it stays right even
+  // with the attenuate-only clamp deleted. Only the gain column moves. Removing
+  // `if(p.attenuateOnly&&gain>0) gain=0;` printed "+7.0 dB" for Apple Music
+  // beside the words "never boosted", asserting in numbers the lift the label
+  // refuses to claim, and every assertion above still passed. Pin the number.
+  const pRows = await page.evaluate(() =>
+    [...document.querySelectorAll('#ptable tr')].map(tr => {
+      const td = tr.querySelectorAll('td'), pill = tr.querySelector('.pill');
+      return {
+        name: tr.querySelector('th').textContent.trim(),
+        gain: td[1].textContent.trim(),
+        pill: pill.className.replace('pill', '').trim(),
+        label: pill.textContent.trim(),
+      };
+    }));
+  const byName = n => pRows.find(r => new RegExp(n).test(r.name));
+  for (const n of ['Apple', 'YouTube']) {
+    ok(byName(n).gain === '+0.0 dB',
+       `${n} states no lift, not just no lift in words -> "${byName(n).gain}"`);
+  }
+  // And the clamp is selective rather than a blanket zero: a platform that does
+  // raise quiet masters still prints the lift it applies.
+  const spotGain = parseFloat(byName('Spotify').gain);
+  ok(spotGain > 8.5 && spotGain < 9.5,
+     `Spotify still states the lift it does apply -> "${byName('Spotify').gain}"`);
+
   // A loud master must be judged against the stricter ceiling the page states.
   // The flag used to be a flat tp > -1, so a -1.5 dBTP club master passed while
   // both pages told the reader -2 applied above -14 LUFS. The declared sample
@@ -214,6 +240,26 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(loud.m['True peak'].flag, `true peak flagged against the -2 ceiling (${loud.m['True peak'].v} ${loud.m['True peak'].u})`);
   ok(/over -2/.test(loud.m['True peak'].u), `the stricter ceiling is named -> "${loud.m['True peak'].u}"`);
   ok(/44\.1k/.test(loud.m['Duration'].u), `sample rate read from the file, not the device -> "${loud.m['Duration'].u}"`);
+
+  // Every row on this master reads "turned down". The pill beside it carries
+  // the state, and nothing asserted it: replacing the whole ternary with a flat
+  // "pass" left a green suite while six platforms were shown a pass pill next
+  // to the words "turned down". Assert the state, not only the label.
+  const loudRows = await page.evaluate(() =>
+    [...document.querySelectorAll('#ptable tr')].map(tr => {
+      const td = tr.querySelectorAll('td'), pill = tr.querySelector('.pill');
+      return {
+        name: tr.querySelector('th').textContent.trim(),
+        gain: td[1].textContent.trim(),
+        pill: pill.className.replace('pill', '').trim(),
+        label: pill.textContent.trim(),
+      };
+    }));
+  const turnedDown = loudRows.filter(r => /turned down/.test(r.label));
+  ok(turnedDown.length >= 4, `a master this loud is turned down almost everywhere (${turnedDown.length} rows)`);
+  const passingWhileCut = turnedDown.filter(r => r.pill !== 'warn');
+  ok(passingWhileCut.length === 0,
+     `no row shows a pass pill beside a cut -> ${JSON.stringify(passingWhileCut.map(r => r.name + ' ' + r.gain))}`);
 
   // A disputed platform must not print a gain figure beside "may not be raised".
   await page.goto('file://' + path.join(DOCS, 'loudness.html'));
