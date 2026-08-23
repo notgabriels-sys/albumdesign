@@ -13,6 +13,10 @@ in one command.
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
 
+If you would rather someone else finished the record, the
+[rates are here](https://notgabriels-sys.github.io/albumdesign/shop.html):
+mixing and mastering by Gabriel G Alonso, Berlin.
+
 You finish a cover, and then comes the boring half: 3000×3000 for the
 distributor, 3000×3000 for Beatport, something under 2 MB for SoundCloud, a 9:16
 crop for stories, and every one of them flattened, sRGB, no alpha, baseline JPEG,

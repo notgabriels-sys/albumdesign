@@ -617,6 +617,46 @@ def main() -> int:
         )
 
 
+    print("\n=== the README advertises the site that actually exists ===")
+    # The repository is public and its README is a discovery surface in its own
+    # right, so the same rule applies to it as to a tool page: someone reading
+    # it who wants their record finished needs a route to the rates.
+    #
+    # It is also a list of URLs maintained by hand next to a directory of
+    # files, which is the shape that goes stale silently. A tool renamed in
+    # docs/ leaves a dead link here and nothing notices, because nobody clicks
+    # their own README.
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    linked = set(re.findall(r"albumdesign/([a-z]+\.html)", readme))
+    check(
+        "the README links to at least one page",
+        bool(linked),
+        "no site links found at all, so the URL pattern has drifted",
+    )
+
+    dead = sorted(page for page in linked if page not in src)
+    check(
+        "every page the README links to exists",
+        not dead,
+        f"{dead}; a dead link in the README is a dead link on the repository's "
+        f"front page, which is where a stranger meets this project",
+    )
+
+    check(
+        "the README links to the shop",
+        "shop.html" in linked,
+        "the repository front page is a route in, and it had no route to the "
+        "rates, which is the same gap the tool pages had",
+    )
+
+    for page in TOOL_PAGES:
+        check(
+            f"the README links to {page}",
+            page in linked,
+            "a tool nobody can find from the front page of its own repository",
+        )
+
+
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged
     # EUR 1,200 for a different service. The amount a customer is promised has
