@@ -367,6 +367,26 @@ which made them useless as gates. Keep them asserting.
   The eyebrow is measured too. It shares its line with the wordmark and the
   meter bars, so it has less room than anything else on the card, and a longer
   title runs into them rather than off the edge.
+- **Then the same alt text went stale again, one field along.** The check
+  above compares the alt against the headline the card records, and only that.
+  Renaming the seven pages moved every eyebrow and left six alt texts naming a
+  card that no longer exists: `Preflight Coverforge` describing a card that
+  reads ALBUM COVER SIZE CHECKER, with all 340 checks green plus the a11y
+  suite, because the headlines had not moved and the headline was the only
+  thing anything read. Found by reading a republished artifact's `<head>`, not
+  by running anything.
+
+  This is the card that recorded two of the three strings it drew, in the
+  checker instead of the generator: the fix enumerated what the *card* draws
+  and stopped there, while the alt describes the same card and was still only
+  half read. `make_share_card.py` now records `preflight:eyebrow`, the exact
+  string it printed, present only on the cards that print one, and the alt
+  check reads it. Whether a card has an eyebrow is therefore asked of the card
+  rather than re-derived from `page != "index.html"`, because a condition
+  restated in two files is a condition that can drift apart, which is this
+  entry's other half. Six new checks fire, 340 to 346, and the old alt was put
+  back on one page to prove it fails.
+
 - **A containment test against a short common word cannot fail for the reason
   it exists.** The alt-text check asked whether the owning page's title
   appeared anywhere in the alt. "Preflight" is a substring of nearly any
