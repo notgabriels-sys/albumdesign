@@ -237,6 +237,22 @@ which made them useless as gates. Keep them asserting.
   Both were proved by running them before the fix, and each new test was run
   against the old file to confirm it fails there: five do, and the five that
   guard the ordinary case pass either way, which is what they are for.
+- **`packcheck.py` reported a clean pack it had never listened to.** It had no
+  tests and no CI step of its own, which is how this lasted. `peak_dbfs`
+  returns None for any width it cannot decode and on any read error, and the
+  caller dropped that on the floor, so a 32-bit file clipping at 0 dBFS drew no
+  comment while a 24-bit file at the identical amplitude was reported as
+  clipped. And `--quick` skips the decode entirely while printing the same
+  `N WAV files, 0 error(s), 0 warning(s)` summary a full run prints, so a pack
+  holding that clipped file reported clean and then wrote its README.txt, which
+  is the document that ships with the product.
+
+  Both were proved on a pack built for the purpose. An unmeasured level is now
+  a warning naming the file, the summary says what a run did not listen to, and
+  a README written from a `--quick` run says so on stderr. The run still
+  delivers, in the same spirit as the imageops fix: disclose rather than
+  refuse. `tests/test_packcheck.py` is new, and runs under the existing pytest
+  CI step, so the tool is no longer unguarded.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
