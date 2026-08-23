@@ -549,14 +549,19 @@ to correct a wrong attribution, not as grounds for a new hard claim.
   shape: those put the amount back in an object nobody here can read, which is
   exactly the setup that hid the €1,200 charge. A test asserts they still fail.
 
-  **What is still only his word: the handle.** `paypal.me` is blocked by the
-  egress proxy and the API still will not authorise, so nothing confirms
-  `gabrielgga00` sits on the business account rather than the personal one. He
-  said he read it out of the merchant dashboard while signed in to the business
-  account, and `/mep/` is merchant-side, which personal accounts do not get.
-  That is corroboration, not verification. It is a question of who receives,
-  which is his to answer, not of how much, which is checked. If he ever says
-  money landed in the wrong account, the handle is the thing to change.
+  **The handle was settled on 23 August 2026, by a payment rather than a read.**
+  He sent EUR 1 to `paypal.me/gabrielgga00` from a logged-out browser and
+  reported the receipt did not arrive at notgabriels@gmail.com. He has two
+  accounts, so it landed on the business one, hologrampeoplemusic@gmail.com,
+  which is also the Impressum address.
+
+  That is an observation of where money actually went, which is worth more than
+  the position it replaced, where the handle rested on his memory of a
+  dashboard. It is still his report rather than something read from here:
+  `paypal.me` is blocked by the egress proxy and the API still will not
+  authorise. Who receives was always his to answer; how much is what the checks
+  cover. If money ever lands in the wrong account, the handle is the thing to
+  change.
 - GVL catalogue table and the Förderantrag both have blanks only he can fill:
   real release dates, ISRCs, which tracks were actually released, real bio
   facts and real costs. Do not guess any of them.
