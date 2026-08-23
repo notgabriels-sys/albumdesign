@@ -95,6 +95,20 @@ def _wrap(draw, text: str, f, width: int) -> list[str]:
     return lines
 
 
+def _overflows(draw, lines: list[str], f, width: int) -> list[str]:
+    """Lines wider than the column, which _wrap cannot prevent on its own.
+
+    Wrapping breaks on spaces, so a single word wider than the column comes out
+    on a line of its own and stays too wide. Measured: a 38-character word at
+    60px produced a 1277px line in a 1056px column, drawn straight off the
+    right edge, and the generator reported success.
+
+    That is the crop bug's twin. Both are the generator producing a broken
+    image and saying it worked, so both fail loudly instead.
+    """
+    return [line for line in lines if draw.textlength(line, font=f) > width]
+
+
 def _sentences_that_fit(draw, text: str, f, width: int, max_lines: int) -> list[str]:
     """As many whole sentences of `text` as fit, never a fragment of one.
 
@@ -112,7 +126,7 @@ def _sentences_that_fit(draw, text: str, f, width: int, max_lines: int) -> list[
     lines: list[str] = []
     for part in parts:
         trial = _wrap(draw, " ".join(kept + [part]), f, width)
-        if len(trial) > max_lines:
+        if len(trial) > max_lines or _overflows(draw, trial, f, width):
             break
         kept.append(part)
         lines = trial
@@ -170,10 +184,14 @@ def draw_card(page: str, out: Path) -> None:
     for size in (60, 54, 48, 42):
         head = font("DejaVuSans-Bold.ttf", size)
         head_lines = _wrap(d, head_text, head, column)
-        if len(head_lines) <= 3:
+        wide = _overflows(d, head_lines, head, column)
+        if len(head_lines) <= 3 and not wide:
             break
     else:
-        raise ValueError(f"{page}: the h1 {head_text!r} will not fit the card")
+        raise ValueError(
+            f"{page}: the h1 {head_text!r} will not fit the card at any size "
+            f"(too many lines, or a single word wider than the column: {wide})"
+        )
 
     y = 172
     for i, line in enumerate(head_lines):
