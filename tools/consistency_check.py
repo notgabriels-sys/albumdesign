@@ -241,7 +241,25 @@ def promised_amounts(body: str) -> list[str]:
 # legal notice carrying his residential address, and putting that address into
 # a machine-readable graph is a decision about his personal data, not an SEO
 # improvement. Everything else on the site describes a tool or a service.
-NO_STRUCTURED_DATA = {"impressum.html"}
+# Pages that deliberately carry no structured data, and why. A set with no
+# reasons attached is how a deliberate exemption becomes an oversight nobody
+# can tell apart from a mistake, so each one has to say what it is.
+NO_STRUCTURED_DATA = {
+    "impressum.html": "it holds a residential address, and a machine-readable "
+    "graph is a different thing from a legal notice",
+    "404.html": "it is an error state, not a thing; describing it in the graph "
+    "would assert that a page exists at whatever URL was mistyped",
+}
+
+# Pages that borrow the site card rather than having their own. Neither is a
+# page anyone links to on purpose, so a card built from its own headline would
+# be a card nobody ever sees.
+BORROWS_SITE_CARD = {"impressum.html", "404.html"}
+
+# Pages kept out of sitemap.xml on purpose. The sitemap is a list of pages
+# worth indexing, and an error page is the one page that must never be one:
+# indexed, it competes in search with the pages it exists to rescue people to.
+NOT_IN_SITEMAP = {"404.html"}
 
 _JSON_LD = re.compile(
     r'<script type="application/ld\+json">(.*?)</script>', re.S
@@ -443,8 +461,7 @@ def main() -> int:
             check(
                 f"{name} deliberately carries no structured data",
                 not _JSON_LD.search(body),
-                "it holds a residential address, and putting that into a "
-                "machine-readable graph is a decision about his data",
+                NO_STRUCTURED_DATA[name],
             )
             continue
 
@@ -550,6 +567,28 @@ def main() -> int:
     )
 
 
+    print("\n=== the Preflight wordmark is one wordmark ===")
+    # Each tool page has its own wordmark (LOUDNESS-CHECK and so on), but the
+    # pages that carry the site's own name have to spell it the same way. The
+    # 404 page was written with a third variant, PRE<b>.</b>FLIGHT, next to the
+    # PRE<b>FLIGHT</b> that index.html and impressum.html already used. Nothing
+    # caught it, because a wordmark is markup rather than a claim.
+    marks = {
+        name: m.group(0)
+        for name, body in src.items()
+        if (m := re.search(r'<span class="brand">PRE.{0,12}FLIGHT.{0,12}</span>', body))
+    }
+    check(
+        "at least one page carries the Preflight wordmark",
+        bool(marks),
+        "none found, so the pattern has drifted off the markup",
+    )
+    check(
+        "every page spelling out Preflight spells it the same way",
+        len(set(marks.values())) <= 1,
+        f"{ {n: m for n, m in marks.items()} }",
+    )
+
     print("\n=== every page previews as itself ===")
     # All eight pages pointed at one share.png. A link to the split sheet
     # posted anywhere previewed as "Free tools for releasing music", which
@@ -576,9 +615,14 @@ def main() -> int:
             f"points at {filename}, which is not there, so the preview is blank",
         )
 
-    # The Impressum is the one page that shares the site card. It is a legal
-    # notice, not something anyone posts a link to on purpose.
-    own_card = {n: c for n, c in referenced.items() if n != "impressum.html"}
+    own_card = {n: c for n, c in referenced.items() if n not in BORROWS_SITE_CARD}
+    for name in BORROWS_SITE_CARD:
+        check(
+            f"{name} borrows the site card rather than having its own",
+            referenced.get(name) == "share.png",
+            f"points at {referenced.get(name)!r}; if it has earned its own card, "
+            f"take it out of BORROWS_SITE_CARD rather than leaving both true",
+        )
     check(
         "no two pages share a preview image",
         len(set(own_card.values())) == len(own_card),
@@ -807,9 +851,21 @@ def main() -> int:
               img.startswith(SITE) and (DOCS / img[len(SITE):]).exists(), img)
 
     listed = re.findall(r"<loc>([^<]+)</loc>", (DOCS / "sitemap.xml").read_text(encoding="utf-8"))
-    check("the sitemap lists every page and no others",
-          sorted(listed) == sorted(SITE + n for n in src),
-          f"{sorted(set(listed) ^ {SITE + n for n in src})}")
+    indexable = {n for n in src if n not in NOT_IN_SITEMAP}
+    check("the sitemap lists every indexable page and no others",
+          sorted(listed) == sorted(SITE + n for n in indexable),
+          f"{sorted(set(listed) ^ {SITE + n for n in indexable})}")
+    # Excluding a page from the sitemap is not the same as asking not to be
+    # indexed, and a crawler that reaches the error page by following a broken
+    # link never consults the sitemap at all. Both have to be true.
+    for name in NOT_IN_SITEMAP:
+        check(f"{name} is kept out of the sitemap on purpose",
+              SITE + name not in listed,
+              "an indexed error page competes in search with the pages it "
+              "exists to rescue people to")
+        check(f"{name} also asks crawlers not to index it",
+              '<meta name="robots" content="noindex">' in src[name],
+              "out of the sitemap is not the same as out of the index")
     check("robots.txt points at the sitemap",
           SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
 
