@@ -36,8 +36,20 @@ RENAMED = {
 }
 
 
+# An artifact is one page with no siblings, reached by its own URL. The error
+# page is the one page that makes no sense in that form: it exists to catch
+# someone who asked the site for a URL it does not have, and nobody arrives at
+# an artifact by mistyping. Deriving a copy would only produce a file nobody
+# publishes, sitting in the output directory looking like an orphan.
+NOT_AN_ARTIFACT = {"404.html"}
+
+
 def pages() -> dict[str, str]:
-    return {p.name: RENAMED.get(p.name, p.name) for p in sorted(DOCS.glob("*.html"))}
+    return {
+        p.name: RENAMED.get(p.name, p.name)
+        for p in sorted(DOCS.glob("*.html"))
+        if p.name not in NOT_AN_ARTIFACT
+    }
 
 # The wrapper lines the Artifact host supplies itself. The language was
 # hardcoded to "en", so the German Impressum stopped the strip loop at its

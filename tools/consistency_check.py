@@ -731,18 +731,35 @@ def main() -> int:
             f"now says {says['description']!r}; rerun tools/make_share_card.py",
         )
 
-    # The alt describes the card, not the page, and those differ for the one
-    # page that borrows another's card. Checking it against its own title
-    # failed the Impressum for correctly describing the site card it points at.
-    owner = {filename: page for page, filename in own_card.items()}
+    # The alt describes the card, not the page, and those differ for the pages
+    # that borrow another's card. Checking it against its own title failed the
+    # Impressum for correctly describing the site card it points at.
+    #
+    # The first version compared the alt against the owner page's title, which
+    # is far too weak a test: "Preflight" is a substring of almost any sentence
+    # about this site. It passed impressum.html while that page's alt still
+    # described the card as it looked before the cards were redrawn, so a
+    # screen reader there was given an image that no longer existed.
+    #
+    # So compare against what the card itself records it was drawn with. The
+    # headline is compared with any trailing full stop removed, because that is
+    # what the generator draws.
     for name, filename in referenced.items():
-        alt = _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
-        shown = page_identity(src[owner[filename]])["name"]
+        alt = html.unescape(
+            _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
+        )
+        headline = png_text(DOCS / filename).get("preflight:headline")
         check(
-            f"{name}'s preview alt text describes the card it points at",
-            shown in alt and "Gabriel G Alonso" in alt,
-            f"alt {alt!r} does not name {shown!r}; the alt is what a screen "
-            f"reader gets instead of the image, so it has to match the image",
+            f"{name}'s preview alt text quotes the headline on the card",
+            headline is not None and headline.rstrip(".") in alt,
+            f"the card reads {headline!r}, the alt reads {alt!r}; the alt is "
+            f"what a screen reader gets instead of the image, so it has to "
+            f"describe the image that is actually there",
+        )
+        check(
+            f"{name}'s preview alt text names who made it",
+            "Gabriel G Alonso" in alt,
+            f"alt {alt!r}",
         )
 
 
