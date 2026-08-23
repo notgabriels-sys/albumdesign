@@ -611,6 +611,42 @@ def main() -> int:
     )
 
 
+    print("\n=== every page carries an icon, and the icons exist ===")
+    # There was no favicon at all: nine pages, no icon file, so every tab
+    # showed the browser's blank document glyph and every page load fired a
+    # 404 for /favicon.ico. Someone who leaves the loudness tool open in a
+    # crowded tab strip could not find it again, which is the whole job of the
+    # thing.
+    #
+    # Three files, because one format does not cover it: SVG for anything
+    # current, .ico for Windows shell icons and old Safari, and a 180px PNG
+    # for an iOS home screen.
+    ICONS = {
+        'rel="icon" href="favicon.svg"': "favicon.svg",
+        'rel="icon" href="favicon.ico"': "favicon.ico",
+        'rel="apple-touch-icon" href="apple-touch-icon.png"': "apple-touch-icon.png",
+    }
+    icon_firings = 0
+    for name, body in src.items():
+        for marker, filename in ICONS.items():
+            icon_firings += 1
+            check(
+                f"{name} links {filename}",
+                marker in body,
+                "a page with no icon is a tab nobody can find again",
+            )
+    check(
+        "the icon scan fired at all",
+        icon_firings > 0,
+        "zero pages examined, so the markers have drifted off the markup",
+    )
+    for filename in ICONS.values():
+        check(
+            f"{filename} is in docs/",
+            (DOCS / filename).is_file(),
+            "every page asks for it, so its absence is a 404 on every page load",
+        )
+
     print("\n=== the Preflight wordmark is one wordmark ===")
     # Each tool page has its own wordmark (LOUDNESS-CHECK and so on), but the
     # pages that carry the site's own name have to spell it the same way. The
