@@ -184,6 +184,41 @@ which made them useless as gates. Keep them asserting.
   All six loudness mutations are caught. Where a page states a verdict in more
   than one place, assert every place, because a test reading only the friendly
   one passes while the number beside it says the opposite.
+
+  `splits.html` was swept last and was the worst of the lot: 8 terms, 4
+  survived. Two were the same hole, that every failing fixture in the suite
+  totalled exactly 100, so nothing exercised the term that checks the shares
+  add up, which is the page's whole job. One was a share with no name against
+  it, never tested because the fixture helper always filled a name in. The
+  fourth is `isFinite` in `problems()` and is left unpinned on purpose: the
+  share box is `input[type=number]`, which sanitises anything it cannot parse
+  to `""`, so the row arrives as missing and the branch above fires instead.
+  Measured in Chromium on 23 August 2026, `"abc"`, `"Infinity"`, `"1/2"`,
+  `"0x10"`, `" 7 "` and `"1e400"` all read back as `""`, while `"-50"` and
+  `"1e5"` survive. Only Chromium was tested, so the guard stays rather than
+  being deleted on one browser's behaviour, and the test that used to claim to
+  cover it now says what it really proves.
+- **The split sheet had one `parseFloat(x)||0` left, and it was the one that
+  mattered.** `sum()` and `problems()` were fixed for it; `readRow()` was not,
+  and `readRow` is what feeds `save()` and `asText()`. Three symptoms, all
+  proved in Chromium before being fixed:
+
+  A blank share was saved as `0`, so a **reload** turned "nobody entered this"
+  into "this person gets nothing", the badge went fail to pass, and the warning
+  naming the row vanished. The earlier badge fix was undone by pressing reload.
+
+  `asText()` printed `0%` for that share, put a signature line under it, and
+  totalled 100, so the copied document read complete and internally consistent.
+  It also dropped a row that had a share but no name while `sum()` kept
+  counting that share, so the listing did not add up to its own total.
+
+  And `copy` said only "Copied to the clipboard." where `print` had always
+  warned. Both hand out the same document, so they now share one
+  `exportWarning()` and say the same thing about it.
+
+  The rule this leaves: when a fix lands on the on-screen verdict, check every
+  other thing that reads the same data. The document that leaves the browser is
+  the one that reaches GEMA and GVL, and it was the copy nobody fixed.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was

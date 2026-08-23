@@ -252,7 +252,10 @@
     var soc=document.createElement("input"); soc.className="f-soc"; soc.placeholder="GEMA / GVL / none";
     soc.value=data.soc||""; soc.setAttribute("aria-label","Society or publisher");
     var pct=document.createElement("input"); pct.type="number"; pct.className="f-pct num";
-    pct.min="0"; pct.max="100"; pct.step="0.01"; pct.value=data.pct!==undefined?data.pct:"";
+    pct.min="0"; pct.max="100"; pct.step="0.01";
+    // null is a share that was never entered, and it comes back as an empty
+    // box rather than a zero somebody has to notice is wrong.
+    pct.value=(data.pct===undefined||data.pct===null)?"":data.pct;
     pct.setAttribute("aria-label","Share percent");
     var del=document.createElement("button"); del.type="button"; del.className="rm noprint";
     del.textContent="Remove"; del.setAttribute("aria-label","Remove this person");
@@ -271,12 +274,20 @@
   }
 
   function rows(tbody){return Array.prototype.slice.call(tbody.querySelectorAll("tr"))}
+  // A share nobody entered is not a zero share. sum() and problems() were
+  // fixed for exactly that, and readRow was left on parseFloat(x)||0 while
+  // being the function that feeds both the saved sheet and the exported one.
+  // Saving 0 meant a reload turned a blank box into a hard zero, the badge
+  // went from fail to pass, and the warning naming the row disappeared, so
+  // the badge fix was undone by pressing reload. Proved in Chromium.
   function readRow(tr){
+    var raw=tr.querySelector(".f-pct").value.trim();
+    var v=parseFloat(raw);
     return {
       name:tr.querySelector(".f-name").value.trim(),
       role:tr.querySelector(".f-role").value,
       soc:tr.querySelector(".f-soc").value.trim(),
-      pct:parseFloat(tr.querySelector(".f-pct").value)||0
+      pct:(raw!==""&&isFinite(v))?v:null
     };
   }
   function sum(tbody){
@@ -309,6 +320,14 @@
       if(!name&&!raw) return;
       if(!raw){ out.push(who+" has no share"); return; }
       var v=parseFloat(raw);
+      // A mutation sweep reports this term as unguarded, and that is honest:
+      // .f-pct is input[type=number], which sanitises anything it cannot parse
+      // to "", so the row reaches here as missing rather than unreadable and
+      // the branch above fires instead. Measured in Chromium on 23 August
+      // 2026: "abc", "Infinity", "1/2", "0x10", " 7 " and "1e400" all read
+      // back as "", while "-50" and "1e5" survive. Only Chromium was tested,
+      // so the guard stays rather than being deleted on one browser's
+      // behaviour, and the test named for it says what it really proves.
       if(!isFinite(v)){ out.push(who+" has a share that is not a number"); return; }
       if(v<0){ out.push(who+" has a negative share"); return; }
       if(!name) out.push(raw+"% has no name against it");
@@ -376,17 +395,43 @@
     update();
   }
 
+  // The exported sheet is the copy that leaves the browser and reaches GEMA
+  // or GVL. It said "0%" for a share nobody entered, put a signature line
+  // under it, and totalled to 100 so the document read complete and
+  // internally consistent. It also dropped a row that had a share but no
+  // name, while sum() still counted that share, so the listing did not add
+  // up to its own total and nothing said why.
+  function shareText(pct){return pct===null?"share not filled in":pct+"%"}
+  function personLine(r){
+    return "  "+(r.name||"(name missing)")+"  \u00b7  "+r.role+"  \u00b7  "+
+           (r.soc||"no society")+"  \u00b7  "+shareText(r.pct);
+  }
+  function totalLine(tbody){
+    var n=problems(tbody).length;
+    return "  total "+(Math.round(sum(tbody)*100)/100)+"%"+
+           (n?"  ("+n+" row"+(n>1?"s":"")+" could not be read, so this total does not cover the sheet)":"");
+  }
+  // Print and copy hand out the same document, so they say the same thing
+  // about it. Copy said only "Copied to the clipboard."
+  function exportWarning(){
+    var probs=problems($("writers")).concat(problems($("performers")));
+    if(probs.length) return probs.length+" row"+(probs.length>1?"s":"")+" could not be read as a share.";
+    var off=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
+    return off?"a side does not total 100%.":"";
+  }
+
   function asText(){
     var m=["title","artist","label","isrc","date","place"].map(function(k){return $(k).value.trim()});
     var out=["SPLIT SHEET","Track: "+(m[0]||"—"),"Artist: "+(m[1]||"—"),"Label: "+(m[2]||"—"),
              "ISRC: "+(m[3]||"—"),"Agreed: "+(m[4]||"—")+(m[5]?", "+m[5]:""),"",
              "COMPOSITION (GEMA side)"];
+    // A row nobody has touched is still a blank form and stays out of it.
     rows($("writers")).map(readRow).forEach(function(r){
-      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
-    out.push("  total "+(Math.round(sum($("writers"))*100)/100)+"%","","RECORDING (GVL side)");
+      if(r.name||r.pct!==null) out.push(personLine(r))});
+    out.push(totalLine($("writers")),"","RECORDING (GVL side)");
     rows($("performers")).map(readRow).forEach(function(r){
-      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
-    out.push("  total "+(Math.round(sum($("performers"))*100)/100)+"%","",
+      if(r.name||r.pct!==null) out.push(personLine(r))});
+    out.push(totalLine($("performers")),"",
              "Signed:", "");
     rows($("sigs")).forEach(function(tr){out.push("  "+tr.cells[0].textContent+"   ______________________   date ____________")});
     return out.join("\n");
@@ -397,16 +442,13 @@
   $("evenw").addEventListener("click",function(){even($("writers"))});
   $("evenr").addEventListener("click",function(){even($("performers"))});
   $("print").addEventListener("click",function(){
-    var probs=problems($("writers")).concat(problems($("performers")));
-    var offTotal=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
-    $("live").textContent = probs.length
-      ? "Printing anyway, but "+probs.length+" row"+(probs.length>1?"s":"")+" could not be read as a share."
-      : (offTotal ? "Printing anyway, but a side does not total 100%." : "");
+    var w=exportWarning();
+    $("live").textContent=w?("Printing anyway, but "+w):"";
     window.print();
   });
   $("copy").addEventListener("click",function(){
-    var t=asText();
-    var done=function(){$("live").textContent="Copied to the clipboard."};
+    var t=asText(), w=exportWarning();
+    var done=function(){$("live").textContent="Copied to the clipboard."+(w?" But "+w:"")};
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(t).then(done,function(){fallback(t,done)});
     } else fallback(t,done);
