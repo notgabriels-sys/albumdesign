@@ -67,6 +67,12 @@ DOCS = ROOT / "docs"
 #
 # Adding a host here is a claim that someone read the objects. Do not add one
 # because a link looks right.
+# The contact address, which is also the one in the Impressum and the one his
+# business PayPal sits on. notgabriels@gmail.com is his personal account and
+# belongs on none of this: client mail and client money go to the business one.
+CONTACT = "hologrampeoplemusic@gmail.com"
+PERSONAL_ADDRESS = "notgabriels@gmail.com"
+
 VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com", "paypal.me"}
 
 # Some links name a payment provider without being able to take money: the
@@ -461,12 +467,18 @@ def main() -> int:
     # to another tool. Nobody arrives on the landing page, so a visitor who
     # found the loudness tool in a search result never learned the other four
     # existed, and every page's authority had to travel through index.html.
+    # Read, never retyped. These labels were hardcoded here, which is the same
+    # rule this file enforces on the pages being broken one level down inside
+    # the checker: a name written twice can drift, and it did. Retitling the
+    # pages left every page calling its siblings by names none of them used any
+    # more, and the landing page naming the same five links one way in its
+    # structured data and another on its own cards, with 329 checks green.
+    #
+    # A page's name is its title. Everything else reads that.
     TOOL_PAGES = {
-        "cover.html": "Cover Art Check",
-        "loudness.html": "Loudness Check",
-        "release.html": "Release Preflight",
-        "delivery.html": "Delivery Check",
-        "splits.html": "Split Sheet",
+        page: page_identity(src[page])["name"]
+        for page in ("cover.html", "loudness.html", "release.html",
+                     "delivery.html", "splits.html")
     }
     for name in TOOL_PAGES:
         body = src[name]
@@ -618,6 +630,41 @@ def main() -> int:
         f"not the order the entries happen to sit in",
     )
 
+
+    print("\n=== one name per page, on the page and everywhere pointing at it ===")
+    # The landing page names each tool twice, in a visible card and in its
+    # structured data, and the sibling navs name them a third time. Retitling
+    # moved the titles and left all three behind. Nothing noticed, because each
+    # check compared the copies with each other rather than with the page.
+    index = src["index.html"]
+    listed = {
+        item["url"].rsplit("/", 1)[-1]: item.get("name")
+        for item in structured_data(index)[0]
+        .get("mainEntity", {})
+        .get("itemListElement", [])
+    }
+    cards = dict(
+        re.findall(
+            r'href="([a-z]+\.html)">\s*<span class="ic"[^>]*>[^<]*</span>\s*<h3>([^<]+)</h3>',
+            index,
+        )
+    )
+    check(
+        "the landing page has a visible card for every tool",
+        set(cards) == set(TOOL_PAGES),
+        f"cards for {sorted(cards)}, tools are {sorted(TOOL_PAGES)}",
+    )
+    for page, name in TOOL_PAGES.items():
+        check(
+            f"the landing page's card for {page} uses the page's own name",
+            cards.get(page) == name,
+            f"card says {cards.get(page)!r}, the page calls itself {name!r}",
+        )
+        check(
+            f"the landing page's structured list names {page} the same way",
+            listed.get(page) == name,
+            f"structured data says {listed.get(page)!r}, card says {cards.get(page)!r}",
+        )
 
     print("\n=== every page carries an icon, and the icons exist ===")
     # There was no favicon at all: nine pages, no icon file, so every tab
@@ -903,6 +950,18 @@ def main() -> int:
         not (adds_vat and plus_vat),
         f"no-VAT: {sorted(adds_vat)}  plus-VAT: {sorted(plus_vat)}",
     )
+    # That comparison passes on two empty sets, so it says nothing about the
+    # statement being there. Measured: stripping Kleinunternehmer, UStG and VAT
+    # from the shop left every check green. He is a Kleinunternehmer under
+    # section 19, the page's "prices on this page are the total" line rests on
+    # exactly that, and a page quoting prices with the basis missing is the
+    # wrong-tax-treatment failure arriving by omission instead.
+    shop_body = src.get("shop.html", "")
+    check(
+        "the shop states the section 19 position its prices rest on",
+        "Kleinunternehmer" in shop_body and "19" in shop_body,
+        "the page quotes prices as totals without saying why no VAT is added",
+    )
 
     print("\n=== the tools do not contradict each other on delivery advice ===")
     cover, release = src.get("cover.html", ""), src.get("release.html", "")
@@ -943,8 +1002,32 @@ def main() -> int:
         check(f"{name} makes no network call", not calls, f"found {sorted(set(calls))}")
 
     print("\n=== one contact address, spelled one way ===")
-    addrs = Counter(a for b in src.values() for a in re.findall(r"mailto:([^\"?]+)", b))
+    # `len(addrs) <= 1` was the whole check, and it passes on an empty set.
+    # Measured: stripping every mailto from all nine pages left 325 checks
+    # green, with the site carrying no way to reach him at all. Booking starts
+    # by email, so that is the business disappearing quietly.
+    addrs = Counter(a for b in src.values() for a in re.findall(r'mailto:([^"?]+)', b))
+    check(
+        "the site carries a contact address at all",
+        bool(addrs),
+        "no mailto found anywhere; either they are gone or the pattern drifted",
+    )
     check("a single contact address is used everywhere", len(addrs) <= 1, f"{dict(addrs)}")
+    check(
+        "the contact address is the business one",
+        set(addrs) <= {CONTACT},
+        f"found {sorted(addrs)}, expected {CONTACT}",
+    )
+    # notgabriels@gmail.com is his personal PayPal and personal mail. Client
+    # money and client mail go to the business address, which is also the one
+    # in the Impressum. This asserts the personal one never appears anywhere,
+    # in a mailto or otherwise.
+    personal = sorted(n for n, b in src.items() if PERSONAL_ADDRESS in b)
+    check(
+        "the personal address appears on no page",
+        not personal,
+        f"{personal} carry {PERSONAL_ADDRESS}, which is not the business address",
+    )
 
     print("\n=== no em dashes in prose, which is a house rule ===")
     # Everything written for him, not only the pages. The first version of this
