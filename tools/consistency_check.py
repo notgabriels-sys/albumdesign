@@ -16,6 +16,8 @@ Exits non-zero on any failure, so CI gates on it.
 
 from __future__ import annotations
 
+import html
+import json
 import re
 import sys
 from urllib.parse import urlsplit
@@ -235,6 +237,41 @@ def promised_amounts(body: str) -> list[str]:
     return [a for label in price_promises(body) for a in re.findall(r"€\s?([\d.,]+)", label)]
 
 
+# The Impressum is the one page with no structured data, deliberately. It is a
+# legal notice carrying his residential address, and putting that address into
+# a machine-readable graph is a decision about his personal data, not an SEO
+# improvement. Everything else on the site describes a tool or a service.
+NO_STRUCTURED_DATA = {"impressum.html"}
+
+_JSON_LD = re.compile(
+    r'<script type="application/ld\+json">(.*?)</script>', re.S
+)
+
+
+def structured_data(body: str) -> list[dict]:
+    """Every JSON-LD block on a page, parsed.
+
+    Raises on malformed JSON rather than returning nothing, because a block
+    that fails to parse is invisible to a search engine and would otherwise
+    look identical to a page that simply has none.
+    """
+    return [json.loads(b) for b in _JSON_LD.findall(body)]
+
+
+def _meta(body: str, pattern: str) -> str:
+    m = re.search(pattern, body)
+    return html.unescape(m.group(1)) if m else ""
+
+
+def page_identity(body: str) -> dict[str, str]:
+    """What the page says it is, in its own markup."""
+    return {
+        "name": _meta(body, r"<title>([^<]*)</title>"),
+        "description": _meta(body, r'<meta name="description" content="([^"]*)"'),
+        "url": _meta(body, r'<link rel="canonical" href="([^"]*)"'),
+    }
+
+
 def _em_dash_allowed(line: str) -> bool:
     if _EM_DASH_SMUGGLED.search(line):
         return False
@@ -387,6 +424,131 @@ def main() -> int:
             not wrong,
             "named differently here than on index.html: " + ", ".join(wrong),
         )
+
+    print("\n=== structured data says what the page itself says ===")
+    # No page carried any. Five distinct free tools and a rate card were being
+    # read as undifferentiated text, so nothing told a search engine that
+    # loudness.html is an application, that it costs nothing, or that the shop
+    # charges EUR 45 for a master.
+    #
+    # Structured data restates facts the page already states, and a fact
+    # written twice is a fact that can drift apart. That is not hypothetical
+    # here: this site shipped a button promising EUR 25 over a EUR 1,200
+    # charge. So every field below is asserted against the page's own markup
+    # rather than merely being present, and the shop's prices are asserted
+    # against its rate table in both directions.
+    ld_firings = 0
+    for name, body in src.items():
+        if name in NO_STRUCTURED_DATA:
+            check(
+                f"{name} deliberately carries no structured data",
+                not _JSON_LD.search(body),
+                "it holds a residential address, and putting that into a "
+                "machine-readable graph is a decision about his data",
+            )
+            continue
+
+        try:
+            blocks = structured_data(body)
+        except json.JSONDecodeError as exc:
+            check(f"{name} structured data parses", False, str(exc))
+            continue
+
+        check(
+            f"{name} carries exactly one structured-data block",
+            len(blocks) == 1,
+            f"found {len(blocks)}; a block that does not parse is invisible to "
+            f"a search engine and looks identical to a page with none",
+        )
+        if len(blocks) != 1:
+            continue
+
+        ld = blocks[0]
+        says = page_identity(body)
+        for key in ("name", "description", "url"):
+            ld_firings += 1
+            check(
+                f"{name} structured-data {key} matches the page",
+                ld.get(key) == says[key],
+                f"markup says {says[key]!r}, structured data says {ld.get(key)!r}",
+            )
+
+    # Every family in this file has to be able to say it ran. The price-promise
+    # check sat at zero firings inside a suite reporting all checks passed,
+    # because a loop over nothing prints nothing.
+    check(
+        "the structured-data field scan fired at all",
+        ld_firings > 0,
+        "zero fields compared, so the block regex has drifted off the markup",
+    )
+
+    print("\n=== a free tool says free, and the shop says its own prices ===")
+    for name in TOOL_PAGES:
+        ld = structured_data(src[name])[0]
+        offer = ld.get("offers") or {}
+        # Both places, not just the friendly one. A page whose footer reads
+        # "a free tool by" while its structured data quotes a price tells a
+        # search engine the opposite of what it tells a reader.
+        check(
+            f"{name} is free in its markup and in its structured data",
+            "a free tool by" in src[name]
+            and offer.get("price") == "0"
+            and ld.get("isAccessibleForFree") is True,
+            f"footer says free, structured data offers {offer.get('price')!r} "
+            f"and isAccessibleForFree {ld.get('isAccessibleForFree')!r}",
+        )
+
+    shop = src["shop.html"]
+    catalog = structured_data(shop)[0].get("hasOfferCatalog", {})
+    ld_prices = sorted(o.get("price", "") for o in catalog.get("itemListElement", []))
+    table_prices = sorted(re.findall(r'<td class="n">€([\d.,]+)</td>', shop))
+    check(
+        "the shop's structured data quotes its rate table exactly",
+        ld_prices == table_prices and bool(table_prices),
+        f"structured data {ld_prices}, rate table {table_prices}",
+    )
+    check(
+        "every shop offer states a currency",
+        bool(catalog.get("itemListElement"))
+        and all(
+            o.get("priceCurrency") == "EUR" for o in catalog.get("itemListElement", [])
+        ),
+        "an amount with no currency is an amount decided by an account setting "
+        "nobody reading the page can see",
+    )
+    # He is a Kleinunternehmer under section 19 UStG and charges no VAT, so
+    # neither "included" nor "excluded" is true. A tax treatment contradicting
+    # the Kleinunternehmer line sat on this page once already.
+    check(
+        "the shop's structured data claims no VAT treatment",
+        "valueAddedTaxIncluded" not in json.dumps(catalog),
+        "section 19 means no VAT is charged at all, so any VAT flag is a claim "
+        "nobody here can support",
+    )
+
+    items = (
+        structured_data(src["index.html"])[0]
+        .get("mainEntity", {})
+        .get("itemListElement", [])
+    )
+    listed = [item.get("url") for item in items]
+    expected = [page_identity(src[t])["url"] for t in TOOL_PAGES]
+    check(
+        "the landing page's structured list holds the five tools, in order",
+        listed == expected,
+        f"listed {listed}, expected {expected}",
+    )
+    # The URLs being in the right order is not the same as the list saying so.
+    # A reader of the graph goes by "position", and a mutation that reordered
+    # only the numbers passed the check above without moving a single URL.
+    positions = [item.get("position") for item in items]
+    check(
+        "the landing page's list numbers its items 1 to 5",
+        positions == list(range(1, len(items) + 1)) and bool(items),
+        f"positions {positions}; the order a consumer reads is this field, "
+        f"not the order the entries happen to sit in",
+    )
+
 
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged
