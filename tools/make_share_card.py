@@ -158,7 +158,8 @@ def draw_card(page: str, out: Path) -> None:
     # gets the full width. Nothing is layered over anything.
     bars = [0.32, 0.62, 0.45, 0.86, 0.40, 0.70, 0.28, 0.54]
     bw, gap, base, top = 16, 12, 128, 62
-    x = W - PAD - (len(bars) * bw + (len(bars) - 1) * gap)
+    bars_left = W - PAD - (len(bars) * bw + (len(bars) - 1) * gap)
+    x = bars_left
     for frac in bars:
         h = int((base - top) * frac)
         shade = tuple(int(c * (0.45 + 0.55 * frac)) for c in ACCENT)
@@ -175,7 +176,15 @@ def draw_card(page: str, out: Path) -> None:
     if page != "index.html":
         eyebrow = font("DejaVuSansMono-Bold.ttf", 22)
         w = d.textlength("P R E F L I G H T", font=brand)
-        d.text((PAD + w + 22, 99), title.upper(), font=eyebrow, fill=ACCENT)
+        left = PAD + w + 22
+        # The eyebrow shares its line with the wordmark and the meter bars, so
+        # it has less room than anything else on the card. Measured rather than
+        # assumed, for the same reason every other line is.
+        if _overflows(d, [title.upper()], eyebrow, bars_left - 24 - left):
+            raise ValueError(
+                f"{page}: the title {title!r} is too long for the card's eyebrow"
+            )
+        d.text((left, 99), title.upper(), font=eyebrow, fill=ACCENT)
 
     # The headline is the page's h1, at the largest size that still leaves room
     # for the description underneath. Sized by measuring, not by counting
@@ -224,6 +233,7 @@ def draw_card(page: str, out: Path) -> None:
     # importing this module, so the two agree by both being right.
     meta = PngInfo()
     meta.add_itxt("preflight:page", page)
+    meta.add_itxt("preflight:title", title)
     meta.add_itxt("preflight:headline", headline)
     meta.add_itxt("preflight:description", description)
 

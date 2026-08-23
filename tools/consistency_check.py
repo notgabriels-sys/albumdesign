@@ -48,11 +48,19 @@ DOCS = ROOT / "docs"
 # the link, and paypal_amount_mismatches() below asserts it against the rate
 # table on the same page.
 #
-# What is NOT established here: which of Gabriel's two PayPal accounts the
-# handle sits on. paypal.me is blocked by the egress proxy and the PayPal MCP
-# server has returned 401 on every attempt, so the handle rests on his
-# statement that he read it out of the merchant dashboard while signed in to
-# the business account. That is a recipient question, not an amount question.
+# Who receives was the open question, and it was settled on 23 August 2026 by
+# a live payment rather than by reading anything. Gabriel sent EUR 1 to
+# paypal.me/gabrielgga00 from a logged-out browser and reported that the
+# receipt did not arrive at notgabriels@gmail.com, his personal account. He has
+# two accounts, so it landed on the business one, hologrampeoplemusic@gmail.com,
+# which is also the address in the Impressum.
+#
+# That is an observation of where money actually went, which is what makes it
+# worth more than the earlier position, where the handle rested on his memory
+# of a dashboard. It is still his report rather than something read from here:
+# paypal.me is blocked by the egress proxy and the PayPal MCP server has
+# returned 401 on every attempt. If money ever lands in the wrong account, the
+# handle is the thing to change.
 #
 # Do not extend this to paypal.com/ncp/ or any other PayPal link shape. Those
 # put the amount back in a stored object nobody here can read.
@@ -752,6 +760,17 @@ def main() -> int:
             f"records {drawn_from!r}",
         )
         says = page_identity(src[name])
+        # The card draws three strings and recorded two. Changing a title left
+        # the eyebrow showing the old one and all 318 checks passed, which is
+        # the defect these very checks were added to prevent, failing on its
+        # own implementation. Where a thing is stated in more than one place,
+        # assert every place, including the places you added yourself.
+        check(
+            f"{filename} shows {name}'s current title",
+            text.get("preflight:title") == says["name"],
+            f"card was drawn from {text.get('preflight:title')!r}, page now "
+            f"says {says['name']!r}; rerun tools/make_share_card.py",
+        )
         head = _meta(src[name], r"<h1[^>]*>(.*?)</h1>")
         head = html.unescape(re.sub(r"<[^>]+>", "", head)).strip()
         check(

@@ -159,6 +159,9 @@ def test_every_shipped_card_records_its_page(page, filename):
     text = _png_text(DOCS / filename)
     assert text.get("preflight:page") == page
     title, headline, description = msc.read(page)
+    # All three strings the card draws, not two of them. The title is printed
+    # as the eyebrow and went unrecorded, so a retitled page kept an old card.
+    assert text.get("preflight:title") == title
     assert text.get("preflight:headline") == headline
     assert text.get("preflight:description") == description
 
