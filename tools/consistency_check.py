@@ -546,6 +546,54 @@ def main() -> int:
         "no byline found at all, so the footer markup has drifted",
     )
 
+    # One wordmark for one site, and the page's own name beside it.
+    #
+    # Every tool page carried its own wordmark, and after the rename each one
+    # was a name the site had retired: COVERFORGE at the top of Album Cover
+    # Size Checker, LOUDNESS·CHECK at the top of LUFS and True Peak Meter. That
+    # is the first thing on the page, above the headline, and it survived four
+    # rounds of fixing the names further down because nothing read it.
+    #
+    # The preview cards had already settled the pattern: the site's wordmark,
+    # then the page's title beside it. The headers now match the cards, which
+    # is also the only shape that fits: "ALBUM COVER SIZE CHECKER" set as a
+    # letterspaced monospace wordmark is wider than a 360px viewport.
+    wordmarks = 0
+    for page, body in src.items():
+        if '<span class="brand">PRE<b>FLIGHT</b></span>' in body:
+            wordmarks += 1
+        check(
+            f"{page} carries the site wordmark",
+            '<span class="brand">PRE<b>FLIGHT</b></span>' in body,
+            "the header wordmark is not the site's, so this page presents "
+            "itself as a separate product",
+        )
+
+    check(
+        "the wordmark scan fired at all",
+        wordmarks == len(src),
+        f"{wordmarks} of {len(src)} pages, so the brand markup has drifted",
+    )
+
+    named_in_header = 0
+    for page in list(TOOL_PAGES) + ["shop.html"]:
+        title = page_identity(src[page])["name"]
+        if '<span class="page">' in src[page]:
+            named_in_header += 1
+        check(
+            f"{page} names itself in its header",
+            f'<span class="page">{title}</span>' in src[page],
+            f"the header does not carry {title!r}, so nothing above the "
+            f"headline says which of the tools this is",
+        )
+
+    check(
+        "the header-name scan fired at all",
+        named_in_header == len(TOOL_PAGES) + 1,
+        f"{named_in_header} of {len(TOOL_PAGES) + 1} pages carry a header "
+        f"name span, so the markup this reads has drifted",
+    )
+
     check(
         "the footer-byline scan fired at all",
         bylines == len(TOOL_PAGES) + 1,

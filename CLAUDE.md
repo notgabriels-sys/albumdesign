@@ -379,6 +379,36 @@ which made them useless as gates. Keep them asserting.
   tags and printing the surrounding 80 characters of every hit. Most hits were
   those substrings and were false. Two were not, and neither sat in a link.
 
+- **The header wordmark was the last place, and the most visible.** Every tool
+  page carried its own wordmark, so after the rename the first thing on the
+  page, above the headline, was a name the site had retired: `COVERFORGE` on
+  Album Cover Size Checker, `LOUDNESS·CHECK` on LUFS and True Peak Meter,
+  `STUDIO·SHOP` on Mixing and Mastering Rates. It survived four rounds of
+  fixing names further down the same pages, because every one of those rounds
+  read links and bylines and none of them read the header.
+
+  The preview cards had already settled the pattern a year of this file keeps
+  arriving at: the site's wordmark, then the page's own title beside it. The
+  headers now match the cards. That is also the only shape that fits, since
+  `ALBUM COVER SIZE CHECKER` set as a letterspaced monospace wordmark is wider
+  than a 360px viewport, so the per-page wordmark could not have survived the
+  new names even if nobody minded the old ones.
+
+- **The a11y suite measured contrast on pages where nothing had happened.**
+  Every page was loaded untouched, so the pass, warn and fail pills, the
+  coloured verdict lines and the tinted cells did not exist when the contrast
+  was computed, and the suite reported `all text meets WCAG AA contrast` for
+  every page in both schemes over a palette it had never seen. The site's
+  semantic colours are the ones a visitor is actually here to read.
+
+  This repository's oldest defect, wearing accessibility clothes. The suite now
+  drives loudness, delivery and cover with real fixtures in both schemes and
+  asserts a verdict rendered *before* believing an empty failure list. Proved
+  by pointing the loudness drive at a non-audio fixture: the contrast check
+  passes, on nothing, while the new evidence check fails. Measured 23 August
+  2026, the real colours all pass, so this closed a hole rather than fixing a
+  visible defect.
+
 - **`verify_truepeak.py` does gate, measured 23 August 2026.** Its sibling was
   recorded as swept and this one never was. Six mutations, all caught: each of
   the four expectations moved on its own, the oversampling dropped entirely,
@@ -569,6 +599,18 @@ Gabriel shares them. `Artifact` with `action: "list"` finds their URLs; publish
 with the same URL to update one in place, and read it with WebFetch first,
 because the tool refuses to overwrite a version this session has not seen.
 They are copies, not the source: fix `docs/`, then rederive and republish.
+
+**Publishing by bare file path only keeps the URL while this session still holds
+that path's mapping, and it does not always.** Republishing
+`arts/loudness.html` by path created a *second* artifact under the same title
+instead of updating `d84def54`, in the same run where four sibling files
+published by path kept their URLs. There is no delete action, so the duplicate
+is permanent: `6a57bf35-bd5c-4ccf-83d6-5d8dac5ddabd`, private and orphaned.
+Pass `url` explicitly for every republish unless this session published that
+exact path itself and you can see it in the transcript. The refusal that
+follows is the normal path, not a problem: read the live version, diff it
+against the derived copy, confirm the only published-only lines are the ones
+being replaced, then publish.
 Meta tags in the derived copies do nothing there, since the host supplies its
 own document head, so a docs change that only touches `<head>` is not a reason
 to republish all seven.
