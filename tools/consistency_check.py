@@ -349,6 +349,45 @@ def main() -> int:
             "from search or a link",
         )
 
+    print("\n=== every tool page names its siblings ===")
+    # The internal link graph was a star: every tool linked home, none linked
+    # to another tool. Nobody arrives on the landing page, so a visitor who
+    # found the loudness tool in a search result never learned the other four
+    # existed, and every page's authority had to travel through index.html.
+    TOOL_PAGES = {
+        "cover.html": "Cover Art Check",
+        "loudness.html": "Loudness Check",
+        "release.html": "Release Preflight",
+        "delivery.html": "Delivery Check",
+        "splits.html": "Split Sheet",
+    }
+    for name in TOOL_PAGES:
+        body = src[name]
+        missing = [
+            other
+            for other in TOOL_PAGES
+            if other != name and f'href="{other}"' not in body
+        ]
+        check(
+            f"{name} links to the other four tools",
+            not missing,
+            "reachable only through the landing page nobody lands on: "
+            + ", ".join(missing),
+        )
+        # A link with the wrong words on it is a link nobody clicks, and the
+        # names have to match the landing page's cards or the same tool reads
+        # as two different tools.
+        wrong = [
+            label
+            for other, label in TOOL_PAGES.items()
+            if other != name and f'href="{other}">{label}</a>' not in body
+        ]
+        check(
+            f"{name} calls each sibling by its landing-page name",
+            not wrong,
+            "named differently here than on index.html: " + ", ".join(wrong),
+        )
+
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged
     # EUR 1,200 for a different service. The amount a customer is promised has
