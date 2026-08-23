@@ -341,6 +341,30 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(clip.mp3 === null, `an MP3 has no integer full scale to pin against (${clip.mp3})`);
   ok(clip.empty === null, `and so is a file too short to hold a header (${clip.empty})`);
 
+  // ---- two checks nothing could make fail ----
+  // Found by mutation: forcing either of these to always report "pass" left the
+  // whole browser suite green, so neither was verified. The fixture set was the
+  // reason. rel_track1 and rel_track2 sit 0.6 dB apart, inside the spread pass
+  // band, and every _write_wav fixture is stereo while the 3-channel one cannot
+  // be measured for loudness at all. Two fixtures now exist that can fail them.
+  console.log('\n=== a release with inconsistent levels or channel counts ===');
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_quiet_44100_24.wav']);
+  const spread = dcheck(d, 'loudness spread');
+  ok(spread && spread.pill !== 'PASS',
+    `-14 next to -30 is not a consistent release (loudness spread -> ${spread && spread.pill})`);
+
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_mono_44100_24.wav']);
+  const chans = dcheck(d, 'channels');
+  ok(chans && chans.pill !== 'PASS',
+    `one mono track beside a stereo one is worth flagging (channels -> ${chans && chans.pill})`);
+
+  // And the honest cases still pass, so the two above are not just always-fail.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_track2_44100_24.wav']);
+  ok(dcheck(d, 'loudness spread').pill === 'PASS',
+    `0.6 dB apart is still a consistent release`);
+  ok(dcheck(d, 'channels').pill === 'PASS',
+    `two stereo tracks still pass the channel check`);
+
   // BS.1770 weights only mono, stereo, quad and 5.1, so a 3-channel file has no
   // loudness. It used to show a blank LUFS cell, a green OK, and no mention.
   d = await runDelivery(['rel_3channel_44100_24.wav']);

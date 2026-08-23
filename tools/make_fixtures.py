@@ -133,6 +133,30 @@ def _write_clipped(path, rate, secs, clip_value):
 _write_clipped(d / "rel_near_fs_44100_16.wav", 44100, 3, 32760)
 _write_clipped(d / "rel_at_fs_44100_16.wav", 44100, 3, 32767)
 
+# A quiet track next to rel_track1 at -14 dBFS. Nothing else in the set can
+# make the delivery page's loudness-spread check fail: track1 and track2 sit
+# 0.6 dB apart, well inside the pass band, so the check could be forced to
+# always report pass with no browser assertion noticing.
+_write_wav(d / "rel_quiet_44100_24.wav", 44100, 3, 3, 10 ** (-30.0 / 20.0))
+
+# A mono track. Every other _write_wav fixture is stereo and the 3-channel one
+# cannot be measured for loudness at all, so the channels check had nothing
+# that could make it fail either.
+def _write_mono(path, rate, sampwidth, secs, amp, freq=1000.0):
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(1)
+        w.setsampwidth(sampwidth)
+        w.setframerate(rate)
+        peak = 2 ** (sampwidth * 8 - 1) - 1
+        frames = bytearray()
+        for i in range(int(rate * secs)):
+            v = int(amp * math.sin(2 * math.pi * freq * i / rate) * peak)
+            frames += v.to_bytes(sampwidth, "little", signed=True)
+        w.writeframes(bytes(frames))
+
+
+_write_mono(d / "rel_mono_44100_24.wav", 44100, 3, 3, 10 ** (-14.0 / 20.0))
+
 
 # WAVE_FORMAT_EXTENSIBLE is what most DAWs write for 24-bit and for anything
 # above stereo. The clipping scanner only accepted format code 1, so a clipped
