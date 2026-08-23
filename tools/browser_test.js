@@ -77,6 +77,28 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   const check = (r, name) => r.checks.find(c => c.name.toLowerCase() === name);
 
   console.log('\n=== cover tool, real files ===');
+  // ---- four verdicts nothing could make fail ----
+  // Found by mutation: turning each of these branches into a "pass" left the
+  // whole browser suite green. readable FAIL is the one that matters, because
+  // "stop the cover checker calling unreadable files clear" was a deliberate
+  // fix and nothing was holding it in place.
+  let cov = await runCover('small_1000.jpg');
+  ok(check(cov, 'resolution').pill === 'FAIL',
+    `1000px is below the 1400 floor (resolution -> ${check(cov,'resolution').pill})`);
+
+  cov = await runCover('notanimage.jpg');
+  ok(check(cov, 'format').pill === 'FAIL',
+    `a file that is not an image has no usable format (format -> ${check(cov,'format').pill})`);
+  ok(check(cov, 'readable').pill === 'FAIL',
+    `and it is not readable either (readable -> ${check(cov,'readable').pill})`);
+  ok(!/Ready to ship/.test(cov.verdict),
+    `so it is not ready to ship ("${cov.verdict}")`);
+
+  // 17 MB, over the 10 MB ceiling Ditto and DistroKid document.
+  cov = await runCover('cmyk_nonsquare.tif');
+  ok(check(cov, 'filesize').pill === 'WARN',
+    `17 MB is over the documented ceiling (filesize -> ${check(cov,'filesize').pill})`);
+
   let r = await runCover('good_3000.jpg');
   ok(check(r, 'resolution').pill === 'PASS', `3000px JPEG -> resolution PASS (${check(r,'resolution').pill})`);
   ok(check(r, 'format').pill === 'PASS', `3000px JPEG -> format PASS`);

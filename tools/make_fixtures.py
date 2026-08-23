@@ -19,6 +19,16 @@ Image.new("RGB", (3000, 3000), (20, 140, 90)).save(d / "good_3000.jpg", quality=
 Image.new("RGB", (4000, 4000), (20, 140, 90)).save(d / "over_4000.jpg", quality=90)
 Image.new("CMYK", (3000, 3000)).save(d / "cmyk_3000.jpg")
 Image.new("RGB", (1200, 1600), (200, 50, 50)).save(d / "nonsquare.jpg", quality=90)
+
+# Square but under the 1400px floor most distributors enforce. Nothing in the
+# set was below it, so the resolution FAIL branch could be turned into a pass
+# with no browser assertion noticing.
+Image.new("RGB", (1000, 1000), (60, 90, 160)).save(d / "small_1000.jpg", quality=90)
+
+# Not an image at all, under a name the picker accepts. The header sniffer
+# reports "unknown" and the browser cannot decode it, so this drives both the
+# format FAIL and readable FAIL branches, neither of which had a fixture.
+(d / "notanimage.jpg").write_bytes(b"this is not an image, not even slightly" * 40)
 Image.new("RGBA", (3000, 3000), (10, 10, 10, 128)).save(d / "alpha_3000.png")
 
 # A CMYK TIFF: the exact file the cover tool exists to catch, and the one
