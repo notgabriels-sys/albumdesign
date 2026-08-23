@@ -480,6 +480,7 @@ def main() -> int:
         for page in ("cover.html", "loudness.html", "release.html",
                      "delivery.html", "splits.html")
     }
+    bylines = 0
     for name in TOOL_PAGES:
         body = src[name]
         missing = [
@@ -505,6 +506,78 @@ def main() -> int:
             f"{name} calls each sibling by its landing-page name",
             not wrong,
             "named differently here than on index.html: " + ", ".join(wrong),
+        )
+        # And signs itself with that name too.
+        #
+        # The rename reached the navs, the cards and the structured data, and
+        # stopped at the byline in each page's own footer, so every tool page
+        # ended with a line calling itself something the site no longer calls
+        # anything: "Split Sheet: a free tool by Gabriel G Alonso" at the foot
+        # of Split Sheet Maker. Found by rendering the page and looking at it,
+        # with 353 checks green.
+        #
+        # A page naming its four siblings wrongly is bad. A page naming itself
+        # wrongly, in the last line a visitor reads, is worse, and it was the
+        # one place nothing looked.
+        signed = re.search(r"<span>([^<]*): a free tool by", body)
+        if signed:
+            bylines += 1
+        check(
+            f"{name} signs its footer with its own name",
+            signed is not None and signed.group(1) == TOOL_PAGES[name],
+            f"the page is called {TOOL_PAGES[name]!r}, its footer byline reads "
+            f"{signed.group(1)!r}" if signed else
+            "no byline found at all, so the footer markup has drifted",
+        )
+
+    # The shop signs itself the same way, in a slightly different sentence, and
+    # was signing itself "Studio Shop" while calling itself Mixing and
+    # Mastering Rates. It is the page money is spent on, so it is the last one
+    # that should introduce itself under a name found nowhere else.
+    shop_name = page_identity(src["shop.html"])["name"]
+    shop_signed = re.search(r"<span>([^<]*): Gabriel G Alonso", src["shop.html"])
+    if shop_signed:
+        bylines += 1
+    check(
+        "shop.html signs its footer with its own name",
+        shop_signed is not None and shop_signed.group(1) == shop_name,
+        f"the page is called {shop_name!r}, its footer byline reads "
+        f"{shop_signed.group(1)!r}" if shop_signed else
+        "no byline found at all, so the footer markup has drifted",
+    )
+
+    check(
+        "the footer-byline scan fired at all",
+        bylines == len(TOOL_PAGES) + 1,
+        f"found a byline on {bylines} of {len(TOOL_PAGES) + 1} pages, so the "
+        f"markup this reads has drifted and the check is comparing nothing",
+    )
+
+    # No page calls anything by a name the rename retired.
+    #
+    # The checks above compare a name against a page's title wherever a name
+    # sits in a link or a byline. Prose is not either of those: cover.html's
+    # opening sentence read "Coverforge checks size, shape, format and colour",
+    # which is the CLI's name and the page's own former title, and nothing on
+    # the site says it any more. A visitor met a product name in the first
+    # sentence that appears nowhere else on the page they are reading.
+    #
+    # Only the four retired names that are not substrings of a current title
+    # are listed, so this cannot fire on "Release Delivery Check" containing
+    # "Delivery Check". The comparison is case-sensitive on purpose: prose
+    # like "the cover and loudness checkers" is ordinary English, not a name.
+    RETIRED_NAMES = ("Coverforge", "Loudness Check", "Release Preflight",
+                     "Studio Shop")
+    for page, body in src.items():
+        prose = re.sub(r"<(script|style)\b.*?</\1>", " ", body, flags=re.S | re.I)
+        prose = re.sub(r"<[^>]+>", " ", prose)
+        found = sorted({n for n in RETIRED_NAMES if n in prose})
+        check(
+            f"{page} uses no name the site has retired",
+            not found,
+            f"{found}; the rename left these behind, and a page that calls "
+            f"itself or a sibling by one is offering a name a reader will not "
+            f"find anywhere else",
         )
 
     print("\n=== structured data says what the page itself says ===")
@@ -942,6 +1015,46 @@ def main() -> int:
             page in linked,
             "a tool nobody can find from the front page of its own repository",
         )
+
+    # And calls it what it is called.
+    #
+    # "A name written twice drifts the moment you rename anything" was written
+    # about the tool pages naming each other, and the README was left out of
+    # that fix while being exactly the same shape: a hand-typed list of names
+    # beside a directory of pages. Renaming the pages left the front page of a
+    # public repository offering a "cover spec checker", a "delivery check" and
+    # a "split sheet", none of which is the name of anything on the site, and
+    # every README check passed because they only ever asked whether the URLs
+    # resolved.
+    #
+    # The link text is compared with the page's own <title>, the same source
+    # the landing cards and the sibling navs read.
+    #
+    # The shop is deliberately not held to this. Its link sits inside a
+    # sentence rather than in the list of names, and a sentence reading "the
+    # Mixing and Mastering Rates" to keep a check happy would be worse writing
+    # for no gain. That it is linked at all is checked above.
+    named = 0
+    for page, title in TOOL_PAGES.items():
+        texts = re.findall(
+            rf"\[([^\]]+)\]\(https://[^)]*albumdesign/{re.escape(page)}\)", readme
+        )
+        if texts:
+            named += 1
+        check(
+            f"the README calls {page} by its own name",
+            title in texts,
+            f"the README calls it {texts!r}; the page calls itself {title!r}, "
+            f"and a stranger meeting this project on its front page should be "
+            f"given the name they will see when they arrive",
+        )
+
+    check(
+        "the README's link-text scan fired at all",
+        named == len(TOOL_PAGES),
+        f"matched link text for {named} of {len(TOOL_PAGES)} tools, so the "
+        f"markdown-link pattern has drifted off the README",
+    )
 
 
     print("\n=== every card link quotes a price the page actually charges ===")

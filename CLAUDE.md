@@ -335,6 +335,58 @@ which made them useless as gates. Keep them asserting.
   `docs/` would leave a dead link there silently. `consistency_check.py` now
   reads `README.md` and asserts every page it links to exists, that the five
   tools are all linked, and that the shop is.
+- **The README was left out of the rename, and every README check passed.**
+  The rule that a page's name is its `<title>` was applied to the tool pages
+  and the landing cards, and the README is the same shape: a hand-typed list of
+  names beside a directory of pages. It went on offering a `cover spec
+  checker`, a `delivery check` and a `split sheet`, none of which is the name
+  of anything on the site, on the front page of a public repository. The
+  checks were green because they only ever asked whether the URLs resolved.
+  The link text is now compared with each page's own title, and the scan
+  counts itself so a drifted markdown pattern fails instead of matching
+  nothing quietly. The shop link is deliberately exempt and the reason is in
+  the file: it sits inside a sentence rather than in the list of names.
+
+- **And every tool page was still signing itself with its old name.** The
+  rename reached the navs, the landing cards, the structured data, the preview
+  cards and their alt text, and stopped at the byline in each page's own
+  footer. `Split Sheet: a free tool by Gabriel G Alonso` sat at the foot of
+  Split Sheet Maker, and the same on all five, with 353 checks green and both
+  browser suites passing. A page naming its siblings wrongly is bad; a page
+  naming *itself* wrongly, in the last line a visitor reads, is worse, and it
+  was the one place nothing looked.
+
+  Found by rendering `docs/` in Chromium and reading the footer, not by
+  running anything. Same as the crop and the bars through the headline: look
+  at the output. Six checks added, 353 to 359, both failure modes proved.
+
+- **Then the shop and the cover page were still doing it in prose.** Sweeping
+  the rendered text rather than the links found two more: `shop.html` signed
+  its footer `Studio Shop` while calling itself Mixing and Mastering Rates, on
+  the one page money is spent on, and `cover.html`'s opening sentence read
+  `Coverforge checks size, shape, format and colour`, which is the CLI's name
+  and that page's own former title and appears nowhere else on the site.
+
+  Links and bylines are checked against the title. Prose is neither, so the
+  four retired names that are not substrings of a current one are now asserted
+  to appear on no page: `Coverforge`, `Loudness Check`, `Release Preflight`,
+  `Studio Shop`. Case-sensitive, because "the cover and loudness checkers" is
+  ordinary English and not a name. Only four, because `Delivery Check` and
+  `Split Sheet` are inside `Release Delivery Check` and `Split Sheet Maker`
+  and a ban on them would fire on the correct text.
+
+  The sweep that found them was a script stripping `<script>`, `<style>` and
+  tags and printing the surrounding 80 characters of every hit. Most hits were
+  those substrings and were false. Two were not, and neither sat in a link.
+
+- **`verify_truepeak.py` does gate, measured 23 August 2026.** Its sibling was
+  recorded as swept and this one never was. Six mutations, all caught: each of
+  the four expectations moved on its own, the oversampling dropped entirely,
+  and `max` replaced by `mean`. Two of the first attempts were no-op
+  mutations, caught by the md5-before-and-after guard rather than printed as
+  confident SURVIVED lines, which is the third time that trap has been hit
+  here.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows
