@@ -569,6 +569,18 @@ Gabriel shares them. `Artifact` with `action: "list"` finds their URLs; publish
 with the same URL to update one in place, and read it with WebFetch first,
 because the tool refuses to overwrite a version this session has not seen.
 They are copies, not the source: fix `docs/`, then rederive and republish.
+
+**Publishing by bare file path only keeps the URL while this session still holds
+that path's mapping, and it does not always.** Republishing
+`arts/loudness.html` by path created a *second* artifact under the same title
+instead of updating `d84def54`, in the same run where four sibling files
+published by path kept their URLs. There is no delete action, so the duplicate
+is permanent: `6a57bf35-bd5c-4ccf-83d6-5d8dac5ddabd`, private and orphaned.
+Pass `url` explicitly for every republish unless this session published that
+exact path itself and you can see it in the transcript. The refusal that
+follows is the normal path, not a problem: read the live version, diff it
+against the derived copy, confirm the only published-only lines are the ones
+being replaced, then publish.
 Meta tags in the derived copies do nothing there, since the host supplies its
 own document head, so a docs change that only touches `<head>` is not a reason
 to republish all seven.
