@@ -208,10 +208,22 @@ const PROBE = () => {
   // rendered before believing an empty list of failures.
   console.log("\n=== contrast after a real measurement ===");
   const FIX = path.join(__dirname, "fixtures");
+  const settled = async (pg) => {
+    // Wait for a result to exist rather than for a fixed number of seconds.
+    // A hardcoded sleep makes a slow runner look like a page that rendered
+    // nothing, which would fail the evidence check for a reason that has
+    // nothing to do with the page.
+    await pg.waitForFunction(
+      () => document.querySelectorAll(".pill, [class*=pill]").length > 0,
+      null, { timeout: 60000 },
+    ).catch(() => {});
+    await pg.waitForTimeout(400);
+  };
   const measured = async (scheme, label, drive) => {
     const c = await browser.newContext({ colorScheme: scheme, viewport: { width: 1200, height: 900 } });
     const pg = await c.newPage();
     await drive(pg);
+    await settled(pg);
     const shown = await pg.evaluate(() =>
       document.querySelectorAll(".pill, [class*=pill]").length);
     // Positive evidence the run produced something. Without this an empty
@@ -229,7 +241,6 @@ const PROBE = () => {
     ["loudness", async pg => {
       await pg.goto("file://" + path.join(ROOT, "loudness.html"));
       await pg.setInputFiles("input[type=file]", path.join(FIX, "loud_44100.wav"));
-      await pg.waitForTimeout(4000);
     }],
     ["delivery", async pg => {
       await pg.goto("file://" + path.join(ROOT, "delivery.html"));
@@ -239,12 +250,10 @@ const PROBE = () => {
         path.join(FIX, "rel_oddball_48000_16.wav"),
         path.join(FIX, "silence.wav"),
       ]);
-      await pg.waitForTimeout(6000);
     }],
     ["cover", async pg => {
       await pg.goto("file://" + path.join(ROOT, "cover.html"));
       await pg.setInputFiles("input[type=file]", path.join(FIX, "nonsquare.jpg"));
-      await pg.waitForTimeout(2500);
     }],
   ];
   for (const scheme of ["light", "dark"]) {
