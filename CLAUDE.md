@@ -53,19 +53,33 @@ These come from his operating profile and apply to anything leaving this repo:
 The site is five tools plus the shop and the Impressum: `cover.html`,
 `loudness.html`, `delivery.html` (a whole release at once, not one track),
 `release.html`, `splits.html`, `shop.html`, `impressum.html`, with `index.html`
-as the landing page. `docs/share*.png` are the link-preview images, one per
-page, drawn by `tools/make_share_card.py`. They are committed rather than built
-in CI because they use a system font and would come out slightly different on
-every runner. `share.png` keeps its bare name because it is in every link
-already shared; `impressum.html` borrows it rather than having its own.
+as the landing page and `404.html` catching everything else.
+
+`docs/share*.png` are the link-preview images, one per page, drawn by
+`tools/make_share_card.py`. `favicon.svg`, `favicon.ico` and
+`apple-touch-icon.png` are drawn by `tools/make_favicon.py`. All of them are
+committed rather than built in CI because they use a system font, and a build
+step would produce slightly different files on every runner. `share.png` keeps
+its bare name because it is in every link already shared; `impressum.html` and
+`404.html` borrow it rather than having their own.
 
 Adding a page means more than writing it: `consistency_check.py` requires the
 Open Graph set on every page, requires `sitemap.xml` to list exactly the pages
 that exist, requires a structured-data block that matches the page's own title,
-description and canonical, requires a preview image that exists and is not
-shared with another page, and requires the README to link it. So a new page
-fails CI until all of that is done. That is the point. `delivery.html` shipped
-unlisted for three commits before the first of those checks existed.
+description and canonical, requires a preview image that exists, is not shared
+with another page and records that page in its own bytes, requires the three
+icon links, and requires the README to link it. So a new page fails CI until
+all of that is done. That is the point. `delivery.html` shipped unlisted for
+three commits before the first of those checks existed.
+
+`404.html` is the one page exempt from three of those, and each exemption is
+named in the file with its reason rather than being a widened rule: no
+structured data (an error state is not a thing, and describing it would assert
+a page exists at whatever URL was mistyped), no card of its own, and out of the
+sitemap plus a `noindex`, because an indexed error page competes in search with
+the pages it exists to rescue people to. `sync_artifacts.py` skips it too: an
+artifact is one page reached by its own URL, and nobody arrives at one by
+mistyping.
 
 ## Testing
 
@@ -326,6 +340,63 @@ which made them useless as gates. Keep them asserting.
   see them. As of 23 August 2026 both are empty, which is why the repo shows
   up in GitHub search as a bare name. Only Gabriel can fill them in; the text
   to paste is in the launch-kit artifact.
+- **A picture of a claim needs the claim recorded in it.** The preview cards
+  restate each page's headline and description, and the checks asserted the
+  file existed, was unique, was referenced and had matching alt text. None of
+  them asked whether it said what the page says. Editing `loudness.html`'s
+  `<h1>` left its card showing the old headline and all 250 checks passed, plus
+  the a11y suite. Each card now carries the strings it was drawn from in PNG
+  iTXt chunks, and `consistency_check.py` parses them out of the raw bytes with
+  `struct` and `zlib` rather than through Pillow, even though Pillow is
+  installed in that job: a check that trusts the library the generator wrote
+  with can only confirm that library round-trips. Same reason the preview
+  checks do not import `make_share_card.py`.
+
+  The source *page* is recorded as well as the text, because with only the text
+  compared, swapping two cards is caught but copying one over another whose
+  headline happens to match is not.
+- **A containment test against a short common word cannot fail for the reason
+  it exists.** The alt-text check asked whether the owning page's title
+  appeared anywhere in the alt. "Preflight" is a substring of nearly any
+  sentence about this site, so it passed `impressum.html` while that page's alt
+  still described the card as it looked before the cards were redrawn: a screen
+  reader there was handed a description of an image that was not on the page.
+  It now compares against the headline the card itself records. When you write
+  a containment check, ask what string would fail it, and if the answer is
+  "almost nothing", it is not a check.
+- **`cmd | tail -3; echo $?` reports tail's status, not cmd's.** Used exactly
+  that to confirm `sync_artifacts.py --check` still exits non-zero on an orphan,
+  read `exit=0`, and nearly recorded a working guard as broken. Capture it:
+  `out=$(cmd 2>&1); rc=$?`. This is the same family as the two ways the mutation
+  measurement lies, already above.
+- **A generator that draws past the edge is the crop bug's twin.** `_wrap`
+  breaks on spaces, so a word wider than the column comes out on a line of its
+  own and stays too wide: measured, a 38-character word at 60px produced a
+  1277px line in a 1056px column, drawn straight off the card. One version
+  cropped the text and said it worked, this one overflowed it and said it
+  worked. `_overflows()` now measures every line, the headline loop tries
+  smaller sizes, and a sentence containing an unbreakable word is not a fit.
+- **Pillow's ICO save will not upscale, and says nothing when it drops sizes.**
+  `frames[0].save(path, sizes=[(16,16),(32,32),(48,48)], append_images=...)`
+  with a 16px base wrote a single-size `.ico` and reported success. The largest
+  frame has to be the base. Each entry is still drawn natively at its size
+  rather than downsampled, which is what keeps 16px crisp: a 64px master
+  resized to 16 put 2.5px bars across pixel boundaries and produced a pale
+  smear. Found by opening it at 8x, which is the only way to see a favicon.
+- **Three things in `docs/` are committed rather than built, and each now has a
+  test that they match their generator.** `share*.png` (system font),
+  `favicon.svg`, `favicon.ico` and `apple-touch-icon.png` (same). Committing
+  means the file that ships is the file someone looked at, which is only true
+  while the committed bytes and the generator agree, and until 23 August 2026
+  nothing said they did. `tests/test_make_share_card.py` and
+  `tests/test_make_favicon.py` regenerate into a tmp dir and compare bytes. If
+  you add another committed asset, add that test with it.
+- **The icons are drawn from one 16-pixel grid, not from the SVG.** Deriving
+  the raster sizes from the SVG's 32-unit grid rounded two bars into contact
+  and the icon stopped being four bars. The grid in `make_favicon.py` is chosen
+  by hand and every other size is a whole multiple of it, including the SVG.
+  The home-screen icon keeps a 10 per cent margin because iOS masks its corners
+  off; drawn full bleed first, and the outer bars ran into all four edges.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
