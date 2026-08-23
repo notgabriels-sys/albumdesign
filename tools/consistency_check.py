@@ -480,6 +480,7 @@ def main() -> int:
         for page in ("cover.html", "loudness.html", "release.html",
                      "delivery.html", "splits.html")
     }
+    bylines = 0
     for name in TOOL_PAGES:
         body = src[name]
         missing = [
@@ -506,6 +507,35 @@ def main() -> int:
             not wrong,
             "named differently here than on index.html: " + ", ".join(wrong),
         )
+        # And signs itself with that name too.
+        #
+        # The rename reached the navs, the cards and the structured data, and
+        # stopped at the byline in each page's own footer, so every tool page
+        # ended with a line calling itself something the site no longer calls
+        # anything: "Split Sheet: a free tool by Gabriel G Alonso" at the foot
+        # of Split Sheet Maker. Found by rendering the page and looking at it,
+        # with 353 checks green.
+        #
+        # A page naming its four siblings wrongly is bad. A page naming itself
+        # wrongly, in the last line a visitor reads, is worse, and it was the
+        # one place nothing looked.
+        signed = re.search(r"<span>([^<]*): a free tool by", body)
+        if signed:
+            bylines += 1
+        check(
+            f"{name} signs its footer with its own name",
+            signed is not None and signed.group(1) == TOOL_PAGES[name],
+            f"the page is called {TOOL_PAGES[name]!r}, its footer byline reads "
+            f"{signed.group(1)!r}" if signed else
+            "no byline found at all, so the footer markup has drifted",
+        )
+
+    check(
+        "the footer-byline scan fired at all",
+        bylines == len(TOOL_PAGES),
+        f"found a byline on {bylines} of {len(TOOL_PAGES)} tool pages, so the "
+        f"markup this reads has drifted and the check is comparing nothing",
+    )
 
     print("\n=== structured data says what the page itself says ===")
     # No page carried any. Five distinct free tools and a rate card were being
