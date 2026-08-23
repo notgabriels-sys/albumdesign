@@ -171,6 +171,19 @@ which made them useless as gates. Keep them asserting.
   baseline ran something. And the first term in a disjunction has no leading
   `or`, so a regex written for the rest mutates nothing; assert the mutation
   changed the file. The driver in this repo's history did both.
+
+  The same sweep run against the browser pages found the same shape, and the
+  last two survivors were both in `loudness.html`'s platform table. Deleting
+  `if(p.attenuateOnly&&gain>0) gain=0;` printed `+7.0 dB` in Apple Music's gain
+  column beside the words `as-is, never boosted`, and every existing assertion
+  passed, because the label is computed from the unclamped `p.t-LUFS` while only
+  the number moves. Replacing the pill ternary with a flat `"pass"` showed six
+  platforms a pass pill next to `turned down` on a -1.5 LUFS master, because
+  nothing read the pill's class, only its text. Both are pinned now: the gain
+  column and the pill state are asserted, not just the wording beside them.
+  All six loudness mutations are caught. Where a page states a verdict in more
+  than one place, assert every place, because a test reading only the friendly
+  one passes while the number beside it says the opposite.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
