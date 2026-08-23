@@ -53,15 +53,19 @@ These come from his operating profile and apply to anything leaving this repo:
 The site is five tools plus the shop and the Impressum: `cover.html`,
 `loudness.html`, `delivery.html` (a whole release at once, not one track),
 `release.html`, `splits.html`, `shop.html`, `impressum.html`, with `index.html`
-as the landing page. `docs/share.png` is the link-preview image, drawn by
-`tools/make_share_card.py`. It is committed rather than built in CI because it
-uses a system font and would come out slightly different on every runner.
+as the landing page. `docs/share*.png` are the link-preview images, one per
+page, drawn by `tools/make_share_card.py`. They are committed rather than built
+in CI because they use a system font and would come out slightly different on
+every runner. `share.png` keeps its bare name because it is in every link
+already shared; `impressum.html` borrows it rather than having its own.
 
 Adding a page means more than writing it: `consistency_check.py` requires the
-Open Graph set on every page and requires `sitemap.xml` to list exactly the
-pages that exist, so a new page fails CI until both are done. That is the
-point. `delivery.html` shipped unlisted for three commits before the check
-existed.
+Open Graph set on every page, requires `sitemap.xml` to list exactly the pages
+that exist, requires a structured-data block that matches the page's own title,
+description and canonical, requires a preview image that exists and is not
+shared with another page, and requires the README to link it. So a new page
+fails CI until all of that is done. That is the point. `delivery.html` shipped
+unlisted for three commits before the first of those checks existed.
 
 ## Testing
 
@@ -274,6 +278,54 @@ which made them useless as gates. Keep them asserting.
   that is the regex having drifted off the markup again. The scan is also
   deliberately wider than the payment-anchor one, since the original mismatch
   was a *label* problem and a label does not have to sit on a link to mislead.
+- **A fact restated somewhere else is a fact that can drift.** Structured data
+  and the preview cards both restate what a page already says, which is the
+  same shape as the EUR 25 button over a EUR 1,200 charge. So neither is typed
+  by hand: `make_share_card.py` and the JSON-LD both read the page's own
+  `<title>`, `<h1>`, meta description and canonical, and the shop's prices come
+  out of its rate table. `consistency_check.py` then asserts the two agree, in
+  both directions for the prices. If you add a field, read it, do not retype it.
+
+  Two things the shop's block deliberately does **not** carry. No VAT flag of
+  any kind: under §19 no VAT is charged, so neither `included` nor `excluded`
+  is true, and a tax treatment contradicting the Kleinunternehmer line sat on
+  that page once already. And `impressum.html` carries no structured data at
+  all, because it holds his residential address and a machine-readable graph is
+  a different thing from a legal notice. A check asserts that stays absent, so
+  the exemption cannot quietly become an oversight.
+
+  The mutation sweep found one hole worth remembering: reordering only the
+  `position` fields in the landing page's `ItemList` left every URL in place
+  and passed, because that check reads URLs while a consumer of the graph reads
+  `position`. Both are asserted now. The general form is the one already in
+  this file: where a thing is stated in more than one place, assert every place.
+- **A generator that crops rather than fails will ship the crop.** The first
+  version of the per-page share cards wrapped the description to a guessed
+  character count and then sliced the line list, so the loudness card read
+  `Measure a master's integrated LUFS and true peak the way the` and stopped.
+  It looked broken in the one place a reader decides whether to click. It now
+  adds whole sentences, measures in pixels, and raises if not even the first
+  sentence fits, because the fix belongs in the page's description and not in
+  a slice.
+
+  The same card had the meter bars drawn full height on the right and the text
+  then measured as if they were not there, so the tallest bar ran straight
+  through the headline. Decoration drawn first does not move text drawn second.
+
+  Both were found by opening the PNG, not by reading the code, and both were in
+  code written minutes earlier. Look at the output.
+- **The README is a page too.** It is the front page of a public repository,
+  so a stranger meets the project there, and it had no route to the rates while
+  every tool page had one. It is also a hand-maintained list of URLs next to a
+  directory of files, and nobody clicks their own README, so a page renamed in
+  `docs/` would leave a dead link there silently. `consistency_check.py` now
+  reads `README.md` and asserts every page it links to exists, that the five
+  tools are all linked, and that the shop is.
+- **The repository's About box and topics are not in the repo.** They are
+  settings, so nothing in `docs/` or `tools/` can set them and no check can
+  see them. As of 23 August 2026 both are empty, which is why the repo shows
+  up in GitHub search as a bare name. Only Gabriel can fill them in; the text
+  to paste is in the launch-kit artifact.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
