@@ -331,6 +331,27 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(trTp > -4, `the transient sets the peak -> ${trTp} dBTP`);
   ok(trTp - trLufs > 15, `peak and loudness are separate measurements (${(trTp - trLufs).toFixed(1)} dB apart)`);
 
+  // A track nobody could measure must be a warning, never a pass. That defect
+  // shipped here once: the over-the-ceiling list was filtered on isFinite while
+  // the check was still scored pass, so a release whose peaks all failed to
+  // measure was told every track sat under its ceiling, with the column blank
+  // above the sentence.
+  //
+  // The fix was made and never tested on this page. silence.wav went to
+  // loudness.html and nowhere else, so nothing here would have noticed the
+  // regression. A silent bounce is not hypothetical either: a master fader left
+  // down, or the wrong region exported, and the release ships as silence.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'silence.wav']);
+  ok(d.rows.length === 2, `the silent file is still listed (${d.rows.length} rows)`);
+  const silent = d.rows.find(r => /silence/.test(r[0]));
+  ok(silent !== undefined, 'the silent file appears in the table by name');
+  ok(!/^-?\d/.test(silent[5]),
+     `its loudness column states no value rather than a number -> "${silent[5]}"`);
+  ok(dcheck(d, 'loudness measured').pill === 'WARN',
+     `a track nobody could measure warns -> loudness measured ${dcheck(d,'loudness measured').pill}`);
+  ok(d.verdict !== 'Ready to deliver',
+     `a release holding an unmeasurable track is not ready -> verdict "${d.verdict}"`);
+
   // A file name is the only attacker-shaped text this page handles, and it goes
   // into a single-quoted title attribute. With ' missing from the escape set,
   // this name closed the attribute and added a live onmouseover handler.

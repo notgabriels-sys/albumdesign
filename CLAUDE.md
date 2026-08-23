@@ -409,6 +409,45 @@ which made them useless as gates. Keep them asserting.
   by hand and every other size is a whole multiple of it, including the SVG.
   The home-screen icon keeps a 10 per cent margin because iOS masks its corners
   off; drawn full bleed first, and the outer bars ran into all four edges.
+- **The two browser suites were swept on 23 August 2026 and do guard.** Every
+  mutation below was caught, so this does not need redoing: contrast dropped
+  below AA, an `h1` removed, the `main` landmark removed, a heading level
+  skipped, K-weighting bypassed, the integrated gate removed, true peak
+  replaced by sample peak, CMYK downgraded to a pass, an unrecognised file
+  called a pass, the severity ranking flattened, and the square check forced
+  true. `verify_lufs.py` was checked the same way and exits 1 when only the
+  expectation moves.
+
+  One gap was real and is now closed. `silence.wav` went to `loudness.html`
+  and nowhere else, so the delivery page's "a track nobody could measure is a
+  warning, never a pass" behaviour, the exact defect recorded further up this
+  file as fixed, had no test on that page. A silent bounce is not hypothetical:
+  a master fader left down and the release ships as silence. Two mutations now
+  fail, downgrading the warning to a pass and dropping unmeasured tracks from
+  the list.
+
+  A live true peak cannot actually be non-finite, because both `log10` calls
+  add `1e-12`, so a silent file reads -240 dBTP rather than -Infinity. The
+  `isFinite(r.tp)` terms are therefore unreachable siblings of the `null`
+  checks beside them, in the same position as the `isFinite` in `splits.html`:
+  left in place, not pinned, and written down here so the next sweep does not
+  mistake them for a hole.
+- **Three ways a mutation measurement lied, all hit on one afternoon.** The two
+  already above are a `-k` selector matching nothing and a regex that mutates
+  nothing. Two more, both mine:
+
+  A harness that counts `FAIL` lines reads a *crash* as a clean run. Forcing
+  every `isFinite` in `delivery.html` to true printed "0 FAIL" because the
+  suite had aborted. Require positive evidence the run finished.
+
+  Then the fix for that was itself wrong: it grepped for `CHECKS FAILED` while
+  `browser_test.js` prints `2 CHECK(S) FAILED`, so a genuine failure was read
+  as a crash. Assert on the exit code, which is unambiguous, rather than on
+  text you did not go and look at.
+
+  And before any of it, two mutations targeted `kFilter` and `verdictFor`,
+  neither of which exists: the real names are `kWeight` and an inline `sev`
+  table. Both printed a confident SURVIVED over a file nothing had touched.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
