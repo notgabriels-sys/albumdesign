@@ -594,13 +594,51 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(!sp.pass, `150 and -50 does not pass just because it totals 100 (${sp.text})`);
   ok(/negative/i.test(sp.issues), `it names the negative share -> "${sp.issues}"`);
 
+  // Named for the unreadable branch, but that is not what it exercises:
+  // input[type=number] sanitises "abc" to "", so this reaches problems() as a
+  // missing share. Kept because it is the path a real typo takes, and renamed
+  // so it stops claiming coverage it does not have. See the comment on the
+  // isFinite branch in splits.html.
   sp = await split(['50', '50', 'abc']);
-  ok(!sp.pass, `a third writer whose share cannot be read does not pass (${sp.text})`);
+  ok(!sp.pass, `a share the number input rejected does not pass (${sp.text})`);
   ok(/Person 3/.test(sp.issues), `it names the row -> "${sp.issues}"`);
 
   sp = await split(['100', '']);
   ok(!sp.pass, `a named person with no share entered does not pass (${sp.text})`);
   ok(/Person 2/.test(sp.issues), `it names the person -> "${sp.issues}"`);
+
+  // Every failing fixture above totals exactly 100, so the term that checks
+  // the shares add up was never exercised: a mutation sweep deleted `totals`
+  // from `ok=totals&&!probs.length`, and separately forced it true, and both
+  // survived a green suite. Telling you the sheet does not add up is the
+  // page's whole job.
+  sp = await split(['50', '40']);
+  ok(!sp.pass, `90% does not pass just because every row is readable (${sp.text})`);
+  ok(sp.issues === '', 'a short total is not blamed on a row that is fine');
+  ok(/must total 100/.test(sp.text), `the badge says what is wrong -> "${sp.text}"`);
+
+  sp = await split(['60', '60']);
+  ok(!sp.pass, `120% does not pass either (${sp.text})`);
+
+  // The helper always filled in a name, so a share with no name against it was
+  // never tested. It is the row the exported sheet used to drop while sum()
+  // kept counting its share, so the listing did not add up to its own total.
+  const noName = await page.evaluate(() => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    ['50', '50'].forEach(() => document.getElementById('addw').click());
+    const trs = [...tb.querySelectorAll('tr')];
+    trs[0].querySelector('.f-name').value = 'Person 1';
+    trs[0].querySelector('.f-pct').value = '50';
+    trs[1].querySelector('.f-name').value = '';
+    trs[1].querySelector('.f-pct').value = '50';
+    trs[0].dispatchEvent(new Event('input', { bubbles: true }));
+    const b = document.getElementById('wtotal');
+    return { pass: b.className.includes('pass'), text: b.textContent.trim(),
+             issues: document.getElementById('rowissues').textContent.trim() };
+  });
+  ok(!noName.pass, `a share with nobody's name on it does not pass (${noName.text})`);
+  ok(/has no name/.test(noName.issues), `it says whose share is unattributed -> "${noName.issues}"`);
 
   // A blank form is someone starting work, not a mistake to shout about.
   const blank = await page.evaluate(() => {
@@ -611,6 +649,130 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
     return document.getElementById('rowissues').textContent.trim();
   });
   ok(blank === '', `an untouched empty row raises nothing (got "${blank}")`);
+
+  // ---- a blank share must not become a zero share by being saved ----
+  // readRow kept parseFloat(x)||0 after sum() and problems() were fixed for
+  // it, and readRow is what feeds save(). A blank box persisted as 0, so a
+  // reload turned "nobody entered this" into "this person gets nothing", the
+  // badge went fail -> pass, and the warning naming the row disappeared. The
+  // badge fix was undone by pressing reload. Proved in Chromium before fixing.
+  console.log('\n=== a blank share survives a reload as a blank share ===');
+  await page.goto('file://' + path.join(DOCS, 'splits.html'));
+  await page.waitForTimeout(200);
+  const beforeReload = await page.evaluate(() => {
+    const tb = document.getElementById('writers');
+    tb.innerHTML = '';
+    ['100', ''].forEach(() => document.getElementById('addw').click());
+    [...tb.querySelectorAll('tr')].forEach((tr, i) => {
+      tr.querySelector('.f-name').value = 'Person ' + (i + 1);
+      tr.querySelector('.f-pct').value = ['100', ''][i];
+    });
+    tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+    const b = document.getElementById('wtotal');
+    return { shares: [...tb.querySelectorAll('.f-pct')].map(i => i.value),
+             pass: b.className.includes('pass') };
+  });
+  ok(!beforeReload.pass, 'the sheet fails before the reload');
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll('#writers tr').length > 0);
+  await page.waitForTimeout(200);
+  const afterReload = await page.evaluate(() => {
+    const tb = document.getElementById('writers');
+    const b = document.getElementById('wtotal');
+    return { shares: [...tb.querySelectorAll('.f-pct')].map(i => i.value),
+             pass: b.className.includes('pass'),
+             issues: document.getElementById('rowissues').textContent.trim() };
+  });
+  ok(afterReload.shares[1] === '',
+     `the empty share is still empty after a reload -> ${JSON.stringify(afterReload.shares)}`);
+  ok(!afterReload.pass, 'and the sheet still fails, rather than passing on an invented zero');
+  ok(/Person 2/.test(afterReload.issues),
+     `and it still names the person -> "${afterReload.issues}"`);
+
+  // ---- the sheet that leaves the browser says what the page knows ----
+  // asText() printed "0%" for a share nobody entered, put a signature line
+  // under it and totalled to 100, so the document read complete. It also
+  // dropped a row that had a share but no name while sum() still counted that
+  // share, so the listing did not add up to its own total. And Copy said only
+  // "Copied to the clipboard." where Print had always warned.
+  console.log('\n=== the exported split sheet states what the page knows ===');
+  {
+    const ex = await browser.newPage();
+    await ex.addInitScript(() => {
+      window.__clip = null;
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: (t) => { window.__clip = t; return Promise.resolve(); } },
+        configurable: true,
+      });
+    });
+    await ex.goto('file://' + path.join(DOCS, 'splits.html'));
+    await ex.waitForTimeout(200);
+    // clipboard.writeText resolves asynchronously, so the status line is still
+    // the previous run's when click() returns. Reading it straight away made
+    // one assertion pass on the message left by the fixture before it, which
+    // is the same read-the-wrong-thing defect the rest of this sweep is
+    // about. Clear it, then wait for the page to write a new one.
+    const fill = async (vals) => {
+      await ex.evaluate((vals) => {
+        const tb = document.getElementById('writers');
+        tb.innerHTML = '';
+        vals.forEach(() => document.getElementById('addw').click());
+        [...tb.querySelectorAll('tr')].forEach((tr, i) => {
+          tr.querySelector('.f-name').value = vals[i][0];
+          tr.querySelector('.f-pct').value = vals[i][1];
+        });
+        tb.querySelector('tr').dispatchEvent(new Event('input', { bubbles: true }));
+        window.__clip = null;
+        document.getElementById('live').textContent = '';
+        document.getElementById('copy').click();
+      }, vals);
+      await ex.waitForFunction(() => document.getElementById('live').textContent !== '');
+      return ex.evaluate(() => ({
+        clip: window.__clip,
+        live: document.getElementById('live').textContent.trim(),
+      }));
+    };
+
+    let e = await fill([['Person 1', '100'], ['Person 2', '']]);
+    const line2 = e.clip.split('\n').find(l => /Person 2/.test(l) && /·/.test(l));
+    ok(!/0%/.test(line2), `a share nobody entered is not exported as 0% -> "${line2}"`);
+    ok(/not filled in/.test(line2), `it says so instead -> "${line2}"`);
+    ok(/does not cover the sheet/.test(e.clip),
+       'the total discloses that it does not cover every row');
+
+    e = await fill([['Person 1', '50'], ['', '50']]);
+    ok(/name missing/.test(e.clip),
+       'a row with a share but no name is printed rather than dropped from the sheet');
+
+    // Copy hands out the same document Print does, so it says the same thing.
+    ok(/could not be read/.test(e.live),
+       `Copy warns like Print does -> "${e.live}"`);
+    // A genuinely clean sheet needs both sides filled: the recording table
+    // starts with one empty row, so filling only the composition side leaves
+    // the GVL half totalling 0 and the warning is right to fire. The first
+    // version of this fixture made that mistake and read as a false failure.
+    const clean = await ex.evaluate(() => {
+      [['writers', 'addw'], ['performers', 'addr']].forEach(([id, add]) => {
+        const tb = document.getElementById(id);
+        tb.innerHTML = '';
+        document.getElementById(add).click();
+        document.getElementById(add).click();
+        [...tb.querySelectorAll('tr')].forEach((tr, i) => {
+          tr.querySelector('.f-name').value = 'Person ' + (i + 1);
+          tr.querySelector('.f-pct').value = ['60', '40'][i];
+        });
+      });
+      document.querySelector('#writers tr').dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('live').textContent = '';
+      document.getElementById('copy').click();
+      return null;
+    });
+    await ex.waitForFunction(() => document.getElementById('live').textContent !== '');
+    const cleanLive = await ex.evaluate(() => document.getElementById('live').textContent.trim());
+    ok(cleanLive === 'Copied to the clipboard.',
+       `and a sheet with both sides at 100 copies without a warning -> "${cleanLive}"`);
+    await ex.close();
+  }
 
   // ---- a collaborator's name is attacker-shaped text ----
   // The rule in CLAUDE.md: any page echoing user text escapes the apostrophe
