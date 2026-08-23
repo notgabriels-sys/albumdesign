@@ -304,3 +304,11 @@ rate table agreeing across every page that quotes it, no unverified payment link
 reaching a page, the cover tool and the checklist not contradicting each other,
 and no page making a network call, which is what "nothing is uploaded" means.
 Each check is there because that exact thing broke once.
+
+---
+
+## Gabriel Tools + Code
+
+Part of Gabriel García Alonso's public tool/product ecosystem. Browse the master catalog for related audio tools, repositories, Hologram People soundware, and services:
+
+[Gabriel Tools + Code](https://gabriel-tools-and-code.notgabriels960914.chatgpt.site/)
