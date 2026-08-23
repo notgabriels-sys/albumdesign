@@ -448,6 +448,31 @@ which made them useless as gates. Keep them asserting.
   And before any of it, two mutations targeted `kFilter` and `verdictFor`,
   neither of which exists: the real names are `kWeight` and an inline `sev`
   table. Both printed a confident SURVIVED over a file nothing had touched.
+- **A name written twice drifts the moment you rename anything.** Retitling the
+  seven pages left every tool page calling its four siblings by names none of
+  them used any more, and left `index.html` naming the same five links one way
+  in its structured data and another on its own visible cards. All 329 checks
+  passed, because each check compared the copies with each other rather than
+  with the page. The sibling-name check was itself part of the problem: it
+  held a hardcoded label map, so the checker had retyped the names too.
+
+  A page's name is its `<title>`. `TOOL_PAGES` now derives from that, the
+  landing cards and the sibling navs use it, and three checks assert the card,
+  the structured list and the title agree. Read it, do not retype it, applies
+  to `consistency_check.py` as much as to the pages it checks.
+- **Two single-check families were vacuously true.** `len(addrs) <= 1` for the
+  contact address passes on an empty set: measured, stripping every `mailto:`
+  from all nine pages left 325 checks green with no way to reach him anywhere
+  on the site, and booking starts by email. The VAT check compared two sets
+  that were both empty once `Kleinunternehmer`, `UStG` and `VAT` were stripped
+  from the shop, so a page quoting prices as totals with the section 19 basis
+  missing passed too.
+
+  Both now assert the thing exists before comparing it, the address is checked
+  against the business one, and `notgabriels@gmail.com` is asserted to appear
+  on no page at all. Counting checks per family is what found these: no family
+  fires zero times, but three fired exactly once, and two of those three were
+  the dead-net shape wearing a passing result.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
