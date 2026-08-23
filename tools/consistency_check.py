@@ -237,13 +237,11 @@ def promised_amounts(body: str) -> list[str]:
     return [a for label in price_promises(body) for a in re.findall(r"€\s?([\d.,]+)", label)]
 
 
-# The Impressum is the one page with no structured data, deliberately. It is a
-# legal notice carrying his residential address, and putting that address into
-# a machine-readable graph is a decision about his personal data, not an SEO
-# improvement. Everything else on the site describes a tool or a service.
-# Pages that deliberately carry no structured data, and why. A set with no
-# reasons attached is how a deliberate exemption becomes an oversight nobody
-# can tell apart from a mistake, so each one has to say what it is.
+# Pages that deliberately carry no structured data, and why. This used to be a
+# bare set holding one name, with the reason in a comment above it. A set with
+# no reasons attached is how a deliberate exemption becomes an oversight nobody
+# can tell apart from a mistake, so each one now carries its own, and the check
+# prints it when it fires.
 NO_STRUCTURED_DATA = {
     "impressum.html": "it holds a residential address, and a machine-readable "
     "graph is a different thing from a legal notice",
