@@ -219,6 +219,24 @@ which made them useless as gates. Keep them asserting.
   The rule this leaves: when a fix lands on the on-screen verdict, check every
   other thing that reads the same data. The document that leaves the browser is
   the one that reaches GEMA and GVL, and it was the copy nobody fixed.
+- **`sync_artifacts.py` reported success over pages it never read.** Both its
+  modes loop over `pages()` and print their happy message after the loop, so an
+  empty loop printed it too. With a `docs/` holding no pages, `--check` exited
+  0 saying `artifact copies are current` and the write mode exited 0 saying
+  `written to ...`. The write mode is CI's `artifact copies derive cleanly`
+  step, so that green meant nothing had been derived rather than everything
+  deriving cleanly. It now exits 2 and names the directory it looked in.
+
+  `--check` also only ever asked whether each page's copy matched. Nothing
+  asked the reverse, so a page deleted from `docs/` left its derived copy in
+  the output directory and the check called the directory current with the
+  orphan sitting in it. Orphans are now named and fail the check, with
+  `RENAMED` accounted for so `preflight.html` and `coverforge.html` are not
+  mistaken for orphans of pages that do not exist under those names.
+
+  Both were proved by running them before the fix, and each new test was run
+  against the old file to confirm it fails there: five do, and the five that
+  guard the ordinary case pass either way, which is what they are for.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was

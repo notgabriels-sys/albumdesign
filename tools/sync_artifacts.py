@@ -89,8 +89,19 @@ def main() -> int:
     if not args.check:
         out.mkdir(parents=True, exist_ok=True)
 
+    # Both loops below report success on an empty loop, so a run that found no
+    # pages printed "artifact copies are current" and exited 0. The write mode
+    # is CI's "artifact copies derive cleanly" gate, so that green meant
+    # nothing was derived rather than everything derived cleanly. A check that
+    # read nothing has not checked anything.
+    found = pages()
+    if not found:
+        print(f"no pages found in {DOCS}", file=sys.stderr)
+        print("nothing was derived, so nothing was checked", file=sys.stderr)
+        return 2
+
     stale = []
-    for src_name, dst_name in pages().items():
+    for src_name, dst_name in found.items():
         page = DOCS / src_name
         if not page.exists():
             print(f"missing {page}", file=sys.stderr)
@@ -108,8 +119,22 @@ def main() -> int:
             dst.write_text(body, encoding="utf-8")
             print(f"  wrote  {dst}  (from docs/{src_name})")
 
-    if args.check and stale:
-        print(f"\n{len(stale)} artifact copies are stale: {', '.join(stale)}")
+    # A copy for a page that no longer exists is not "current" either. The
+    # loop only ever asked whether each page's copy matched, so a page deleted
+    # from docs/ left its derived copy sitting in the output directory and the
+    # check called the directory current with it there.
+    orphans = []
+    if args.check and out.is_dir():
+        expected = set(found.values())
+        orphans = sorted(p.name for p in out.glob("*.html") if p.name not in expected)
+        for name in orphans:
+            print(f"  ORPHAN {name}  (no page in docs/ derives this)")
+
+    if args.check and (stale or orphans):
+        if stale:
+            print(f"\n{len(stale)} artifact copies are stale: {', '.join(stale)}")
+        if orphans:
+            print(f"{len(orphans)} copies have no page behind them: {', '.join(orphans)}")
         return 1
     print("\nartifact copies " + ("are current" if args.check else f"written to {out}"))
     return 0
