@@ -550,6 +550,73 @@ def main() -> int:
     )
 
 
+    print("\n=== every page previews as itself ===")
+    # All eight pages pointed at one share.png. A link to the split sheet
+    # posted anywhere previewed as "Free tools for releasing music", which
+    # describes the site rather than the page, so the preview did none of the
+    # work a preview exists to do on the one screen where someone decides
+    # whether to click.
+    #
+    # This checks the published state rather than the generator's intent: that
+    # the file a page names is really in docs/, that its alt text describes
+    # that page's card, and that no card is sitting there unreferenced.
+    # make_share_card.py is not imported, so the two have to agree by both
+    # being right rather than by sharing a variable.
+    referenced: dict[str, str] = {}
+    for name, body in src.items():
+        card = re.search(r'<meta property="og:image" content="([^"]*)"', body)
+        check(f"{name} names a preview image", bool(card), "no og:image")
+        if not card:
+            continue
+        filename = card.group(1).rsplit("/", 1)[-1]
+        referenced[name] = filename
+        check(
+            f"{name}'s preview image exists in docs/",
+            (DOCS / filename).is_file(),
+            f"points at {filename}, which is not there, so the preview is blank",
+        )
+
+    # The Impressum is the one page that shares the site card. It is a legal
+    # notice, not something anyone posts a link to on purpose.
+    own_card = {n: c for n, c in referenced.items() if n != "impressum.html"}
+    check(
+        "no two pages share a preview image",
+        len(set(own_card.values())) == len(own_card),
+        f"{sorted(Counter(own_card.values()).items())}",
+    )
+    check(
+        "the preview-image scan fired at all",
+        bool(referenced),
+        "zero pages examined, so the og:image regex has drifted off the markup",
+    )
+
+    orphans = sorted(
+        p.name
+        for p in DOCS.glob("share*.png")
+        if p.name not in set(referenced.values())
+    )
+    check(
+        "no preview image is sitting unreferenced in docs/",
+        not orphans,
+        f"{orphans}; a card nothing points at is a card nobody will ever see, "
+        f"and it publishes at a URL anyway",
+    )
+
+    # The alt describes the card, not the page, and those differ for the one
+    # page that borrows another's card. Checking it against its own title
+    # failed the Impressum for correctly describing the site card it points at.
+    owner = {filename: page for page, filename in own_card.items()}
+    for name, filename in referenced.items():
+        alt = _meta(src[name], r'<meta property="og:image:alt" content="([^"]*)"')
+        shown = page_identity(src[owner[filename]])["name"]
+        check(
+            f"{name}'s preview alt text describes the card it points at",
+            shown in alt and "Gabriel G Alonso" in alt,
+            f"alt {alt!r} does not name {shown!r}; the alt is what a screen "
+            f"reader gets instead of the image, so it has to match the image",
+        )
+
+
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged
     # EUR 1,200 for a different service. The amount a customer is promised has
