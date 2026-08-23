@@ -355,6 +355,18 @@ which made them useless as gates. Keep them asserting.
   The source *page* is recorded as well as the text, because with only the text
   compared, swapping two cards is caught but copying one over another whose
   headline happens to match is not.
+
+  **And then it failed on its own implementation the same day.** The card draws
+  three strings and recorded two: the title is printed as the eyebrow and went
+  unrecorded, so retitling a page left the old name on its card and all 318
+  checks passed. Fixed hours after the rule above was written into this file,
+  and the new check earned its keep immediately by firing on all seven cards
+  the moment the titles moved. When you write the check, enumerate what the
+  thing actually draws rather than what you were thinking about at the time.
+
+  The eyebrow is measured too. It shares its line with the wordmark and the
+  meter bars, so it has less room than anything else on the card, and a longer
+  title runs into them rather than off the edge.
 - **A containment test against a short common word cannot fail for the reason
   it exists.** The alt-text check asked whether the owning page's title
   appeared anywhere in the alt. "Preflight" is a substring of nearly any
