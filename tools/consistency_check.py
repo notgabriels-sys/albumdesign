@@ -330,6 +330,25 @@ def main() -> int:
                 "seen, so nothing compared a promise against the table",
             )
 
+    print("\n=== every tool offers a way to buy the paid work ===")
+    # The five free tools are the funnel, and none of them linked to the shop.
+    # Their only conversion path was a bare mailto, which asks a stranger to
+    # compose an email with no idea what it costs. Nobody arrives on the
+    # landing page: a search result or a forum link lands them straight on a
+    # tool, so that was where the paid work had to be reachable and was not.
+    #
+    # shop.html is the destination and impressum.html is a legal page, so
+    # neither needs to link to the shop. Everything else does.
+    for name, body in src.items():
+        if name in ("shop.html", "impressum.html"):
+            continue
+        check(
+            f"{name} links to the shop",
+            'href="shop.html"' in body,
+            "a page with no route to the rates converts nobody who lands on it "
+            "from search or a link",
+        )
+
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged
     # EUR 1,200 for a different service. The amount a customer is promised has
