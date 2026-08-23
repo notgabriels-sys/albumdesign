@@ -246,3 +246,56 @@ class TestAPayPalLinkChargesWhatTheButtonSays:
         # A page whose table could not be read is not a page whose amounts
         # agree with it.
         assert mismatches(page("https://paypal.me/gabrielgga00/45EUR"), "")
+
+
+class TestAPriceInAButtonMustMatchTheTable:
+    """The check for this fired zero times across the whole site.
+
+    Its pattern was `>\\s*(Pay[^<]{0,40})<`, anchored to a capital "Pay" at the
+    start of the text. The shop's buttons read "Mastering, pay EUR 45", so the
+    only things it matched were the two section labels, which name no amount.
+    The inner loop never ran, and a check written for the EUR 25 / EUR 1,200
+    wrong-checkout bug had never once executed while the suite reported "all
+    129 consistency checks passed".
+
+    Counted before fixing: 0 firings site-wide. After: 6.
+    """
+
+    TABLE_ROW = '<td class="n">€45</td>'
+
+    def promise(self, text: str) -> str:
+        return f'<a class="paylink" href="https://paypal.me/x/45EUR">{text}</a>'
+
+    def test_the_shops_own_buttons_are_seen(self):
+        shop = (ROOT / "docs" / "shop.html").read_text(encoding="utf-8")
+        assert cc.promised_amounts(shop), "the scan must reach the real buttons"
+
+    def test_it_sees_a_lowercase_pay_that_does_not_start_the_label(self):
+        # The exact shape the old pattern missed.
+        assert cc.promised_amounts(self.promise("Mastering, pay €45")) == ["45"]
+
+    def test_it_still_sees_the_old_shape(self):
+        assert cc.promised_amounts(self.promise("Pay €45")) == ["45"]
+
+    def test_a_label_naming_no_amount_promises_nothing(self):
+        assert cc.promised_amounts(self.promise("Pay by card, one track")) == []
+
+    def test_a_price_with_no_payment_word_is_not_a_promise(self):
+        # A rate table cell is not a promise; only the scan over the table
+        # should see those, or every row would be compared against itself.
+        assert cc.promised_amounts('<td class="n">€45</td>') == []
+
+    def test_payment_as_a_substring_does_not_trigger_it(self):
+        assert cc.promised_amounts(self.promise("Payment terms: €45")) == []
+
+    def test_every_amount_in_one_label_is_returned(self):
+        assert cc.promised_amounts(self.promise("pay €45 now, €160 later")) == ["45", "160"]
+
+    def test_the_real_pages_promise_only_amounts_their_tables_quote(self):
+        import re as _re
+
+        for page_path in (ROOT / "docs").glob("*.html"):
+            body = page_path.read_text(encoding="utf-8")
+            table = "".join(_re.findall(r'<td class="n">(€[\d.,]+)</td>', body))
+            for amount in cc.promised_amounts(body):
+                assert f"€{amount}" in table, f"{page_path.name} promises €{amount}"
