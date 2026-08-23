@@ -4,11 +4,11 @@ Preflight your release artwork, then export the whole per-platform delivery pack
 in one command.
 
 **Free browser tools, nothing to install:**
-[cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
-[LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
-[delivery check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
-[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
-[split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
+[Album Cover Size Checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
+[LUFS and True Peak Meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
+[Release Delivery Check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
+[Music Release Checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
+[Split Sheet Maker](https://notgabriels-sys.github.io/albumdesign/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.

@@ -943,6 +943,46 @@ def main() -> int:
             "a tool nobody can find from the front page of its own repository",
         )
 
+    # And calls it what it is called.
+    #
+    # "A name written twice drifts the moment you rename anything" was written
+    # about the tool pages naming each other, and the README was left out of
+    # that fix while being exactly the same shape: a hand-typed list of names
+    # beside a directory of pages. Renaming the pages left the front page of a
+    # public repository offering a "cover spec checker", a "delivery check" and
+    # a "split sheet", none of which is the name of anything on the site, and
+    # every README check passed because they only ever asked whether the URLs
+    # resolved.
+    #
+    # The link text is compared with the page's own <title>, the same source
+    # the landing cards and the sibling navs read.
+    #
+    # The shop is deliberately not held to this. Its link sits inside a
+    # sentence rather than in the list of names, and a sentence reading "the
+    # Mixing and Mastering Rates" to keep a check happy would be worse writing
+    # for no gain. That it is linked at all is checked above.
+    named = 0
+    for page, title in TOOL_PAGES.items():
+        texts = re.findall(
+            rf"\[([^\]]+)\]\(https://[^)]*albumdesign/{re.escape(page)}\)", readme
+        )
+        if texts:
+            named += 1
+        check(
+            f"the README calls {page} by its own name",
+            title in texts,
+            f"the README calls it {texts!r}; the page calls itself {title!r}, "
+            f"and a stranger meeting this project on its front page should be "
+            f"given the name they will see when they arrive",
+        )
+
+    check(
+        "the README's link-text scan fired at all",
+        named == len(TOOL_PAGES),
+        f"matched link text for {named} of {len(TOOL_PAGES)} tools, so the "
+        f"markdown-link pattern has drifted off the README",
+    )
+
 
     print("\n=== every card link quotes a price the page actually charges ===")
     # The failure this exists for: a button reading "Pay EUR 25" that charged

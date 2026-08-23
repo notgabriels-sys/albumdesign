@@ -335,6 +335,18 @@ which made them useless as gates. Keep them asserting.
   `docs/` would leave a dead link there silently. `consistency_check.py` now
   reads `README.md` and asserts every page it links to exists, that the five
   tools are all linked, and that the shop is.
+- **The README was left out of the rename, and every README check passed.**
+  The rule that a page's name is its `<title>` was applied to the tool pages
+  and the landing cards, and the README is the same shape: a hand-typed list of
+  names beside a directory of pages. It went on offering a `cover spec
+  checker`, a `delivery check` and a `split sheet`, none of which is the name
+  of anything on the site, on the front page of a public repository. The
+  checks were green because they only ever asked whether the URLs resolved.
+  The link text is now compared with each page's own title, and the scan
+  counts itself so a drifted markdown pattern fails instead of matching
+  nothing quietly. The shop link is deliberately exempt and the reason is in
+  the file: it sits inside a sentence rather than in the list of names.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows
