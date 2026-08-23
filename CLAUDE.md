@@ -149,6 +149,28 @@ which made them useless as gates. Keep them asserting.
   buffer that plants a sync every seven bytes defeated both. What works is
   gating the scan on the file declaring itself, an ID3 tag or a real frame at
   offset 0, plus the field validation. Do not loosen that back to a bare scan.
+- **A green suite is not evidence a guard is guarding.** Every verdict
+  function here is a disjunction, and a term can be deleted without any test
+  failing because a sibling term fires on the same fixture. Measured on 22
+  August 2026 by deleting each term in turn and running the suite:
+
+  | function | terms | survived before |
+  |---|---|---|
+  | `BundleAudit.ok` | 9 | 6 |
+  | `compare_manifests` has_issues | 12 | 10 |
+  | `verify` exit code | 2 | 1 |
+  | `check` exit code | 3 | 0 |
+
+  All are pinned now, each condition asserted alone against an otherwise clean
+  input so no sibling can mask it. `check` was already fine, so nothing was
+  added there. If you add a term to any of these, add the isolated test with
+  it, and confirm it fails when the term is removed.
+
+  Two ways the measurement lies, both hit here. A `-k` selector that matches
+  nothing prints confident SURVIVED lines over zero tests, so assert the
+  baseline ran something. And the first term in a disjunction has no leading
+  `or`, so a regex written for the rest mutates nothing; assert the mutation
+  changed the file. The driver in this repo's history did both.
 - **The Chromium install step in CI hangs sometimes.**
   `npx playwright install --with-deps chromium` takes about 25 seconds
   normally and has twice sat for 5 to 20 minutes on a PR while `main` was
