@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
 from . import imageops
 from .imageops import Encoded, SourceImage, human_bytes, slugify
-from .preflight import ERROR, Finding, check, cover_scale, worst_level
+from .preflight import ERROR, WARN, Finding, check, cover_scale, worst_level
 from .specs import Target
 
 
@@ -144,6 +146,32 @@ def output_name(slug: str, target: Target) -> str:
     return f"{slug}--{target.key}--{target.dimensions}.{target.extension}"
 
 
+def write_new_bytes(path: Path, data: bytes) -> None:
+    """Write a delivery file, refusing to follow a symlink that is already there.
+
+    Building into an existing directory is a supported flow, so the directory
+    can hold entries this build did not create. A plain write follows a symlink,
+    which let a planted link redirect a delivery file anywhere the user could
+    write, while the manifest still recorded it as part of the pack. O_NOFOLLOW
+    fails on the link itself instead.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise imageops.ImageError(
+                f"{path} is a symlink; refusing to write through it. "
+                "Remove it or build into a clean directory."
+            ) from None
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except OSError as exc:
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
+
+
 def build(
     src: SourceImage,
     targets: list[Target],
@@ -158,6 +186,24 @@ def build(
     if Path(slug).is_absolute() or "/" in slug or "\\" in slug:
         raise ValueError("slug must not be an absolute path or contain path separators")
     findings = check(src, targets, flatten_colour, allow_upscale)
+    # imageops builds the sRGB profile once at import and _encode_once embeds it
+    # only `if SRGB_BYTES`. When ImageCms cannot create one, that test silently
+    # skips, so every output shipped untagged and the build reported no warning
+    # at all: a clean run whose files were not what the run implies. Untagged
+    # artwork is interpreted differently from platform to platform, and this
+    # repo's byte-reproducibility guarantee rests on that profile being present
+    # with its timestamp zeroed. A conversion that did not happen is a warning
+    # that says so, never a silent success.
+    if imageops.SRGB_BYTES is None:
+        findings.append(
+            Finding(
+                WARN,
+                "srgb-profile-unavailable",
+                "no sRGB profile could be built here, so these files ship untagged. "
+                "Colour will drift between platforms and the output hashes will not "
+                "match a tagged build. Check that Pillow has working ImageCms.",
+            )
+        )
     result = BuildResult(source=src, slug=slug, out_dir=out_dir, findings=findings)
 
     renderable, skipped = plan(src, targets, findings, allow_upscale)
@@ -177,14 +223,19 @@ def build(
     result.source_sha256 = hashlib.sha256(raw).hexdigest()
 
     # Decode and colour-manage once, then resize per target.
-    normalised = imageops.normalise(src.path, flatten_colour, data=raw)
+    colour_notes: list[str] = []
+    normalised = imageops.normalise(
+        src.path, flatten_colour, data=raw, notes=colour_notes
+    )
+    for note in colour_notes:
+        result.findings.append(Finding(WARN, "colour-transform-degraded", note))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for target in renderable:
         rendered = imageops.render(normalised, target)
         encoded: Encoded = imageops.encode(rendered, target)
         path = out_dir / output_name(slug, target)
-        path.write_bytes(encoded.data)
+        write_new_bytes(path, encoded.data)
         result.outputs.append(
             Output(
                 target=target,
