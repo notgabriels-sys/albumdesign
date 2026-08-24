@@ -72,9 +72,29 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
         msg:  li.querySelector('.msg').textContent.trim(),
       })),
       platforms: [...document.querySelectorAll('.plat')].map(p => p.textContent.trim()),
+      // Read out of the element that holds it. Regexing the tile's whole text
+      // for /\bPass\b/ silently matches nothing, because the name runs
+      // straight into the verdict ("BandcampPass: 1400 floor") and "p" to "P"
+      // is not a word boundary. That assertion passed on every file, including
+      // ones where seven tiles said Pass.
+      platformVerdicts: [...document.querySelectorAll('.plat b')].map(b => b.textContent.trim()),
+      specs: [...document.querySelectorAll('#specs div')]
+        .map(row => row.querySelector('dt').textContent.trim() + '=' +
+                    row.querySelector('dd').textContent.trim()),
     }));
   };
   const check = (r, name) => r.checks.find(c => c.name.toLowerCase() === name);
+  // Same list, but an absence comes back as a value instead of undefined.
+  // Reading `.pill` off a check that a regression removed threw a TypeError and
+  // killed node, so a mutation sweep read the run as crashed rather than as a
+  // failing assertion: forcing every file down the undecodable path removed
+  // Square, Resolution and Colour from every result and took the suite with
+  // them. `check` deliberately still returns undefined, because the two
+  // assertions that test whether a check exists at all use `!!check(...)` and
+  // `!check(...)`, and a helper that always returned an object would make both
+  // of them vacuously true. Use `must` to read a field, `check` to ask whether
+  // there is one.
+  const must = (r, name) => check(r, name) || { pill: '(absent)', name, msg: '(absent)' };
 
   console.log('\n=== cover tool, real files ===');
   // ---- four verdicts nothing could make fail ----
@@ -83,44 +103,44 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   // "stop the cover checker calling unreadable files clear" was a deliberate
   // fix and nothing was holding it in place.
   let cov = await runCover('small_1000.jpg');
-  ok(check(cov, 'resolution').pill === 'FAIL',
-    `1000px is below the 1400 floor (resolution -> ${check(cov,'resolution').pill})`);
+  ok(must(cov, 'resolution').pill === 'FAIL',
+    `1000px is below the 1400 floor (resolution -> ${must(cov, 'resolution').pill})`);
 
   cov = await runCover('notanimage.jpg');
-  ok(check(cov, 'format').pill === 'FAIL',
-    `a file that is not an image has no usable format (format -> ${check(cov,'format').pill})`);
-  ok(check(cov, 'readable').pill === 'FAIL',
-    `and it is not readable either (readable -> ${check(cov,'readable').pill})`);
+  ok(must(cov, 'format').pill === 'FAIL',
+    `a file that is not an image has no usable format (format -> ${must(cov, 'format').pill})`);
+  ok(must(cov, 'readable').pill === 'FAIL',
+    `and it is not readable either (readable -> ${must(cov, 'readable').pill})`);
   ok(!/Ready to ship/.test(cov.verdict),
     `so it is not ready to ship ("${cov.verdict}")`);
 
   // 17 MB, over the 10 MB ceiling Ditto and DistroKid document.
   cov = await runCover('cmyk_nonsquare.tif');
-  ok(check(cov, 'filesize').pill === 'WARN',
-    `17 MB is over the documented ceiling (filesize -> ${check(cov,'filesize').pill})`);
+  ok(must(cov, 'filesize').pill === 'WARN',
+    `17 MB is over the documented ceiling (filesize -> ${must(cov, 'filesize').pill})`);
 
   let r = await runCover('good_3000.jpg');
-  ok(check(r, 'resolution').pill === 'PASS', `3000px JPEG -> resolution PASS (${check(r,'resolution').pill})`);
-  ok(check(r, 'format').pill === 'PASS', `3000px JPEG -> format PASS`);
+  ok(must(r, 'resolution').pill === 'PASS', `3000px JPEG -> resolution PASS (${must(r, 'resolution').pill})`);
+  ok(must(r, 'format').pill === 'PASS', `3000px JPEG -> format PASS`);
   ok(r.verdict === 'Ready to ship', `3000px JPEG -> verdict "${r.verdict}"`);
 
   r = await runCover('over_4000.jpg');
   // The ceiling is its own check, independent of the floor chain, so an image
   // can be both under the recommendation and over the ceiling and hear both.
   ok(!!check(r, 'oversize'), `4000px -> a separate oversize check fires`);
-  ok(check(r, 'oversize').pill === 'WARN', `4000px -> oversize WARN (the ceiling bug we fixed)`);
-  ok(/3000px ceiling/.test(check(r, 'oversize').msg), `4000px -> message names the 3000 ceiling`);
+  ok(must(r, 'oversize').pill === 'WARN', `4000px -> oversize WARN (the ceiling bug we fixed)`);
+  ok(/3000px ceiling/.test(must(r, 'oversize').msg), `4000px -> message names the 3000 ceiling`);
 
   r = await runCover('cmyk_3000.jpg');
-  ok(check(r, 'colour').pill === 'FAIL', `CMYK -> colour FAIL (${check(r,'colour').pill}: ${check(r,'colour').msg})`);
+  ok(must(r, 'colour').pill === 'FAIL', `CMYK -> colour FAIL (${must(r, 'colour').pill}: ${must(r, 'colour').msg})`);
 
   r = await runCover('nonsquare.jpg');
-  ok(check(r, 'square').pill === 'FAIL', `1200x1600 -> square FAIL`);
+  ok(must(r, 'square').pill === 'FAIL', `1200x1600 -> square FAIL`);
   ok(r.verdict === 'Not ready to upload', `non-square -> verdict "${r.verdict}"`);
 
   r = await runCover('alpha_3000.png');
-  ok(check(r, 'colour').pill === 'WARN', `RGBA PNG -> colour WARN (alpha)`);
-  ok(check(r, 'format').pill === 'WARN', `PNG -> format WARN (DistroKid documents JPG only)`);
+  ok(must(r, 'colour').pill === 'WARN', `RGBA PNG -> colour WARN (alpha)`);
+  ok(must(r, 'format').pill === 'WARN', `PNG -> format WARN (DistroKid documents JPG only)`);
 
   // SoundCloud split: a 3000px file over 2MB must fail SC upload only
   const scRow = r.platforms.find(t => /SoundCloud upload/.test(t));
@@ -146,10 +166,55 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(!/No blockers/.test(r.verdictSub), `undecodable file does not claim no blockers -> "${r.verdictSub}"`);
   ok(!!check(r, 'readable'), `undecodable file gets an explicit readable check`);
 
+  // ---- a header is not an image ----
+  // The guard above was `!w || !h`, which asks whether we have numbers rather
+  // than whether anything was measured, and a PNG IHDR supplies numbers for
+  // free. A 33-byte file holding a signature and an IHDR and no image data was
+  // reported as a 3000 x 3000 cover, "Good to go, with notes", with four
+  // checks passing and all seven platform tiles reading Pass.
+  //
+  // The verdict, the checks list, the spec table and the platform grid all
+  // state this, so all four are asserted. Fixing only the headline leaves a
+  // page whose first line says nothing was measured over seven tiles saying
+  // Pass on a size nobody read.
+  for (const [f, claim] of [['png_header_only.png', '3000'], ['png_claims_40000.png', '40000']]) {
+    r = await runCover(f);
+    ok(/Could not check/.test(r.verdict), `${f} -> verdict "${r.verdict}"`);
+    // Read once and default the message, because a mutation that deletes the
+    // readable check entirely made `must(r, 'readable').msg` throw, node died,
+    // and the sweep harness saw a run with no verdict line rather than a
+    // failing assertion. A test that crashes on the regression it exists to
+    // catch is not reporting, it is exiting.
+    const readable = must(r, 'readable');
+    ok(readable.pill === 'FAIL', `${f} -> readable FAIL (${readable.pill})`);
+    ok(new RegExp('header claims ' + claim).test(readable.msg),
+       `${f} -> the message names the ${claim}px claim as a claim -> "${readable.msg.slice(0, 60)}"`);
+    ok(!check(r, 'square') && !check(r, 'resolution'),
+       `${f} -> nothing grades a size that was never decoded (square/resolution absent)`);
+    ok(r.checks.every(c => c.pill !== 'PASS' || c.name === 'Filesize'),
+       `${f} -> the only PASS left is the byte count, which really was measured` +
+       ` -> ${r.checks.filter(c => c.pill === 'PASS').map(c => c.name).join(',') || 'none'}`);
+    const passing = r.platformVerdicts.filter(v => v === 'Pass');
+    ok(r.platformVerdicts.length === 7 && passing.length === 0,
+       `${f} -> no platform tile passes an unmeasured file (${passing.length} of ${r.platformVerdicts.length} do)`);
+    const dims = r.specs.find(x => x.startsWith('Dimensions='));
+    ok(/claimed, not decoded/.test(dims),
+       `${f} -> the spec table calls the size a claim -> "${dims}"`);
+  }
+
+  // The other half of the same guard: a file this browser really can decode
+  // must still be graded. Dropping the header numbers on every undecoded file
+  // is only correct while `decoded` is true for the files that decode.
+  r = await runCover('good_3000.jpg');
+  ok(must(r, 'resolution').pill === 'PASS',
+     `a file that does decode is still measured (resolution -> ${must(r, 'resolution').pill})`);
+  ok(r.platformVerdicts.filter(v => v === 'Pass').length > 0,
+     `and its platform tiles still pass (${r.platformVerdicts.join(',')})`);
+
   // Greyscale+alpha matched the grayscale branch first and lost the flatten
   // advice an RGBA file gets.
   r = await runCover('gray_alpha_3000.png');
-  ok(/[Ff]latten/.test(check(r, 'colour').msg), `grayscale+alpha still says flatten -> "${check(r,'colour').msg}"`);
+  ok(/[Ff]latten/.test(must(r, 'colour').msg), `grayscale+alpha still says flatten -> "${must(r, 'colour').msg}"`);
 
   // The verdict used to be computed from the checks alone, so it could call a
   // file ready while a platform tile below it read Fail.
