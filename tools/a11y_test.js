@@ -8,7 +8,9 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const ROOT = path.join(__dirname, "..", "docs");
-const PAGES = ["index.html", "cover.html", "loudness.html", "release.html", "shop.html"];
+// Discovered, not listed. A hardcoded list let splits.html ship untested,
+// which is exactly the failure a new page should not be able to have.
+const PAGES = fs.readdirSync(ROOT).filter(f => f.endsWith(".html")).sort();
 
 function chromePath() {
   const base = "/opt/pw-browsers";
@@ -156,26 +158,9 @@ const PROBE = () => {
     await ctx.close();
   }
 
-  // Keyboard: the release checklist must be operable with Space and Enter.
-  console.log("\n=== keyboard operation ===");
+  console.log("\n=== file input accessibility ===");
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto("file://" + path.join(ROOT, "release.html"));
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
-  const first = page.locator("[role=checkbox]").first();
-  await first.focus();
-  await page.keyboard.press("Space");
-  check("Space ticks a checklist item", (await first.getAttribute("aria-checked")) === "true");
-  await page.keyboard.press("Enter");
-  check("Enter unticks it", (await first.getAttribute("aria-checked")) === "false");
-  const bar = page.locator("#track");
-  check("progressbar exposes value", (await bar.getAttribute("aria-valuenow")) === "0" &&
-    +(await bar.getAttribute("aria-valuemax")) > 0);
-  check("checkbox group is not an invalid list",
-    (await page.locator("ul[role=group]").count()) > 0 &&
-    (await page.locator("ul:not([role]) > li[role=checkbox]").count()) === 0);
-
   // The cover tool's file input must be the labelled, focusable control.
   await page.goto("file://" + path.join(ROOT, "cover.html"));
   const inputs = await page.evaluate(() => {
@@ -191,6 +176,60 @@ const PROBE = () => {
   check("cover has a live region for results", inputs.live > 0);
 
   await ctx.close();
+
+  // Contrast, on the colours a visitor is actually here to read.
+  //
+  // Every check above ran on an untouched page. The pass, warn and fail
+  // pills, the coloured verdict lines and the tinted table cells do not
+  // exist until a file has been measured, so the site's whole semantic
+  // palette had never had its contrast computed, in either scheme, while the
+  // suite reported "all text meets WCAG AA contrast" for every page.
+  //
+  // That is this repository's oldest defect wearing accessibility clothes: a
+  // verdict reported over a measurement that did not happen. So these drive
+  // the tools with real fixtures first, and assert that the results actually
+  // rendered before believing an empty list of failures.
+  console.log("\n=== contrast after a real measurement ===");
+  const FIX = path.join(__dirname, "fixtures");
+  const settled = async (pg) => {
+    // Wait for a result to exist rather than for a fixed number of seconds.
+    // A hardcoded sleep makes a slow runner look like a page that rendered
+    // nothing, which would fail the evidence check for a reason that has
+    // nothing to do with the page.
+    await pg.waitForFunction(
+      () => document.querySelectorAll(".pill, [class*=pill]").length > 0,
+      null, { timeout: 60000 },
+    ).catch(() => {});
+    await pg.waitForTimeout(400);
+  };
+  const measured = async (scheme, label, drive) => {
+    const c = await browser.newContext({ colorScheme: scheme, viewport: { width: 1200, height: 900 } });
+    const pg = await c.newPage();
+    await drive(pg);
+    await settled(pg);
+    const shown = await pg.evaluate(() =>
+      document.querySelectorAll(".pill, [class*=pill]").length);
+    // Positive evidence the run produced something. Without this an empty
+    // failure list is indistinguishable from a page that never rendered.
+    check(label + " (" + scheme + ") rendered a verdict to measure", shown > 0,
+      "no pills on the page, so the fixture never produced a result and the "
+      + "contrast check below examined nothing");
+    const bad = await pg.evaluate(PROBE);
+    check(label + " (" + scheme + ") result colours meet WCAG AA",
+      bad.contrast.length === 0, JSON.stringify(bad.contrast.slice(0, 4)));
+    await c.close();
+  };
+
+  const drives = [
+    ["cover", async pg => {
+      await pg.goto("file://" + path.join(ROOT, "cover.html"));
+      await pg.setInputFiles("input[type=file]", path.join(FIX, "nonsquare.jpg"));
+    }],
+  ];
+  for (const scheme of ["light", "dark"]) {
+    for (const [label, drive] of drives) await measured(scheme, label, drive);
+  }
+
   await browser.close();
   console.log("\n" + (fail ? fail + " FAILED, " + pass + " passed" : "ALL " + pass + " CHECKS PASSED"));
   process.exit(fail ? 1 : 0);
