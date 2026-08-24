@@ -706,18 +706,74 @@
         chKeys.length<=1 ? (chKeys[0]==="2"?"every track is stereo":"every track has "+chKeys[0]+" channels")
         : "mixed channel counts: "+chKeys.join(", ")+". Worth checking that is deliberate");
 
+      // A file that decoded but holds almost nothing is a broken file, not a
+      // quiet one. Measured: a master cut to a third of its length by an
+      // interrupted copy decoded cleanly, reported 0:00 in the length column,
+      // passed sample rate, bit depth, channels, true peak and clipping, and
+      // was called "Deliverable, with notes". Nothing here read the length.
+      //
+      // 400 ms is not a taste threshold: it is what BS.1770 needs before it
+      // can produce an integrated reading at all, which is why loudness.html
+      // already refuses below it. Under that, nothing about the file can be
+      // measured and it is not a master.
+      var MIN_SEC=0.4;
+      var stubs=good.filter(function(r){return r.dur!=null&&isFinite(r.dur)&&r.dur<MIN_SEC});
+      if(stubs.length){
+        add("length","fail",
+          stubs.length+" track"+(stubs.length===1?" is":"s are")+" too short to be a master: "+
+          stubs.map(function(r){return r.name+" ("+r.dur.toFixed(2)+" s)"}).join(", ")+
+          ". Under the 400 ms BS.1770 needs, nothing can be measured from "+
+          (stubs.length===1?"it":"them")+". A file this short is usually a copy that was "+
+          "interrupted, so check the source before you deliver");
+      }
+
       var measured=good.filter(function(r){return r.lufs!=null&&isFinite(r.lufs)});
       // BS.1770 defines channel weights for mono, stereo, quad and 5.1 only, so
       // a 3- or 5-channel file is left unmeasured. Saying nothing let it sit
       // inside a "Ready to deliver" verdict with a blank LUFS cell, and it also
       // silently took the looser -1 dBTP ceiling, which is the one that applies
       // when the loudness is unknown.
+      //
+      // The reason has to be the real one. This said "truncated.wav (2
+      // channels). BS.1770 covers mono, stereo, quad and 5.1" about a stereo
+      // file, which tells an engineer their perfectly ordinary layout is
+      // unsupported when the actual problem was that the file was 0.33 s long.
+      // A wrong cause stated confidently, with a number beside it that makes
+      // the wrong cause look substantiated, is worse than no explanation.
       if(measured.length<good.length){
         var unmeasured=good.filter(function(r){return !(r.lufs!=null&&isFinite(r.lufs))});
+        var tooShort=unmeasured.filter(function(r){
+          return r.dur!=null&&isFinite(r.dur)&&r.dur<MIN_SEC});
+        var badCh=unmeasured.filter(function(r){return !CH_WEIGHTS[r.ch]});
+        var why=[];
+        if(tooShort.length) why.push(
+          tooShort.map(function(r){return r.name+" ("+r.dur.toFixed(2)+" s)"}).join(", ")+
+          ", shorter than the 400 ms BS.1770 needs");
+        if(badCh.length) why.push(
+          badCh.map(function(r){return r.name+" ("+r.ch+" channels)"}).join(", ")+
+          ", a layout BS.1770 has no weights for; it covers mono, stereo, quad and 5.1");
+        // Digital silence has no cause to report from the loudness side: the
+        // absolute gate at -70 LUFS discards every block, so there is no
+        // integrated value to give. But the reason is knowable from the peak,
+        // and it is the single most useful thing this page can say. A master
+        // fader left down produces exactly this, and the release ships as
+        // silence. -100 dBTP is below the noise floor of any real format, so
+        // nothing audible is in the file at all.
+        var silent=unmeasured.filter(function(r){
+          return r.tp!=null&&isFinite(r.tp)&&r.tp<-100&&
+                 !(r.dur!=null&&isFinite(r.dur)&&r.dur<MIN_SEC)});
+        if(silent.length) why.push(
+          silent.map(function(r){return r.name}).join(", ")+
+          ", silent, or so close to it that nothing registers. A master fader left "+
+          "down produces exactly this, so play the bounce before you deliver");
+        var rest=unmeasured.filter(function(r){
+          return !(r.dur!=null&&isFinite(r.dur)&&r.dur<MIN_SEC)&&CH_WEIGHTS[r.ch]&&
+                 !(r.tp!=null&&isFinite(r.tp)&&r.tp<-100)});
+        if(rest.length) why.push(
+          rest.map(function(r){return r.name}).join(", ")+", for a reason this page could not establish");
         add("loudness measured","warn",
           unmeasured.length+" track"+(unmeasured.length===1?"":"s")+" could not be measured: "+
-          unmeasured.map(function(r){return r.name+" ("+r.ch+" channels)"}).join(", ")+
-          ". BS.1770 covers mono, stereo, quad and 5.1, so the loudness checks below leave "+
+          why.join("; ")+". The loudness checks below leave "+
           (unmeasured.length===1?"it":"them")+" out");
       }
       if(measured.length>1){

@@ -235,6 +235,18 @@ _write_wav(
 
 # Edge cases: silence and a clip shorter than the 400 ms BS.1770 block. Both
 # used to render "+Infinity dB" in the platform table.
+# A master cut off partway through, which is what an interrupted copy leaves
+# behind and the single most common broken file in the wild. It decodes, its
+# header is intact, and everything except its length looks like a real track:
+# the delivery page passed sample rate, bit depth, channels, true peak and
+# clipping on this and called it "Deliverable, with notes" with 0:00 in the
+# length column, because nothing read the length.
+_write_wav(d / "rel_full_44100_16.wav", 44100, 2, 1, 10 ** (-6.0 / 20.0))
+_full = (d / "rel_full_44100_16.wav").read_bytes()
+(d / "rel_truncated_44100_16.wav").write_bytes(_full[: len(_full) // 3])
+(d / "rel_full_44100_16.wav").unlink()
+
+
 for name, secs in (("silence.wav", 4), ("tiny_200ms.wav", 0.2)):
     with wave.open(str(d / name), "w") as w:
         w.setnchannels(2)
