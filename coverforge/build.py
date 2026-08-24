@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
 from . import imageops
 from .imageops import Encoded, SourceImage, human_bytes, slugify
-from .preflight import ERROR, Finding, check, cover_scale, worst_level
+from .preflight import ERROR, WARN, Finding, check, cover_scale, worst_level
 from .specs import Target
 
 
@@ -66,6 +68,9 @@ class BuildResult:
     skipped: list[tuple[Target, str]] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     source_sha256: str | None = None
+    # What a build would write. Populated even on a dry run, which otherwise
+    # had nothing to report despite --dry-run promising to report it.
+    planned: list[Target] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -107,8 +112,64 @@ def portable_manifest_payload(result: BuildResult) -> dict[str, object]:
     return payload
 
 
+def plan(
+    src: SourceImage,
+    targets: list[Target],
+    findings: list[Finding],
+    allow_upscale: bool = False,
+) -> tuple[list[Target], list[tuple[Target, str]]]:
+    """Split targets into what a build would render and what it would skip.
+
+    Both `build` and the `check` report call this, so the two can never
+    disagree about whether a target is reachable. They used to decide
+    separately, and `check` counted upscale-skipped targets as clear while
+    `build` skipped them.
+    """
+    blocking = {f.target for f in findings if f.level == ERROR and f.target}
+    renderable: list[Target] = []
+    skipped: list[tuple[Target, str]] = []
+    for target in targets:
+        if target.key in blocking:
+            reason = next(
+                f.message for f in findings if f.target == target.key and f.level == ERROR
+            )
+            skipped.append((target, reason))
+            continue
+        if not allow_upscale and cover_scale(src, target) > 1.0001:
+            skipped.append((target, "would upscale the master; pass --allow-upscale to force"))
+            continue
+        renderable.append(target)
+    return renderable, skipped
+
+
 def output_name(slug: str, target: Target) -> str:
     return f"{slug}--{target.key}--{target.dimensions}.{target.extension}"
+
+
+def write_new_bytes(path: Path, data: bytes) -> None:
+    """Write a delivery file, refusing to follow a symlink that is already there.
+
+    Building into an existing directory is a supported flow, so the directory
+    can hold entries this build did not create. A plain write follows a symlink,
+    which let a planted link redirect a delivery file anywhere the user could
+    write, while the manifest still recorded it as part of the pack. O_NOFOLLOW
+    fails on the link itself instead.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise imageops.ImageError(
+                f"{path} is a symlink; refusing to write through it. "
+                "Remove it or build into a clean directory."
+            ) from None
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except OSError as exc:
+        raise imageops.ImageError(f"could not write {path}: {exc}") from None
 
 
 def build(
@@ -125,21 +186,29 @@ def build(
     if Path(slug).is_absolute() or "/" in slug or "\\" in slug:
         raise ValueError("slug must not be an absolute path or contain path separators")
     findings = check(src, targets, flatten_colour, allow_upscale)
+    # imageops builds the sRGB profile once at import and _encode_once embeds it
+    # only `if SRGB_BYTES`. When ImageCms cannot create one, that test silently
+    # skips, so every output shipped untagged and the build reported no warning
+    # at all: a clean run whose files were not what the run implies. Untagged
+    # artwork is interpreted differently from platform to platform, and this
+    # repo's byte-reproducibility guarantee rests on that profile being present
+    # with its timestamp zeroed. A conversion that did not happen is a warning
+    # that says so, never a silent success.
+    if imageops.SRGB_BYTES is None:
+        findings.append(
+            Finding(
+                WARN,
+                "srgb-profile-unavailable",
+                "no sRGB profile could be built here, so these files ship untagged. "
+                "Colour will drift between platforms and the output hashes will not "
+                "match a tagged build. Check that Pillow has working ImageCms.",
+            )
+        )
     result = BuildResult(source=src, slug=slug, out_dir=out_dir, findings=findings)
 
-    blocking = {f.target for f in findings if f.level == ERROR and f.target}
-    renderable: list[Target] = []
-    for target in targets:
-        if target.key in blocking:
-            reason = next(
-                f.message for f in findings if f.target == target.key and f.level == ERROR
-            )
-            result.skipped.append((target, reason))
-            continue
-        if not allow_upscale and cover_scale(src, target) > 1.0001:
-            result.skipped.append((target, "would upscale the master; pass --allow-upscale to force"))
-            continue
-        renderable.append(target)
+    renderable, skipped = plan(src, targets, findings, allow_upscale)
+    result.skipped.extend(skipped)
+    result.planned = list(renderable)
 
     if not renderable or dry_run:
         return result
@@ -154,14 +223,19 @@ def build(
     result.source_sha256 = hashlib.sha256(raw).hexdigest()
 
     # Decode and colour-manage once, then resize per target.
-    normalised = imageops.normalise(src.path, flatten_colour, data=raw)
+    colour_notes: list[str] = []
+    normalised = imageops.normalise(
+        src.path, flatten_colour, data=raw, notes=colour_notes
+    )
+    for note in colour_notes:
+        result.findings.append(Finding(WARN, "colour-transform-degraded", note))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for target in renderable:
         rendered = imageops.render(normalised, target)
         encoded: Encoded = imageops.encode(rendered, target)
         path = out_dir / output_name(slug, target)
-        path.write_bytes(encoded.data)
+        write_new_bytes(path, encoded.data)
         result.outputs.append(
             Output(
                 target=target,
