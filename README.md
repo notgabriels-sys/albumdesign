@@ -4,14 +4,15 @@ Preflight your release artwork, then export the whole per-platform delivery pack
 in one command.
 
 **Free browser tools, nothing to install:**
-[cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
-[LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
-[delivery check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
-[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
-[split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
+[Album Cover Size Checker](https://gabs-utilities.com/cover.html) ·
+[Split Sheet Maker](https://gabs-utilities.com/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
+
+If you would rather someone else finished the record, the
+[rates are here](https://gabs-utilities.com/shop.html):
+mixing and mastering by Gabriel G Alonso, Berlin.
 
 You finish a cover, and then comes the boring half: 3000×3000 for the
 distributor, 3000×3000 for Beatport, something under 2 MB for SoundCloud, a 9:16
@@ -281,12 +282,9 @@ image fixtures, which are generated rather than committed:
 ```bash
 npm install playwright
 python tools/make_fixtures.py     # writes tools/fixtures/
-node tools/browser_test.js        # functional: parsing, loudness, checklist
+node tools/browser_test.js        # functional: cover and split-sheet tools
 node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
 ```
-
-`verify_lufs.py` and `verify_truepeak.py` check the loudness maths against the
-EBU Tech 3341 test signals independently of the browser.
 
 Two more run in CI and need nothing installed:
 
@@ -297,6 +295,14 @@ python tools/sync_artifacts.py --check  # are the published copies stale?
 
 `consistency_check.py` asserts the things that have actually gone wrong: the
 rate table agreeing across every page that quotes it, no unverified payment link
-reaching a page, the cover tool and the checklist not contradicting each other,
-and no page making a network call, which is what "nothing is uploaded" means.
+reaching a page, and no page making a network call, which is what "nothing is
+uploaded" means.
 Each check is there because that exact thing broke once.
+
+---
+
+## Gabriel Tools + Code
+
+Part of Gabriel García Alonso's public tool/product ecosystem. Browse the master catalog for related audio tools, repositories, Hologram People soundware, and services:
+
+[Gabriel Tools + Code](https://gabriel-tools-and-code.notgabriels960914.chatgpt.site/)

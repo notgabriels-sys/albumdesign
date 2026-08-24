@@ -410,8 +410,14 @@ def test_cli_package_creates_delivery_zip(tmp_path, master):
         assert "manifest.json" in files
         summary = json.loads(zf.read("COVERFORGE_PACKAGE.json").decode("utf-8"))
 
-    assert summary["bundle"] == str(bundle)
+    # The folder's name, not its path. This file ships inside the zip that goes
+    # to the client, and str(bundle) put the invoking absolute path in it, so a
+    # normal `coverforge package ~/deliveries/ft011` handed over the home
+    # directory and the username. This assertion used to pin that leak in place.
+    assert summary["bundle"] == bundle.name
+    assert str(tmp_path) not in json.dumps(summary)
     assert summary["ok"] is True
+    assert summary["hashes_verified"] is True
     assert summary["checked_targets"] == [target.key for target in ALL_TARGETS]
     assert len(summary["files"]) == len(ALL_TARGETS) + 2
 
@@ -542,9 +548,9 @@ def test_manifest_hashes_the_bytes_it_actually_rendered(master, tmp_path, monkey
     Image.new("RGB", (3000, 3000), (0, 255, 0)).save(replacement, format="PNG")
     original = imageops_module.normalise
 
-    def swap_then_decode(path, flatten_colour="#ffffff", *, data=None):
+    def swap_then_decode(path, flatten_colour="#ffffff", *, data=None, notes=None):
         Path(path).write_bytes(replacement.getvalue())
-        return original(path, flatten_colour, data=data)
+        return original(path, flatten_colour, data=data, notes=notes)
 
     # Captured before the swap: this is what the manifest must certify, because
     # these are the bytes the build read and decoded.

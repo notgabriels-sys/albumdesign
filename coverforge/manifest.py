@@ -45,6 +45,10 @@ def _normalise_outputs(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any
     issues: list[str] = []
     raw_outputs = payload.get("outputs", [])
     if raw_outputs is None:
+        # Not the same as a capture with no outputs. Returning silently meant
+        # two manifests whose outputs array was unreadable compared as
+        # identical captures, which is a verdict on something never read.
+        issues.append("outputs is null, so no outputs could be read")
         return outputs, issues
     if not isinstance(raw_outputs, list):
         raise TypeError("manifest outputs must be a list")
@@ -70,18 +74,32 @@ def _normalise_outputs(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any
 def _normalise_manifest(
     payload: dict[str, Any], path: Path
 ) -> tuple[dict[str, Any], dict[str, str | Any], dict[str, str | Any], list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    # A section that is the wrong shape was replaced with an empty one and
+    # nothing recorded it, so damage on both sides cancelled out and the diff
+    # called the pair identical. Name each one instead.
+    structure_issues: list[str] = []
+
     source = payload.get("source")
+    if source is not None and not isinstance(source, dict):
+        structure_issues.append("source is not an object")
     if not isinstance(source, dict):
         source = {}
 
     outputs, output_issues = _normalise_outputs(payload)
+
     skipped = payload.get("skipped")
+    if skipped is not None and not isinstance(skipped, list):
+        structure_issues.append("skipped is not a list")
     if not isinstance(skipped, list):
         skipped = []
 
     findings = payload.get("findings")
+    if findings is not None and not isinstance(findings, list):
+        structure_issues.append("findings is not a list")
     if not isinstance(findings, list):
         findings = []
+
+    output_issues = output_issues + structure_issues
 
     return (
         {
@@ -89,6 +107,13 @@ def _normalise_manifest(
             "generated_by": payload.get("generated_by"),
             "slug": payload.get("slug"),
             "capture_id": payload.get("capture_id"),
+            # The boundary is the manifest's own disclaimer, the sentence that
+            # says these hashes identify bytes and do not establish ownership,
+            # rights or approval. It was never compared, so a copy whose
+            # disclaimer had been rewritten into the opposite claim diffed as
+            # identical. It sits inside the hashed payload, so it is part of
+            # what the capture id covers.
+            "boundary": payload.get("boundary"),
             "path": str(path),
         },
         {
@@ -165,6 +190,7 @@ def compare_manifests(
     generator_changed = left_meta["generated_by"] != right_meta["generated_by"]
     slug_changed = left_meta["slug"] != right_meta["slug"]
     capture_id_changed = left_meta["capture_id"] != right_meta["capture_id"]
+    boundary_changed = left_meta["boundary"] != right_meta["boundary"]
 
     output_issues = sorted(set(left_output_issues + right_output_issues))
     has_issues = bool(
@@ -172,6 +198,7 @@ def compare_manifests(
         or generator_changed
         or slug_changed
         or capture_id_changed
+        or boundary_changed
         or left_sources
         or changed_skipped
         or changed_findings
@@ -209,6 +236,7 @@ def compare_manifests(
             "generated_by_changed": generator_changed,
             "slug_changed": slug_changed,
             "capture_id_changed": capture_id_changed,
+            "boundary_changed": boundary_changed,
             "source": left_sources,
             "skipped": {
                 "left_count": len(left_skipped),

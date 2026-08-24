@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/index.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/cover.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/delivery.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/impressum.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/loudness.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/release.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/shop.html</loc></url>
-  <url><loc>https://notgabriels-sys.github.io/albumdesign/splits.html</loc></url>
+  <url><loc>https://gabs-utilities.com/index.html</loc></url>
+  <url><loc>https://gabs-utilities.com/cover.html</loc></url>
+  <url><loc>https://gabs-utilities.com/impressum.html</loc></url>
+  <url><loc>https://gabs-utilities.com/shop.html</loc></url>
+  <url><loc>https://gabs-utilities.com/splits.html</loc></url>
 </urlset>

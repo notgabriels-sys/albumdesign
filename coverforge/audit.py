@@ -44,9 +44,24 @@ class BundleAudit:
     dimension_mismatches: list[str]
     format_mismatches: list[str]
     manifest_present: bool
+    # The manifest's capture_id is a hash of its own contents, so it can be
+    # recomputed and compared. Nothing did: swap a delivery file, edit the
+    # manifest so its bytes and sha256 match the swap, leave capture_id alone,
+    # and verify said ok. "Hash-bound" only held against a manifest you already
+    # trusted, which is the case a portable manifest is meant to remove.
+    capture_id_mismatch: bool = False
+    # Whether any file's bytes were actually hashed against the manifest.
+    # Without this, a bundle with no manifest at all reached `ok` having
+    # verified nothing: `coverforge verify` on a folder whose cover had been
+    # swapped for a different image exited 0 and printed "ok".
+    hashes_verified: bool = False
 
     @property
     def ok(self) -> bool:
+        if not self.manifest_present:
+            return False
+        if self.capture_id_mismatch:
+            return False
         return not (
             self.missing_targets
             or self.malformed_files
@@ -72,6 +87,8 @@ class BundleAudit:
             "dimension_mismatches": self.dimension_mismatches,
             "format_mismatches": self.format_mismatches,
             "manifest_present": self.manifest_present,
+            "capture_id_mismatch": self.capture_id_mismatch,
+            "hashes_verified": self.hashes_verified,
             "ok": self.ok,
         }
 
@@ -181,10 +198,25 @@ def _check_bundle(
     missing_files: list[str] = []
     dimension_mismatches: list[str] = []
     format_mismatches: list[str] = []
+    hashed_any = False
 
     manifest_payload, manifest_slug = _read_manifest(bundle)
     manifest_present = bool(manifest_payload)
     slug = manifest_slug
+
+    # Recompute the manifest's own integrity token from its contents. A
+    # manifest written by an older coverforge carries no capture_id at all, and
+    # that is not a mismatch, just nothing to check.
+    capture_id_mismatch = False
+    if manifest_present and manifest_payload.get("capture_id"):
+        from .build import manifest_capture_id
+
+        try:
+            expected_capture = manifest_capture_id(manifest_payload)
+        except (TypeError, ValueError):
+            capture_id_mismatch = True
+        else:
+            capture_id_mismatch = expected_capture != manifest_payload["capture_id"]
 
     present_by_target: dict[str, str] = {}
     if manifest_present:
@@ -219,9 +251,29 @@ def _check_bundle(
             if target_key in present_by_target:
                 malformed.append(f"duplicate manifest target: {target_key}")
                 continue
-            present_by_target[target_key] = filename
+
+            # Validate before recording the target as present. Recording first
+            # meant a rejected entry still counted towards present_targets, so
+            # the audit reported the cover as delivered while refusing to look
+            # at the thing the manifest named.
+            # A manifest is by design something you receive from someone else,
+            # so its filenames are untrusted text. `.` matches `/` in the name
+            # pattern, so "../../etc/x--spotify--3000x3000.jpg" parsed happily
+            # and bundle / filename reached outside the folder: verify then
+            # opened, sized and hashed that file and printed the result, while
+            # audit and package called the bundle complete without the real
+            # cover being present. A delivery file is one plain name in the
+            # folder, never a path.
+            if filename != Path(filename).name or Path(filename).is_absolute():
+                malformed.append(f"manifest filename is not a plain name: {filename}")
+                continue
 
             output_path = bundle / filename
+            if output_path.is_symlink():
+                malformed.append(f"manifest entry is a symlink: {filename}")
+                continue
+
+            present_by_target[target_key] = filename
             if not output_path.exists():
                 missing_files.append(filename)
                 continue
@@ -269,6 +321,7 @@ def _check_bundle(
                     )
                 else:
                     actual_sha = _sha256_file(output_path)
+                    hashed_any = True
                     if actual_sha != expected_sha:
                         checksum_mismatches.append(
                             f"{target_key}: expected {expected_sha}, got {actual_sha} in {filename}"
@@ -354,6 +407,8 @@ def _check_bundle(
         dimension_mismatches=dimension_mismatches,
         format_mismatches=format_mismatches,
         manifest_present=manifest_present,
+        capture_id_mismatch=capture_id_mismatch,
+        hashes_verified=hashed_any,
     )
 
 

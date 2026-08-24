@@ -1,21 +1,45 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Coverforge</title>
+<title>Album Cover Size Checker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="description" content="Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.">
-<link rel="canonical" href="https://notgabriels-sys.github.io/albumdesign/cover.html">
+<link rel="canonical" href="https://gabs-utilities.com/cover.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Preflight">
 <meta property="og:locale" content="en_GB">
-<meta property="og:url" content="https://notgabriels-sys.github.io/albumdesign/cover.html">
-<meta property="og:title" content="Coverforge">
+<meta property="og:url" content="https://gabs-utilities.com/cover.html">
+<meta property="og:title" content="Album Cover Size Checker">
 <meta property="og:description" content="Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.">
-<meta property="og:image" content="https://notgabriels-sys.github.io/albumdesign/share.png">
+<meta property="og:image" content="https://gabs-utilities.com/share-cover.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Preflight: free tools for releasing music, by Gabriel G Alonso, Berlin.">
+<meta property="og:image:alt" content="Link preview card. Preflight Album Cover Size Checker, headline &quot;Will your cover art pass?&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
 <meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Album Cover Size Checker",
+  "description": "Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.",
+  "url": "https://gabs-utilities.com/cover.html",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any browser",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  }
+}
+</script>
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
@@ -53,6 +77,8 @@
   .brand{font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
     font-weight:700;letter-spacing:.32em;font-size:15px;text-transform:uppercase}
   .brand b{color:var(--accent)}
+  .page{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.16em;font-size:12px;text-transform:uppercase;color:var(--accent)}
   .tag{color:var(--muted);font-size:13.5px}
   .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
     border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
@@ -122,6 +148,12 @@
   .srcnote{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0;padding:0 15px 16px}
   .tick{width:9px;height:9px;border-radius:50%;flex:none}
 
+  .siblings{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;font-size:13px;color:var(--muted)}
+  .siblings b{font-weight:600;color:var(--ink)}
+  .siblings a{color:var(--accent);text-decoration:none;font-weight:600}
+  .siblings a:hover{text-decoration:underline}
+  .siblings + footer{margin-top:14px;padding-top:0;border-top:0}
   footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
     display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
   footer a{color:var(--accent);text-decoration:none;font-weight:600}
@@ -131,21 +163,31 @@
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .skip{position:absolute;left:-9999px;color:var(--ink)}
   .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  /* Shown only when scripting is off. Every tool here is JavaScript: that is
+     what keeps the files on the visitor's machine, and it also means there is
+     no server to fall back on. Without this the pages present a working-looking
+     drop zone, or a fillable sheet, that silently does nothing. */
+  .nojs{margin:0 0 22px;padding:14px 16px;border:1px solid var(--warn);
+    border-left-width:4px;border-radius:10px;background:var(--surface-2);
+    color:var(--ink);font-size:14.5px;line-height:1.55;max-width:70ch}
+  .nojs b{color:var(--warn)}
   .drop:focus-within{outline:2px solid var(--accent);outline-offset:3px}
 
 </style>
 
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
+  <noscript><p class="nojs"><b>JavaScript is off, so this checker cannot run.</b> This tool runs entirely in your browser, which is what keeps your files on your machine. That also means there is no server to fall back on: with JavaScript turned off, nothing here can run. The drop zone below will accept a file and do nothing with it.</p></noscript>
   <header>
-    <span class="brand">COVER<b>FORGE</b></span>
+    <span class="brand">PRE<b>FLIGHT</b></span>
+    <span class="page">Album Cover Size Checker</span>
     <span class="tag">album art preflight</span>
     <span class="priv">runs in your browser · nothing uploaded</span>
   </header>
 
   <main id="main">
   <h1>Will your cover art pass?</h1>
-  <p class="lede">Drop your artwork below. Coverforge checks size, shape, format and colour against what
+  <p class="lede">Drop your artwork below. It checks size, shape, format and colour against what
     Spotify, Bandcamp, Apple Music, Beatport and the rest actually require, before a wrong file gets your
     release bounced.</p>
 
@@ -194,11 +236,15 @@
   </section>
 
   </main>
+  <nav class="siblings" aria-label="Other tools">
+    <b>Other free tools:</b>
+    <a href="splits.html">Split Sheet Maker</a>
+  </nav>
   <footer>
     <a href="index.html">← all tools</a>
     <a href="impressum.html">Impressum</a>
-    <span>Coverforge: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
-    <span class="cta">Need your tracks finished? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <span>Album Cover Size Checker: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need your tracks finished? <a href="shop.html">See rates and book</a>, or email <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
   </footer>
 </div>
 
@@ -293,8 +339,21 @@
     var finish=function(info){
       info.bytes=file.size;
       var url=URL.createObjectURL(file), img=new Image();
-      img.onload=function(){ if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight} render(info,url) };
-      img.onerror=function(){ render(info,url) };
+      // Whether this browser could actually open the file, as opposed to
+      // whether a header handed us two numbers. Those are different questions
+      // and only one of them is evidence.
+      //
+      // Passed as an argument rather than stashed on `info`, because a stashed
+      // flag has a third state nothing sets. The first version tested
+      // `info.decoded===false`, which made `info.decoded=true` a dead
+      // assignment: deleting it changed no behaviour and a mutation sweep
+      // found it. `render` is reached through exactly one of these two
+      // handlers, so the answer is an argument and both call sites carry it.
+      img.onload=function(){
+        if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight}
+        render(info,url,true);
+      };
+      img.onerror=function(){ render(info,url,false) };
       img.src=url;
     };
     var read=function(bytes,cb){
@@ -310,17 +369,51 @@
     });
   }
 
-  function render(info,url){
+  function render(info,url,decoded){
     $("thumb").src=url;
-    var w=info.width,h=info.height,small=Math.min(w,h),large=Math.max(w,h);
-    var checks=[];
     // Chromium cannot decode TIFF, so a CMYK TIFF, the exact file this tool
     // exists to catch, arrived with no dimensions and no colour mode. The
     // square, resolution and colour checks all silently skipped themselves and
     // the verdict came out "No blockers" while every platform tile read Fail.
+    //
+    // The guard used to be `!w||!h`, which asks whether we have numbers rather
+    // than whether anything was measured, and a PNG or JPEG header supplies
+    // numbers for free. Measured in Chromium: a 33-byte file holding a PNG
+    // signature and an IHDR and no image data at all was reported as a
+    // 3000 x 3000 cover, "Good to go, with notes", four checks passing. So was
+    // a PNG whose IHDR was edited to claim 40000 x 40000. Neither file
+    // contains an image. `decoded` is the answer to the other question.
+    //
+    // Its limit, measured rather than assumed: a PNG whose IHDR claims
+    // 5000 x 5000 with the real 3000 x 3000 image data left in place *does*
+    // decode here. Chromium fires onload, reports naturalWidth 5000, and
+    // img.decode() resolves, so naturalWidth is the header again and there is
+    // no second number to hold it against. The bottom row comes back fully
+    // transparent, but so does a legitimate cover with a transparent corner,
+    // and a guess is not a measurement. That file is caught by
+    // `coverforge check`, which decodes with Pillow and gets a real refusal.
+    // This page reports what a browser sees, and a browser sees 5000.
+    var decodeFailed = !decoded;
+    // A header's numbers are a claim. They are kept for the sentence that
+    // names them as a claim, and dropped from everything that would grade
+    // them, because otherwise the headline says nothing was measured while
+    // the square and resolution checks show PASS and all seven platform tiles
+    // below say Pass on a size nobody read. No TIFF exemption is needed here:
+    // parseHeader gives TIFF, GIF, BMP and WEBP no dimensions at all, so an
+    // undecodable one is unreadable on its own merits and a term exempting it
+    // would never fire.
+    var claimedW=info.width, claimedH=info.height;
+    var w=decodeFailed?0:info.width, h=decodeFailed?0:info.height;
+    var small=Math.min(w,h),large=Math.max(w,h);
+    var checks=[];
     var unreadable=!w||!h;
     if(unreadable){
-      checks.push(["readable","fail","This browser could not decode the file, so its size, shape and colour were not checked. Export a JPEG and run it again"]);
+      checks.push(["readable","fail", decodeFailed && claimedW && claimedH
+        ? "The header claims "+claimedW+" x "+claimedH+" px, but this browser could not "
+          +"decode the file, so nothing below was measured and that size is unconfirmed. "
+          +"A header with no image behind it is what a half-finished export or an "
+          +"interrupted copy leaves. Re-export it and run it again"
+        : "This browser could not decode the file, so its size, shape and colour were not checked. Export a JPEG and run it again"]);
     }
 
     // format
@@ -353,7 +446,11 @@
       }
     }
     // colour
-    var m=info.mode;
+    // A PNG IHDR states a colour type in the same breath as the size, so an
+    // undecoded file's colour mode is the same kind of claim and is dropped
+    // with it. It lands in the "Colour mode unread" branch below, which is
+    // what actually happened.
+    var m=decodeFailed?"unknown":info.mode;
     if(m==="RGB") checks.push(["colour","pass","RGB"]);
     else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by the stores checked here. Convert to RGB / sRGB"]);
     else if(m==="RGBA") checks.push(["colour","warn","Has an alpha channel. Flatten onto a solid background"]);
@@ -370,7 +467,10 @@
 
     // specs
     $("specs").innerHTML="";
-    [["Format",info.format],["Dimensions",w&&h?(w+" x "+h+" px"):"unknown"],
+    [["Format",info.format],
+     // Says "claimed" rather than printing the number bare, because this table
+     // sits directly under a verdict saying nothing was measured.
+     ["Dimensions",w&&h?(w+" x "+h+" px"):(decodeFailed&&claimedW&&claimedH?claimedW+" x "+claimedH+" px claimed, not decoded":"unknown")],
      ["Aspect",w&&h?(w===h?"1:1 square":(w/h).toFixed(2)+":1"):"—"],
      ["Colour",m],["Size",fmtBytes(info.bytes)]].forEach(function(r){
       var row=document.createElement("div");
