@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Iterable
 
-from .imageops import SourceImage
+from .imageops import UNREADABLE_ICC, SourceImage
 from .specs import Target
 
 ERROR = "error"
@@ -90,6 +90,22 @@ def check_source(src: SourceImage, targets: list[Target], flatten_colour: str) -
 
     if src.icc_description is None:
         findings.append(Finding(INFO, "no-icc", "no ICC profile embedded; assuming sRGB"))
+    elif src.icc_description == UNREADABLE_ICC:
+        # inspect() already failed to parse this profile, and _to_srgb fails on
+        # it again for the same reason, falling back to a plain convert. Saying
+        # "will be converted to sRGB" here promised a transform that had
+        # already been established as impossible, and nothing later corrected
+        # it. Colours are taken as they sit, which is worth knowing before a
+        # cover goes out.
+        findings.append(
+            Finding(
+                WARN,
+                "icc-unreadable",
+                "the embedded ICC profile could not be read, so no colour transform "
+                "can be applied and the pixels are taken as they are. If this master "
+                "is not already sRGB the colours will shift. Re-export it as sRGB.",
+            )
+        )
     elif "srgb" not in src.icc_description.lower():
         findings.append(
             Finding(INFO, "icc", f"tagged {src.icc_description!r}; will be converted to sRGB")
