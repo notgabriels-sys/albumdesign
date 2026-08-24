@@ -1,19 +1,68 @@
-<title>Preflight</title>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Preflight, free tools for releasing music</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Free browser tools for releasing music — cover art, loudness and release checks — plus mixing and mastering by Gabriel G Alonso, Berlin.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="Free browser tools for release artwork and split sheets, plus mixing and mastering by Gabriel G Alonso, Berlin.">
+<link rel="canonical" href="https://gabs-utilities.com/index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://gabs-utilities.com/index.html">
+<meta property="og:title" content="Preflight, free tools for releasing music">
+<meta property="og:description" content="Free browser tools for release artwork and split sheets, plus mixing and mastering by Gabriel G Alonso, Berlin.">
+<meta property="og:image" content="https://gabs-utilities.com/share.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Link preview card. Preflight, headline &quot;Get your release right before it ships&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Preflight, free tools for releasing music",
+  "description": "Free browser tools for release artwork and split sheets, plus mixing and mastering by Gabriel G Alonso, Berlin.",
+  "url": "https://gabs-utilities.com/index.html",
+  "author": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  },
+  "mainEntity": {
+    "@type": "ItemList",
+    "name": "Free tools for releasing music",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Album Cover Size Checker",
+        "url": "https://gabs-utilities.com/cover.html"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Split Sheet Maker",
+        "url": "https://gabs-utilities.com/splits.html"
+      }
+    ]
+  }
+}
+</script>
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
-    --ink:#14161c; --muted:#5c6270; --faint:#878d9b; --accent:#5a46e0; --accent-2:#7d5cf0;
+    --ink:#14161c; --muted:#5c6270; --faint:#6a707f; --accent:#5a46e0; --accent-2:#7d5cf0;
     --shadow:0 1px 2px rgba(20,22,28,.05),0 10px 30px rgba(20,22,28,.07);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
-    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
     --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}}
   :root[data-theme="dark"]{
     --ground:#080a0e; --surface:#12141a; --surface-2:#171a21; --line:#242832;
-    --ink:#eceef3; --muted:#9198a8; --faint:#666d7d; --accent:#8b7cff; --accent-2:#a08bff;
+    --ink:#eceef3; --muted:#9198a8; --faint:#7a8293; --accent:#8b7cff; --accent-2:#a08bff;
     --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.4);}
   *{box-sizing:border-box} html,body{margin:0}
   body{background:var(--ground);color:var(--ink);
@@ -70,8 +119,20 @@
   footer a{color:var(--accent);text-decoration:none;font-weight:600}
   footer .proj{margin-left:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.05em;color:var(--faint)}
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+  .nav a{display:inline-block;padding:6px 4px}
+  th[scope=row]{font-family:inherit;font-size:inherit;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:400}
+  :root{--on-accent:#fff}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--on-accent:#0b0c10}}
+  :root[data-theme="dark"]{--on-accent:#0b0c10}
+  .cta{color:var(--on-accent)}
+
 </style>
 
+<a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
   <div class="top">
     <span class="brand">PRE<b>FLIGHT</b></span>
@@ -82,12 +143,13 @@
     </nav>
   </div>
 
+  <main id="main">
   <div class="hero">
     <span class="eyebrow">Free tools for releasing music</span>
     <h1>Get your release right before it ships.</h1>
-    <p>Three quick checks a producer runs before every release: is the artwork accepted, is the master
-      the right loudness, is anything missing. Built by a mixing and mastering engineer who releases music too.
-      Everything runs in your browser, nothing is uploaded.</p>
+    <p>Check whether release artwork meets platform requirements, or prepare a clear split sheet while
+      everyone is aligned. Built by a mixing and mastering engineer who releases music too. Everything runs
+      in your browser, nothing is uploaded.</p>
     <div class="meta">
       <span class="tagpill">no sign-up</span>
       <span class="tagpill">nothing uploaded</span>
@@ -96,31 +158,25 @@
   </div>
 
   <section id="tools">
-    <p class="label">The tools</p>
+    <h2 class="label">The tools</h2>
     <div class="tools">
       <a class="tool" href="cover.html">
-        <span class="ic">◻</span>
-        <h3>Cover Art Check</h3>
+        <span class="ic" aria-hidden="true">◻</span>
+        <h3>Album Cover Size Checker</h3>
         <p>Drop your artwork and see instantly whether it clears Spotify, Bandcamp, Apple Music and Beatport: size, shape, format, colour.</p>
         <span class="go mono">Open cover check</span>
       </a>
-      <a class="tool" href="loudness.html">
-        <span class="ic">≈</span>
-        <h3>Loudness Check</h3>
-        <p>Measure a master's integrated LUFS and true peak the way the platforms do, and see exactly how each one will play it.</p>
-        <span class="go mono">Open loudness check</span>
-      </a>
-      <a class="tool" href="release.html">
-        <span class="ic">✓</span>
-        <h3>Release Preflight</h3>
-        <p>The full pre-release checklist with the specs baked in: audio, artwork, metadata, distribution, promo. Progress saved as you go.</p>
-        <span class="go mono">Open checklist</span>
+      <a class="tool" href="splits.html">
+        <span class="ic" aria-hidden="true">§</span>
+        <h3>Split Sheet Maker</h3>
+        <p>Composition and recording are split separately, and people forget. Fill in both, print it, get it signed while everyone is still friendly.</p>
+        <span class="go mono">Open split sheet</span>
       </a>
     </div>
   </section>
 
   <section id="work">
-    <p class="label">Work with me</p>
+    <h2 class="label">Work with me</h2>
     <div class="service">
       <div>
         <h2>Mixing &amp; mastering for club-ready electronic music.</h2>
@@ -135,11 +191,11 @@
       </div>
       <div class="rates">
         <table>
-          <thead><tr><th>Service</th><th style="text-align:right">Per track</th><th style="text-align:right">4-track EP</th></tr></thead>
+          <thead><tr><th scope="col">Service</th><th style="text-align:right">Per track</th><th style="text-align:right">4-track EP</th></tr></thead>
           <tbody>
-            <tr><td>Mastering</td><td class="n">€25</td><td class="n">€75</td></tr>
-            <tr><td>Mixing</td><td class="n">€90</td><td class="n">€270</td></tr>
-            <tr><td>Mix + master</td><td class="n">€110</td><td class="n">€330</td></tr>
+            <tr><th scope="row">Mastering</th><td class="n">€45</td><td class="n">€135</td></tr>
+            <tr><th scope="row">Mixing</th><td class="n">€160</td><td class="n">€480</td></tr>
+            <tr><th scope="row">Mix + master</th><td class="n">€190</td><td class="n">€570</td></tr>
           </tbody>
         </table>
         <p class="fine">EP rates are discounted against the per-track price.</p>
@@ -147,8 +203,12 @@
     </div>
   </section>
 
+  </main>
   <footer>
-    <span>Preflight — free release tools by Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <span>Preflight: free release tools by Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <a href="impressum.html">Impressum</a>
     <span class="proj">Fate Through · Lack of Fate · Hologram People</span>
   </footer>
 </div>
+
+</html>
