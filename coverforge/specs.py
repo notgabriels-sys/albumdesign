@@ -99,6 +99,15 @@ def _require(raw: dict, key: str, target_key: str, kind: type):
 
 
 def _parse_target(key: str, raw: dict) -> Target:
+    # The key is interpolated straight into the output filename, so a key
+    # carrying separators or dot segments would write outside the pack. The
+    # slug is checked for exactly this in build(); the key was not, and
+    # --extra-targets lets anyone supply one.
+    if not key or key in {".", ".."} or any(c in key for c in "/\\") or key.startswith("."):
+        raise SpecError(
+            f"target {key!r}: key must be a plain name, with no path separators or leading dot"
+        )
+
     fmt = _require(raw, "format", key, str).lower()
     if fmt not in VALID_FORMATS:
         raise SpecError(f"target {key!r}: format must be one of {sorted(VALID_FORMATS)}, got {fmt!r}")
