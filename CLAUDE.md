@@ -487,6 +487,46 @@ which made them useless as gates. Keep them asserting.
   the document came from. A check asserts both printable pages hide `.siblings`
   and `footer a`, and it was proved by putting the chrome back.
 
+- **A master cut off by an interrupted copy was "Deliverable, with notes".**
+  Hostile files fed to both audio pages on 24 August 2026: zero bytes, header
+  only, truncated, a data chunk claiming 999,999,999 bytes, zero channels, and
+  a 4 GHz sample rate. `loudness.html` handled all six with an honest message
+  and no page errors. `delivery.html` handled five and got the sixth wrong.
+
+  A real master cut to a third of its length decoded cleanly, kept an intact
+  header, and passed sample rate, bit depth, channels, true peak and clipping.
+  It showed `0:00` in the length column and nothing read the length, so the
+  verdict was `Deliverable, with notes. Nothing here blocks a delivery.` There
+  was no duration check at all. That is the most common broken file in the
+  world, and the tool exists to catch exactly this.
+
+  **The worse half was the explanation.** The one amber note read `truncated.wav
+  (2 channels). BS.1770 covers mono, stereo, quad and 5.1, so the loudness
+  checks below leave it out`, about a stereo file. A supported layout blamed
+  for a problem that was the length, with a channel count printed beside it
+  that makes the wrong cause look substantiated. A confidently wrong cause is
+  worse than no cause. The reason is now split by what was actually determined:
+  too short, an unsupported layout, silent, or honestly unknown.
+
+  Silence gets named, because the peak can tell what the loudness gate cannot:
+  BS.1770 discards every block below -70 LUFS so there is no integrated value,
+  but a true peak under -100 dBTP is below any real format's noise floor. `a
+  master fader left down produces exactly this` is the most useful sentence
+  this page can print, and it used to print the channel sentence instead.
+
+  400 ms is not a taste threshold, it is the BS.1770 floor `loudness.html`
+  already refuses below. `rel_truncated_44100_16.wav` is a new fixture and four
+  browser assertions cover it; both were proved by mutation, and the first
+  mutation also broke the reason wording, which is the two behaviours being
+  genuinely tied.
+
+  Two of my own probes lied first, both worth remembering. `/Ready to deliver/i`
+  matches `Not ready to deliver`, so a containment test reported every hostile
+  file as passing; that is the short-common-string trap already in this file,
+  hit again. And a 200 ms file is not "a short but legitimate interlude", which
+  is what I labelled it before checking: no release contains a fifth-of-a-second
+  track, and failing it is correct.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows

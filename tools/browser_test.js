@@ -352,6 +352,39 @@ const ok = (c, m) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fa
   ok(d.verdict !== 'Ready to deliver',
      `a release holding an unmeasurable track is not ready -> verdict "${d.verdict}"`);
 
+  // A master cut off by an interrupted copy. Everything except its length looks
+  // like a real track, and nothing read the length: it passed sample rate, bit
+  // depth, channels, true peak and clipping, showed 0:00, and was called
+  // "Deliverable, with notes".
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_truncated_44100_16.wav']);
+  ok(dcheck(d, 'length') && dcheck(d, 'length').pill === 'FAIL',
+    `a truncated master fails on length (${dcheck(d, 'length') ? dcheck(d, 'length').pill : 'no length check'})`);
+  ok(d.verdict !== 'Ready to deliver' && d.verdict !== 'Deliverable, with notes',
+    `a release holding a fragment is not deliverable -> "${d.verdict}"`);
+  // The reason has to be the real one. This said "(2 channels). BS.1770 covers
+  // mono, stereo, quad and 5.1" about a stereo file, blaming a layout that is
+  // fully supported for a problem that was the length.
+  {
+    const why = dcheck(d, 'loudness measured').msg;
+    ok(/0\.3\d s|shorter than the 400 ms/.test(why),
+      `the unmeasured reason names the length -> "${why.slice(0, 90)}"`);
+    ok(!/2 channels/.test(why),
+      `a stereo file is not blamed on its channel count -> "${why.slice(0, 90)}"`);
+  }
+
+  // Silence is the reason worth naming: a master fader left down ships a silent
+  // release, and the page can tell that from the peak even though BS.1770 gives
+  // it no integrated value to report.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'silence.wav']);
+  ok(/silent/.test(dcheck(d, 'loudness measured').msg),
+    `a silent track is named as silent -> "${dcheck(d, 'loudness measured').msg.slice(0, 90)}"`);
+
+  // And the case the old wording was written for still reads correctly.
+  d = await runDelivery(['rel_track1_44100_24.wav', 'rel_3channel_44100_24.wav']);
+  ok(/3 channels/.test(dcheck(d, 'loudness measured').msg) &&
+     /BS\.1770/.test(dcheck(d, 'loudness measured').msg),
+    `an unsupported layout is still explained as one -> "${dcheck(d, 'loudness measured').msg.slice(0, 90)}"`);
+
   // A file name is the only attacker-shaped text this page handles, and it goes
   // into a single-quoted title attribute. With ' missing from the escape set,
   // this name closed the attribute and added a live onmouseover handler.
