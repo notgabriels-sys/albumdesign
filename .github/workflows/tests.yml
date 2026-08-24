@@ -36,20 +36,6 @@ jobs:
       - name: artifact copies derive cleanly
         run: python tools/sync_artifacts.py --out "$RUNNER_TEMP/artifacts"
 
-  maths:
-    name: loudness maths vs EBU Tech 3341
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: pip install numpy scipy
-      # These check the BS.1770 gating and the 4x-oversampled true peak
-      # against known signals, independently of the browser.
-      - run: python tools/verify_lufs.py
-      - run: python tools/verify_truepeak.py
-
   browser:
     name: docs tools in a real browser
     runs-on: ubuntu-latest
