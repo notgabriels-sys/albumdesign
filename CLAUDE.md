@@ -2,98 +2,109 @@
 
 ## How Gabriel wants work done
 
-**Decide and act. Do not stop to ask for permission on ordinary work.**
-When there is a judgement call with an obvious answer, make it, do the work,
-and report the decision and its reasoning afterwards. Use parallel subagents
-("with dispatch") for verification and review passes rather than serialising.
+Gabriel is a Berlin-based sound engineer, producer and live performer. Keep
+the work direct, specific, evidence-based and useful. Do not invent facts,
+credits, release dates, client names, rates, platform specifications or
+commercial outcomes.
 
-That means, by default and without asking first:
-
-- branch, commit, push, open a draft PR, wait for CI, merge when green
-- close superseded PRs with a comment saying what happened to their content
-- fix problems found along the way instead of listing them for later
-
-Only stop and ask when the answer genuinely changes the work and cannot be
-inferred: money, publishing something under his name, deleting his data, or a
-fact only he knows (real release dates, ISRCs, client names, rates).
-
-**Report honestly.** Say what was verified and how, and say plainly what was
-not. Never present an automated check as equivalent to a human one.
+Treat people as people. Promotion must be contextual, permission-aware and
+honest. Do not spam, manufacture urgency, claim approval that was not given or
+present a technical check as proof of artistic quality.
 
 ## Hard rules on claims
 
-These come from his operating profile and apply to anything leaving this repo:
+- A file check proves only the properties actually inspected. It does not
+  prove authorship, ownership, rights clearance, release acceptance or quality.
+- Platform specifications change. Keep the source and retrieval date for any
+  numeric requirement, and distinguish a platform minimum from this project's
+  stricter recommendation.
+- Never add a payment link because a URL looks plausible. Read the provider's
+  actual object and verify name, amount, currency and tax treatment first.
+- Never publish private correspondence, unreleased audio, credentials or
+  payment-provider secrets.
+- Keep Gabriel's identities separate: Lack of Fate, Fate Through and Hologram
+  People are related, but their credits and release claims are not interchangeable.
 
-- Never invent audio parameters (sample rate, bit depth, loudness target,
-  true-peak ceiling, format) or prices. Ask or leave a placeholder.
-- Never inflate credits. A repost or a submission is not a release. No
-  invented clients, credits, employment, or biography.
-- Never claim a listen, a send, or a check that did not happen.
-- Never put invented dates, ISRCs, or budget numbers into royalty claims
-  (GVL) or funding applications.
-- No em dashes in output written for him.
-- Legal name (Gabriel G Alonso) goes on invoices and formal documents.
-  Public-facing artist identities are Hologram People, Lack of Fate,
-  Fate Through. Contact address is hologrampeoplemusic@gmail.com.
+## Current repository scope
 
-## Repo layout
+This repository contains:
 
-- `coverforge/` — the Python CLI. `targets.toml` holds the platform specs and
-  is meant to be edited; the numbers are a best-effort snapshot.
-- `docs/` — **this is the GitHub Pages web root.** Anything committed here is
-  published. Do not put planning notes, specs, or scratch files in it.
-- `tools/` — the test suites. Fixtures are generated, not committed.
+- `coverforge/`: the Python CLI for inspecting release artwork and building
+  per-platform artwork packs.
+- `coverforge/targets.toml`: built-in platform targets and their notes.
+- `docs/cover.html`: the browser-based artwork checker.
+- `docs/splits.html`: the split-sheet generator.
+- `docs/shop.html`: the mixing and mastering rate surface.
+- `docs/index.html`, `docs/404.html` and `docs/impressum.html`: site navigation,
+  fallback and legal pages.
+- `tools/packcheck.py`: sample-pack mechanical validation.
+- `tools/sync_artifacts.py`: derives standalone browser artifacts.
+- `tools/consistency_check.py`: cross-page, payment-link and metadata guards.
+
+Coverforge and the artwork workflow must remain intact when site content is
+changed. Do not remove or weaken artwork tests as collateral damage from an
+unrelated takedown.
 
 ## Testing
 
-CI (`.github/workflows/tests.yml`) runs all of it on every push and PR:
+From the repository root:
 
 ```bash
-pip install -e '.[dev]' && python -m pytest tests -q
-
-npm install playwright
-python tools/make_fixtures.py     # generates tools/fixtures/
-node tools/browser_test.js        # functional: parsing, loudness, checklist
-node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
-python tools/verify_lufs.py       # BS.1770 vs EBU Tech 3341 signals
-python tools/verify_truepeak.py   # 4x-oversampled true peak
+python -m pytest tests -q
+python tools/consistency_check.py
+python tools/sync_artifacts.py --out /tmp/albumdesign-artifacts
+python tools/make_fixtures.py
+node tools/browser_test.js
+node tools/a11y_test.js
+git diff --check
 ```
 
-The two `verify_*` scripts assert and exit non-zero. They used to only print,
-which made them useless as gates. Keep them asserting.
+The browser checks require Playwright and the generated image fixtures. The
+Python suite must remain useful without browser dependencies.
 
-## Things that will bite you
+## Coverforge accuracy
 
-- **Builds must stay byte-reproducible.** The sRGB ICC profile embedded in
-  every output carries a creation timestamp in header bytes 24..35. It is
-  zeroed in `imageops._srgb_profile_bytes()`. Undo that and every rebuild
-  produces different files, different hashes, and a different manifest
-  `capture_id`. Two tests guard it.
-- **The artifact copies in the scratchpad must not have `<!doctype html>` or
-  `<html lang>`.** The Artifact host supplies that wrapper. The `docs/` copies
-  do need it.
-- **Check `main` before building anything.** A whole CLI was once rebuilt from
-  scratch when a better version was already merged.
+- Do not upscale unless the caller explicitly chooses `--allow-upscale`.
+- A target with a `min_source` floor remains blocked below that floor.
+- Preserve EXIF orientation, colour conversion, alpha flattening, deterministic
+  naming and manifest checksums.
+- A generated manifest records the bytes seen and written by that run. It is
+  not proof of rights, approval or platform acceptance.
+- Build and package commands must fail clearly when the selected targets cannot
+  be produced or the output does not validate.
+- Source images are never uploaded by the local tools.
 
-## The site is live
+## Platform specifications
 
-https://notgabriels-sys.github.io/albumdesign/ serves `docs/` from `main`.
-Gabriel switched Pages on himself, because he had to: an Actions token is
-refused with "Resource not accessible by integration" when it tries to *create*
-a Pages site, and the Pages REST path is blocked by this environment's proxy.
-Deploying to the existing site is fine, so pushes to `main` publish normally.
+Use primary platform documentation where possible. Record whether a number is
+published by the platform, supplied by a distributor, or chosen conservatively
+by this project. Do not convert a recommendation into a hard requirement.
 
-`*.github.io` is also blocked by the egress proxy, so the served page cannot be
-fetched from here. To check a deploy, read the `pages build and deployment` run
-and the `github-pages` deployment sha instead, and render `docs/` locally with
-Playwright to check appearance.
+Relevant current sources include Spotify for Artists, Apple Music provider
+guidance, Bandcamp help, SoundCloud help and the distributor documentation
+named beside individual targets. Re-check them before material spec changes.
 
-## Open, needs Gabriel
+## Site and payment safety
 
-- The Stripe link in `docs/shop.html` cannot be read from here (`buy.stripe.com`
-  is refused by the egress gateway with a 403 on CONNECT), so the shop
-  deliberately names no amount and defers to the Stripe page. Confirm what it
-  charges before advertising a figure.
-- GVL catalogue table and the Förderantrag both have blanks only he can fill:
-  real release dates, ISRCs, which tracks were actually released, real bio
-  facts and real costs. Do not guess any of them.
+The public site uses `https://gabs-utilities.com/`. The retained public tools
+are the artwork checker and split-sheet generator. Mixing and mastering is a
+human service and must not be conflated with automated file validation.
+
+Payment buttons are a separate release gate. A label, toast, HTTP 200 or URL
+shape is not evidence of the amount a provider will charge. Verify buyer-facing
+totals after verifying the provider object, and preserve an enquiry path when a
+service cannot be safely represented by a fixed checkout.
+
+## Release discipline
+
+Before claiming completion:
+
+1. Inspect the exact diff and confirm no unrelated files moved.
+2. Run the relevant tests from a clean checkout.
+3. Push the intended branch and read the remote SHA back.
+4. Verify each retired public URL independently returns 404.
+5. Verify retained artwork and service surfaces still respond and contain the
+   expected links.
+
+Publication, payment, successful validation and customer delivery are separate
+facts. Report them separately.
