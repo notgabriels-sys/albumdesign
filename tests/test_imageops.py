@@ -1,4 +1,5 @@
 import io
+import zlib
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,83 @@ def test_inspect_rejects_non_images(tmp_path):
 def test_inspect_missing_file(tmp_path):
     with pytest.raises(ImageError, match="file not found"):
         inspect(tmp_path / "ghost.png")
+
+
+def _png_claiming(tmp_path, w, h, *, keep_pixels=True):
+    """A real PNG with its IHDR edited to claim a size it does not hold.
+
+    The chunk CRC is recomputed so the header is internally valid: an
+    inconsistent one would be caught for the wrong reason and the test would
+    pass without exercising anything.
+    """
+    buf = io.BytesIO()
+    Image.new("RGB", (300, 300), (20, 140, 90)).save(buf, format="PNG")
+    png = bytearray(buf.getvalue())
+    assert bytes(png[12:16]) == b"IHDR"
+    png[16:20] = w.to_bytes(4, "big")
+    png[20:24] = h.to_bytes(4, "big")
+    png[29:33] = zlib.crc32(bytes(png[12:29])).to_bytes(4, "big")
+    path = tmp_path / "claims.png"
+    path.write_bytes(bytes(png) if keep_pixels else bytes(png[:33]))
+    return path
+
+
+def test_inspect_refuses_a_size_the_file_does_not_hold(tmp_path):
+    """A header states a size for a file that holds no such image.
+
+    Pillow reads width and height out of the container without decoding, so
+    `Image.open` returned 5000x5000 for this file and `coverforge check`
+    printed "5000x5000 RGB PNG 33 KB" and "ok 10/10 targets clear", exit 0.
+    5000 is deliberate: it is under Pillow's decompression-bomb limit, so the
+    existing bomb guard does not fire and this is the case it cannot cover.
+    """
+    path = _png_claiming(tmp_path, 5000, 5000)
+    with pytest.raises(ImageError, match="truncated"):
+        inspect(path)
+
+
+def test_inspect_refuses_a_header_with_no_image_behind_it(tmp_path):
+    """The 33-byte version: a signature and an IHDR and nothing else.
+
+    This one was already refused before `im.load()` was added, because Pillow
+    cannot even identify a PNG with no IDAT, and it was measured passing
+    against the unfixed file rather than assumed to bite. It is a regression
+    guard on the boundary next door, not evidence for the fix above. The
+    browser had no such luck: cover.html read this exact shape as a
+    3000 x 3000 cover with every platform tile passing.
+    """
+    path = _png_claiming(tmp_path, 3000, 3000, keep_pixels=False)
+    with pytest.raises(ImageError, match="not a readable image"):
+        inspect(path)
+
+
+def test_inspect_still_sees_an_animated_source(tmp_path):
+    """`is_animated` drives the "only the first frame is exported" warning and
+    had no test, so adding `im.load()` to inspect() could have silenced it
+    unnoticed. `n_frames` is read the same either way, measured both ways.
+
+    The frames must differ. Three identically-filled palette frames come back
+    as a single-frame GIF, which is how the first attempt at this test
+    "proved" animation detection was broken when it was fine.
+    """
+    frames = [Image.new("RGB", (60, 60), c).convert("P")
+              for c in ((255, 0, 0), (0, 255, 0), (0, 0, 255))]
+    path = tmp_path / "anim.gif"
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=100, loop=0)
+    assert Image.open(path).n_frames == 3, "fixture is not animated"
+    assert inspect(path).is_animated
+
+    still = tmp_path / "still.gif"
+    frames[0].save(still)
+    assert not inspect(still).is_animated
+
+
+def test_inspect_still_reads_a_file_that_does_decode(tmp_path):
+    """The other half. Refusing everything would pass both tests above."""
+    path = tmp_path / "real.png"
+    Image.new("RGB", (300, 300), (20, 140, 90)).save(path)
+    src = inspect(path)
+    assert (src.width, src.height) == (300, 300)
 
 
 def test_normalise_flattens_alpha_onto_chosen_colour(tmp_path):

@@ -1,16 +1,18 @@
-# coverforge
+# Coverforge
 
 Preflight your release artwork, then export the whole per-platform delivery pack
 in one command.
 
 **Free browser tools, nothing to install:**
-[cover spec checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
-[LUFS and true-peak meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
-[release checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
-[split sheet](https://notgabriels-sys.github.io/albumdesign/splits.html)
+[Album Cover Size Checker](https://gabs-utilities.com/cover.html) ·
+[Split Sheet Maker](https://gabs-utilities.com/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
+
+If you would rather someone else finished the record, the
+[rates are here](https://gabs-utilities.com/shop.html):
+mixing and mastering by Gabriel G Alonso, Berlin.
 
 You finish a cover, and then comes the boring half: 3000×3000 for the
 distributor, 3000×3000 for Beatport, something under 2 MB for SoundCloud, a 9:16
@@ -67,15 +69,15 @@ Exit codes match the rest of the repo: `0` clean, `1` findings, `2` bad usage.
 
 ## Install
 
-Needs Python 3.11+ (it uses the stdlib TOML reader). Pillow is the only
-dependency.
+Coverforge needs Python 3.11+ and Pillow. From the repository root:
 
 ```bash
-uv venv && uv pip install -e .
-# or: python3 -m venv .venv && .venv/bin/pip install -e .
+uv venv && uv pip install -e '.[dev]'
+# or: python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
-Then `coverforge ...`, or `python -m coverforge ...` without installing.
+Then use `coverforge ...`, or `python -m coverforge ...` without installing the
+console entry point.
 
 ## What it actually does to your pixels
 
@@ -113,14 +115,21 @@ platform's published minimum instead, which is why the two do not always agree.
 ## Commands
 
 ```bash
-coverforge targets                       # list targets, sizes, floors, notes
-coverforge check ART... [--strict]       # report only, writes nothing
-coverforge build ART... -o DIR           # write the delivery pack
-coverforge contact-sheet ART... -o DIR   # offline review packet for variants
+coverforge targets                         # list target definitions
+coverforge check ART... [--strict]         # preflight; writes nothing
+coverforge build ART... -o DIR             # render a delivery pack
+coverforge sheet ART... -o SHEET.jpg       # quick single-JPEG variant grid
+coverforge contact-sheet ART... -o DIR     # JPEG + offline HTML review packet
+coverforge audit DELIVERY...               # validate expected delivery files
+coverforge verify DELIVERY...              # audit plus manifest checksums
+coverforge package DELIVERY... -o DIR      # validated handoff ZIP files
+coverforge manifest LEFT RIGHT             # compare two build captures
 ```
 
-`ART` can be files or a directory. Point it at a folder of variants and each one
-gets its own output folder:
+`contactsheet` is retained as an alias for `contact-sheet`.
+
+`ART` can be files or a directory. Point `build` at a folder of variants and
+each one gets its own output folder:
 
 ```bash
 coverforge build ~/art/ft007-variants/ -o delivery/ --group dsp
@@ -136,58 +145,106 @@ Useful flags:
 | `--name "Artist - Title"` | slugified into the output filenames |
 | `--flatten '#000000'` | colour behind transparency (default white) |
 | `--allow-upscale` | render targets larger than the master |
-| `--dry-run` | build: report what would be written |
+| `--dry-run` | build/review packet: report the plan without writing |
 | `--strict` | check: exit non-zero on warnings, not just errors |
-| `--json` | machine-readable output from any command |
+| `--json` | machine-readable output from supported commands |
 
-Exit codes: `0` clean, `1` findings (errors, or warnings under `--strict`, or
-skipped targets), `2` bad usage or unreadable input. So this drops into a
-pre-delivery script:
+Exit codes: `0` clean, `1` findings (errors, warnings under `--strict`, invalid
+deliveries, differences, or skipped targets), `2` bad usage or unreadable input.
+That makes pre-delivery automation straightforward:
 
 ```bash
 coverforge check final-master.tif --strict || exit 1
 ```
 
-Every build also drops a `manifest.json` and a `DELIVERY.md` table next to the
-files. The second one is handy to paste into a mail to a label or distributor.
-
 ## Picking between variants
 
-Before you decide which master to export, turn a folder of variants into a
-single sheet you can look at:
+For a quick visual pass, combine variants into one labelled JPEG:
+
+```bash
+coverforge sheet ~/art/ft011-variants/ \
+  --title "FT011 visual review" --columns 4 -o review/ft011.jpg
+```
+
+For a review packet that keeps the filename mapping visible, use:
 
 ```bash
 coverforge contact-sheet ~/art/ft011-variants/ \
   --title "FT011 visual review" --columns 4 -o review/ft011
 ```
 
-It writes exactly two files, into a **new** directory that must sit outside
-every source image's own folder:
+It writes exactly two files into a **new** directory that must sit outside every
+source image's own folder:
 
 - `CONTACT_SHEET.jpg`: a numbered, letterboxed preview grid
 - `CONTACT_SHEET.html`: an offline index mapping each number to its filename,
-  dimensions and colour mode
+  dimensions, and colour mode
 
-`--dry-run` validates the images, layout and output location without writing
-anything. `--cell-size`, `--columns` and `--background '#rrggbb'` tune the
-sheet. Source art is never copied, altered or uploaded.
+`--dry-run` validates the images, layout, and output location without writing
+anything. `--cell-size`, `--columns`, and `--background '#rrggbb'` tune the
+packet. Source art is never copied, altered, or uploaded.
 
-## What manifest.json is, and is not
+## Validating and packaging a delivery
 
-The manifest is schema version 1. For a valid name it contains no local paths,
+Validate expected files, filename structure, dimensions, and formats:
+
+```bash
+coverforge audit build/my-release
+```
+
+If the build used `--only` or `--group`, select the same subset during the
+audit. To also compare byte counts and SHA-256 checksums against the manifest:
+
+```bash
+coverforge verify build/my-release
+```
+
+Create a shareable package only after the same validation passes:
+
+```bash
+coverforge package build/my-release -o release-packages
+```
+
+Each ZIP includes `COVERFORGE_PACKAGE.json`, with the audit summary and hashes
+for the included files. `--force` can package a bundle with findings, but the
+command still exits non-zero so automation cannot mistake it for a clean pack.
+
+Compare two generated manifests or bundle folders when a revision arrives:
+
+```bash
+coverforge manifest build/my-release-v1 build/my-release-v2
+coverforge manifest build/my-release-v1 build/my-release-v2 --json
+```
+
+## What a build writes
+
+A non-dry-run build that can produce at least one selected target writes one
+rendered delivery file per produced target. It also writes `DELIVERY.md`, a
+human-readable inventory, and `manifest.json`, the machine-readable capture.
+Skipped targets have no rendered file.
+
+`check` is report-only and writes nothing. `build --dry-run` reports the planned
+result but writes no output directory, delivery files, `DELIVERY.md`, or
+`manifest.json`.
+
+## What `manifest.json` is, and is not
+
+The manifest uses schema version 1. For a valid name it contains no local paths,
 so it is safe to hand to someone else. It records the SHA-256 of the source and
-of every file written, plus a deterministic `capture_id` derived from the rest
-of the payload.
+every emitted output, byte counts, rendering facts, and a deterministic
+`capture_id` derived from the rest of the payload.
 
 That is a record of **the bytes this run read and wrote on your machine**. It is
-not proof of authorship, ownership, rights, approval or release-readiness, and
-it says nothing about whether a platform will accept the files.
+not proof of authorship, ownership, rights, approval, release-readiness, or
+external platform acceptance. Coverforge does not upload files or make those
+decisions for you.
 
 ## The specs are yours to edit
 
-`coverforge/targets.toml` holds every target. **The numbers in it are a best-effort
-snapshot, and platforms change requirements without announcing it**, so check them
-against whatever your distributor currently demands before you rely on them.
+`coverforge/targets.toml` holds every built-in target. The numbers are a
+best-effort snapshot, and platforms change requirements without announcing it,
+so check them against what your distributor currently demands before relying on
+them.
 
 Adding a target is a few lines:
 
@@ -219,18 +276,15 @@ uv pip install -e '.[dev]'
 python -m pytest tests -q
 ```
 
-The browser tools in `docs/` have their own checks. They need Playwright and
-the image fixtures, which are generated rather than committed:
+The browser tools in `docs/` have their own checks. They need Playwright and the
+image fixtures, which are generated rather than committed:
 
 ```bash
 npm install playwright
 python tools/make_fixtures.py     # writes tools/fixtures/
-node tools/browser_test.js        # functional: parsing, loudness, checklist
+node tools/browser_test.js        # functional: cover and split-sheet tools
 node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
 ```
-
-`verify_lufs.py` and `verify_truepeak.py` check the loudness maths against
-the EBU Tech 3341 test signals independently of the browser.
 
 Two more run in CI and need nothing installed:
 
@@ -240,7 +294,15 @@ python tools/sync_artifacts.py --check  # are the published copies stale?
 ```
 
 `consistency_check.py` asserts the things that have actually gone wrong: the
-rate table agreeing across every page that quotes it, no unverified payment
-link reaching a page, the cover tool and the checklist not contradicting each
-other, and no page making a network call, which is what "nothing is uploaded"
-means. Each check is there because that exact thing broke once.
+rate table agreeing across every page that quotes it, no unverified payment link
+reaching a page, and no page making a network call, which is what "nothing is
+uploaded" means.
+Each check is there because that exact thing broke once.
+
+---
+
+## Gabriel Tools + Code
+
+Part of Gabriel García Alonso's public tool/product ecosystem. Browse the master catalog for related audio tools, repositories, Hologram People soundware, and services:
+
+[Gabriel Tools + Code](https://gabriel-tools-and-code.notgabriels960914.chatgpt.site/)
