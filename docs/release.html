@@ -126,7 +126,10 @@
   .nojs b{color:var(--warn)}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 
-  @media print{.bar .btns,.tag,.lede{display:none}body{background:#fff}}
+  /* Printed, so it carries the same chrome the split sheet did: a nav row
+     of sibling tools and footer links on a page someone is working from. */
+  @media print{.bar .btns,.tag,.lede,.siblings,footer a{display:none!important}
+    body{background:#fff}}
 </style>
 
 <a class="skip" href="#main">Skip to content</a>

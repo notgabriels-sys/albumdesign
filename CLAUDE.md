@@ -472,6 +472,21 @@ which made them useless as gates. Keep them asserting.
   describes a list that is not there. Rendering it is what showed that. Write
   the notice after looking at the page, not from what you assume the page does.
 
+- **The split sheet's real output is the printed page, and nobody had looked
+  at it.** Rendered in print media with a filled sheet, it ended with a nav row
+  of four sibling tools in purple, plus `all tools` and `Impressum`, under the
+  signature block. That is website chrome on an agreement someone signs and
+  sends to GEMA and GVL. `release.html` prints too and carried the same.
+
+  Two smaller artifacts in the same render, both wrong on a signed document:
+  `appearance:none` does not reach the date field's picker button, which is a
+  shadow pseudo-element, so a calendar icon printed beside the agreed date; and
+  whichever field had focus when Print was pressed printed its focus ring.
+
+  The byline is deliberately kept in print. On a paper document it says where
+  the document came from. A check asserts both printable pages hide `.siblings`
+  and `footer a`, and it was proved by putting the chrome back.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows

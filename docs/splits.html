@@ -159,11 +159,21 @@
   @media print{
     body{background:#fff;color:#000}
     .wrap{max-width:none;padding:0}
-    .noprint,.priv,.tag,.lede,footer .cta{display:none!important}
+    /* The printed sheet goes to GEMA and GVL with signatures on it. It ended
+       with four purple links to the site's other tools and a nav row, which is
+       website chrome on a signed agreement. The byline stays: on a printed
+       document it says where the document came from. */
+    .noprint,.priv,.tag,.lede,footer .cta,.siblings,footer a{display:none!important}
     .card{box-shadow:none;border:1px solid #999;break-inside:avoid;margin-bottom:12px}
     .card > h2{border-bottom:1px solid #999;color:#000}
     input,select{border:0;background:none;padding:2px 0;min-height:0;color:#000;
       -webkit-appearance:none;appearance:none}
+    /* appearance:none does not reach the date field's picker button, which is
+       a shadow pseudo-element, so a calendar icon printed next to the agreed
+       date. And whichever field had focus when Print was pressed printed its
+       focus ring. Neither belongs on a document someone signs. */
+    input::-webkit-calendar-picker-indicator{display:none}
+    :focus-visible{outline:none!important}
     th,td{border-bottom:1px solid #ccc}
     .sign{display:block!important}
   }

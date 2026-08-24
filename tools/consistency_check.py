@@ -1196,6 +1196,38 @@ def main() -> int:
             "says so nowhere, so it looks broken rather than explained",
         )
 
+    print("\n=== a page meant to be printed prints the document, not the site ===")
+    # splits.html exists to produce a signed sheet for GEMA and GVL, and
+    # release.html gets printed and worked through. Rendered in print media,
+    # the split sheet ended with a nav row of four sibling tools in purple,
+    # plus "all tools" and "Impressum" links, under the signature block: site
+    # chrome on an agreement someone puts their name to.
+    #
+    # The byline is deliberately kept. On a printed document it says where the
+    # document came from, which is worth having.
+    for name in sorted(n for n, b in src.items() if "@media print" in b):
+        rules = "".join(re.findall(r"@media print\{(.*?)\n  \}|@media print\{([^\n]*)\}",
+                                   src[name], re.S)[0] or "")
+        block = re.search(r"@media print\s*\{", src[name])
+        tail = src[name][block.end():]
+        depth, end = 1, 0
+        for i, ch in enumerate(tail):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        rules = tail[:end]
+        for hidden in (".siblings", "footer a"):
+            check(
+                f"{name} hides {hidden!r} when printed",
+                hidden in rules,
+                f"a printed page carrying {hidden} puts website navigation on "
+                f"a document somebody works from or signs",
+            )
+
     print("\n=== every payment processor the site links to is disclosed ===")
     # A payment button sends the visitor, and their data, to a third party
     # acting as its own controller. Art. 13 DSGVO says the privacy notice has
