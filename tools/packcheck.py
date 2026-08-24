@@ -65,6 +65,12 @@ class Pack:
     root: Path
     wavs: list[Path] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
+    # How much of the pack was actually listened to. A count of errors means
+    # nothing without it: zero errors after a run that decoded no audio is not
+    # the same statement as zero errors after a run that decoded all of it.
+    deep: bool = True
+    levels_checked: int = 0
+    levels_unmeasured: int = 0
 
     def add(self, level: str, where: str, message: str) -> None:
         self.findings.append(Finding(level, where, message))
@@ -121,7 +127,7 @@ def peak_dbfs(path: Path, facts: dict) -> float | None:
 
 
 def check_pack(root: Path, deep: bool) -> Pack:
-    pack = Pack(root=root)
+    pack = Pack(root=root, deep=deep)
 
     present = {p.name for p in root.iterdir() if p.is_dir()}
     for folder in FOLDERS:
@@ -205,10 +211,26 @@ def check_pack(root: Path, deep: bool) -> Pack:
 
         if deep:
             peak = peak_dbfs(path, facts)
-            if peak is not None and peak > SPEC["peak_ceiling_dbfs"]:
-                pack.add("error", rel, f"peaks at {peak:.2f} dBFS; likely clipped")
-            elif peak == float("-inf"):
-                pack.add("error", rel, "silent file")
+            if peak is None:
+                # A level nobody measured is not a level under the ceiling.
+                # peak_dbfs decodes only 16- and 24-bit PCM and gives up on a
+                # read error, and the result was dropped on the floor. A
+                # 32-bit file clipping at 0 dBFS drew no comment at all while
+                # a 24-bit file at the identical amplitude was reported as
+                # clipped. Proved on a built pack before this was fixed.
+                pack.levels_unmeasured += 1
+                pack.add(
+                    "warn",
+                    rel,
+                    f"level not measured ({facts['sampwidth'] * 8}-bit is not decoded "
+                    "here), so clipping and silence are unchecked on this file",
+                )
+            else:
+                pack.levels_checked += 1
+                if peak == float("-inf"):
+                    pack.add("error", rel, "silent file")
+                elif peak > SPEC["peak_ceiling_dbfs"]:
+                    pack.add("error", rel, f"peaks at {peak:.2f} dBFS; likely clipped")
 
     if not pack.wavs:
         pack.add("error", ".", "no WAV files found")
@@ -274,10 +296,31 @@ def main() -> int:
     warns = sum(1 for f in pack.findings if f.level == "warn")
     print(f"\n{len(pack.wavs)} WAV files, {errors} error(s), {warns} warning(s)")
 
+    # The summary line is the verdict most people read, and it was the same
+    # shape whether the audio had been decoded or not. A --quick run over a
+    # pack holding a file that peaks at 0 dBFS printed "0 error(s), 0
+    # warning(s)" and then wrote its README. Say what was not listened to.
+    if not pack.deep:
+        print(
+            "audio was not decoded (--quick), so no file was checked for "
+            "clipping or silence"
+        )
+    elif pack.levels_unmeasured:
+        print(
+            f"{pack.levels_unmeasured} of {len(pack.wavs)} file(s) had no level "
+            "measured, so clipping and silence are unchecked there"
+        )
+
     if args.write_readme:
         if errors:
             print("not writing README.txt while there are errors", file=sys.stderr)
         else:
+            if not pack.deep:
+                print(
+                    "note: README.txt written from a --quick run, in which no "
+                    "file's level was checked",
+                    file=sys.stderr,
+                )
             (root / "README.txt").write_text(readme(root, pack, args.title), encoding="utf-8")
             print(f"wrote {root / 'README.txt'}")
 

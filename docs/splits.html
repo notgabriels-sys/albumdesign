@@ -1,9 +1,45 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Split Sheet</title>
+<title>Split Sheet Maker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="description" content="Write down who owns what on a track, before anyone has to remember. Free, runs in your browser, nothing uploaded.">
+<link rel="canonical" href="https://gabs-utilities.com/splits.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://gabs-utilities.com/splits.html">
+<meta property="og:title" content="Split Sheet Maker">
+<meta property="og:description" content="Write down who owns what on a track, before anyone has to remember. Free, runs in your browser, nothing uploaded.">
+<meta property="og:image" content="https://gabs-utilities.com/share-splits.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Link preview card. Preflight Split Sheet Maker, headline &quot;Write down who owns what&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Split Sheet Maker",
+  "description": "Write down who owns what on a track, before anyone has to remember. Free, runs in your browser, nothing uploaded.",
+  "url": "https://gabs-utilities.com/splits.html",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any browser",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  }
+}
+</script>
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
@@ -32,6 +68,8 @@
   .brand{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;letter-spacing:.3em;
     font-size:15px;text-transform:uppercase}
   .brand b{color:var(--accent)}
+  .page{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.16em;font-size:12px;text-transform:uppercase;color:var(--accent)}
   .tag{color:var(--muted);font-size:13.5px}
   .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
     border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
@@ -84,12 +122,20 @@
     letter-spacing:.04em;padding:4px 9px;border-radius:7px;white-space:nowrap}
   .total.pass{color:var(--pass);background:var(--pass-bg)}
   .total.fail{color:var(--fail);background:var(--fail-bg)}
+  .rowissues{color:var(--fail);font-weight:600}
+  .rowissues:empty{display:none}
 
   .note{color:var(--muted);font-size:12.5px;line-height:1.55;margin:10px 0 0}
   .note b{color:var(--ink)}
   .warnbox{border:1px solid var(--line);background:var(--warn-bg);color:var(--ink);
     border-radius:10px;padding:11px 13px;font-size:13px;margin:0 0 14px}
 
+  .siblings{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;font-size:13px;color:var(--muted)}
+  .siblings b{font-weight:600;color:var(--ink)}
+  .siblings a{color:var(--accent);text-decoration:none;font-weight:600}
+  .siblings a:hover{text-decoration:underline}
+  .siblings + footer{margin-top:14px;padding-top:0;border-top:0}
   footer{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;
     gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
   footer a{color:var(--accent);text-decoration:none;font-weight:600}
@@ -99,17 +145,35 @@
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .skip{position:absolute;left:-9999px;color:var(--ink)}
   .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  /* Shown only when scripting is off. Every tool here is JavaScript: that is
+     what keeps the files on the visitor's machine, and it also means there is
+     no server to fall back on. Without this the pages present a working-looking
+     drop zone, or a fillable sheet, that silently does nothing. */
+  .nojs{margin:0 0 22px;padding:14px 16px;border:1px solid var(--warn);
+    border-left-width:4px;border-radius:10px;background:var(--surface-2);
+    color:var(--ink);font-size:14.5px;line-height:1.55;max-width:70ch}
+  .nojs b{color:var(--warn)}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 
   /* The printed sheet is the actual deliverable, so it gets real attention. */
   @media print{
     body{background:#fff;color:#000}
     .wrap{max-width:none;padding:0}
-    .noprint,.priv,.tag,.lede,footer .cta{display:none!important}
+    /* The printed sheet goes to GEMA and GVL with signatures on it. It ended
+       with four purple links to the site's other tools and a nav row, which is
+       website chrome on a signed agreement. The byline stays: on a printed
+       document it says where the document came from. */
+    .noprint,.priv,.tag,.lede,footer .cta,.siblings,footer a{display:none!important}
     .card{box-shadow:none;border:1px solid #999;break-inside:avoid;margin-bottom:12px}
     .card > h2{border-bottom:1px solid #999;color:#000}
     input,select{border:0;background:none;padding:2px 0;min-height:0;color:#000;
       -webkit-appearance:none;appearance:none}
+    /* appearance:none does not reach the date field's picker button, which is
+       a shadow pseudo-element, so a calendar icon printed next to the agreed
+       date. And whichever field had focus when Print was pressed printed its
+       focus ring. Neither belongs on a document someone signs. */
+    input::-webkit-calendar-picker-indicator{display:none}
+    :focus-visible{outline:none!important}
     th,td{border-bottom:1px solid #ccc}
     .sign{display:block!important}
   }
@@ -119,8 +183,10 @@
 
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
+  <noscript><p class="nojs"><b>JavaScript is off, so this sheet is not being checked.</b> This tool runs entirely in your browser, which is what keeps your files on your machine. That also means there is no server to fall back on: with JavaScript turned off, nothing here can run. You can still type into the fields below, but the shares are not added up and a share with nobody named against it is not flagged. Do not print or send a sheet from this page until JavaScript is on and the totals read correctly.</p></noscript>
   <header>
-    <span class="brand">SPLIT<b>·</b>SHEET</span>
+    <span class="brand">PRE<b>FLIGHT</b></span>
+    <span class="page">Split Sheet Maker</span>
     <span class="tag">agree it now, not after the money arrives</span>
     <span class="priv">runs in your browser · nothing uploaded</span>
   </header>
@@ -208,12 +274,18 @@
     <button class="act" id="reset" type="button">Clear</button>
     <span class="note" id="live" role="status" aria-live="polite" style="margin:0"></span>
   </div>
+  <p class="note rowissues" id="rowissues" role="status" aria-live="polite"></p>
 
   </main>
+  <nav class="siblings" aria-label="Other tools">
+    <b>Other free tools:</b>
+    <a href="cover.html">Album Cover Size Checker</a>
+  </nav>
   <footer>
     <a href="index.html">← all tools</a>
-    <span>Split Sheet: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
-    <span class="cta">Need the record finished? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <a href="impressum.html">Impressum</a>
+    <span>Split Sheet Maker: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need the record finished? <a href="shop.html">See rates and book</a>, or email <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
   </footer>
 </div>
 
@@ -236,7 +308,10 @@
     var soc=document.createElement("input"); soc.className="f-soc"; soc.placeholder="GEMA / GVL / none";
     soc.value=data.soc||""; soc.setAttribute("aria-label","Society or publisher");
     var pct=document.createElement("input"); pct.type="number"; pct.className="f-pct num";
-    pct.min="0"; pct.max="100"; pct.step="0.01"; pct.value=data.pct!==undefined?data.pct:"";
+    pct.min="0"; pct.max="100"; pct.step="0.01";
+    // null is a share that was never entered, and it comes back as an empty
+    // box rather than a zero somebody has to notice is wrong.
+    pct.value=(data.pct===undefined||data.pct===null)?"":data.pct;
     pct.setAttribute("aria-label","Share percent");
     var del=document.createElement("button"); del.type="button"; del.className="rm noprint";
     del.textContent="Remove"; del.setAttribute("aria-label","Remove this person");
@@ -255,12 +330,20 @@
   }
 
   function rows(tbody){return Array.prototype.slice.call(tbody.querySelectorAll("tr"))}
+  // A share nobody entered is not a zero share. sum() and problems() were
+  // fixed for exactly that, and readRow was left on parseFloat(x)||0 while
+  // being the function that feeds both the saved sheet and the exported one.
+  // Saving 0 meant a reload turned a blank box into a hard zero, the badge
+  // went from fail to pass, and the warning naming the row disappeared, so
+  // the badge fix was undone by pressing reload. Proved in Chromium.
   function readRow(tr){
+    var raw=tr.querySelector(".f-pct").value.trim();
+    var v=parseFloat(raw);
     return {
       name:tr.querySelector(".f-name").value.trim(),
       role:tr.querySelector(".f-role").value,
       soc:tr.querySelector(".f-soc").value.trim(),
-      pct:parseFloat(tr.querySelector(".f-pct").value)||0
+      pct:(raw!==""&&isFinite(v))?v:null
     };
   }
   function sum(tbody){
@@ -277,10 +360,45 @@
     update();
   }
 
-  function badge(el,total){
-    var ok=Math.abs(total-100)<0.005;
+  // parseFloat(x)||0 turns anything unreadable into a zero and adds it in
+  // silently, so three separate invalid sheets totalled exactly 100 and were
+  // badged pass: 150 with -50, a third writer whose share was unparseable, and
+  // a named person whose share was never filled in. This is the document that
+  // decides who GEMA and GVL pay. A share nobody entered is not a zero share,
+  // and a total is not a verdict on rows the total never read.
+  function problems(tbody){
+    var out=[];
+    rows(tbody).forEach(function(tr,i){
+      var name=tr.querySelector(".f-name").value.trim();
+      var raw=tr.querySelector(".f-pct").value.trim();
+      var who=name||("row "+(i+1));
+      // A row nobody has touched yet is a blank form, not a mistake.
+      if(!name&&!raw) return;
+      if(!raw){ out.push(who+" has no share"); return; }
+      var v=parseFloat(raw);
+      // A mutation sweep reports this term as unguarded, and that is honest:
+      // .f-pct is input[type=number], which sanitises anything it cannot parse
+      // to "", so the row reaches here as missing rather than unreadable and
+      // the branch above fires instead. Measured in Chromium on 23 August
+      // 2026: "abc", "Infinity", "1/2", "0x10", " 7 " and "1e400" all read
+      // back as "", while "-50" and "1e5" survive. Only Chromium was tested,
+      // so the guard stays rather than being deleted on one browser's
+      // behaviour, and the test named for it says what it really proves.
+      if(!isFinite(v)){ out.push(who+" has a share that is not a number"); return; }
+      if(v<0){ out.push(who+" has a negative share"); return; }
+      if(!name) out.push(raw+"% has no name against it");
+    });
+    return out;
+  }
+
+  function badge(el,total,probs){
+    probs=probs||[];
+    var totals=Math.abs(total-100)<0.005;
+    var ok=totals&&!probs.length;
     el.className="total "+(ok?"pass":"fail");
-    el.textContent=(Math.round(total*100)/100)+"%"+(ok?"":", must total 100");
+    var why=probs.length?(", "+probs.length+" row"+(probs.length>1?"s":"")+" to fix")
+                        :(totals?"":", must total 100");
+    el.textContent=(Math.round(total*100)/100)+"%"+why;
   }
 
   function signatures(){
@@ -301,8 +419,15 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 
   function update(){
-    badge($("wtotal"),sum($("writers")));
-    badge($("rtotal"),sum($("performers")));
+    var wp=problems($("writers")), rp=problems($("performers"));
+    badge($("wtotal"),sum($("writers")),wp);
+    badge($("rtotal"),sum($("performers")),rp);
+    // Name the actual rows. A pill reading "100%, 1 row to fix" tells you a
+    // sheet is wrong without telling you where, and this one is printed and
+    // signed.
+    var all=wp.map(function(m){return "Composition: "+m})
+              .concat(rp.map(function(m){return "Recording: "+m}));
+    $("rowissues").textContent=all.length?all.join(". ")+".":"";
     signatures();
     save();
   }
@@ -326,17 +451,43 @@
     update();
   }
 
+  // The exported sheet is the copy that leaves the browser and reaches GEMA
+  // or GVL. It said "0%" for a share nobody entered, put a signature line
+  // under it, and totalled to 100 so the document read complete and
+  // internally consistent. It also dropped a row that had a share but no
+  // name, while sum() still counted that share, so the listing did not add
+  // up to its own total and nothing said why.
+  function shareText(pct){return pct===null?"share not filled in":pct+"%"}
+  function personLine(r){
+    return "  "+(r.name||"(name missing)")+"  \u00b7  "+r.role+"  \u00b7  "+
+           (r.soc||"no society")+"  \u00b7  "+shareText(r.pct);
+  }
+  function totalLine(tbody){
+    var n=problems(tbody).length;
+    return "  total "+(Math.round(sum(tbody)*100)/100)+"%"+
+           (n?"  ("+n+" row"+(n>1?"s":"")+" could not be read, so this total does not cover the sheet)":"");
+  }
+  // Print and copy hand out the same document, so they say the same thing
+  // about it. Copy said only "Copied to the clipboard."
+  function exportWarning(){
+    var probs=problems($("writers")).concat(problems($("performers")));
+    if(probs.length) return probs.length+" row"+(probs.length>1?"s":"")+" could not be read as a share.";
+    var off=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
+    return off?"a side does not total 100%.":"";
+  }
+
   function asText(){
     var m=["title","artist","label","isrc","date","place"].map(function(k){return $(k).value.trim()});
     var out=["SPLIT SHEET","Track: "+(m[0]||"—"),"Artist: "+(m[1]||"—"),"Label: "+(m[2]||"—"),
              "ISRC: "+(m[3]||"—"),"Agreed: "+(m[4]||"—")+(m[5]?", "+m[5]:""),"",
              "COMPOSITION (GEMA side)"];
+    // A row nobody has touched is still a blank form and stays out of it.
     rows($("writers")).map(readRow).forEach(function(r){
-      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
-    out.push("  total "+(Math.round(sum($("writers"))*100)/100)+"%","","RECORDING (GVL side)");
+      if(r.name||r.pct!==null) out.push(personLine(r))});
+    out.push(totalLine($("writers")),"","RECORDING (GVL side)");
     rows($("performers")).map(readRow).forEach(function(r){
-      if(r.name) out.push("  "+r.name+"  ·  "+r.role+"  ·  "+(r.soc||"no society")+"  ·  "+r.pct+"%")});
-    out.push("  total "+(Math.round(sum($("performers"))*100)/100)+"%","",
+      if(r.name||r.pct!==null) out.push(personLine(r))});
+    out.push(totalLine($("performers")),"",
              "Signed:", "");
     rows($("sigs")).forEach(function(tr){out.push("  "+tr.cells[0].textContent+"   ______________________   date ____________")});
     return out.join("\n");
@@ -347,13 +498,13 @@
   $("evenw").addEventListener("click",function(){even($("writers"))});
   $("evenr").addEventListener("click",function(){even($("performers"))});
   $("print").addEventListener("click",function(){
-    var bad=Math.abs(sum($("writers"))-100)>0.005||Math.abs(sum($("performers"))-100)>0.005;
-    $("live").textContent = bad ? "Printing anyway, but a side does not total 100%." : "";
+    var w=exportWarning();
+    $("live").textContent=w?("Printing anyway, but "+w):"";
     window.print();
   });
   $("copy").addEventListener("click",function(){
-    var t=asText();
-    var done=function(){$("live").textContent="Copied to the clipboard."};
+    var t=asText(), w=exportWarning();
+    var done=function(){$("live").textContent="Copied to the clipboard."+(w?" But "+w:"")};
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(t).then(done,function(){fallback(t,done)});
     } else fallback(t,done);
