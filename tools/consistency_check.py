@@ -91,8 +91,14 @@ VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com", "paypal.me"}
 # are listed one exact URL at a time rather than by loosening the rule above,
 # because "the host contains stripe" is exactly the sloppiness this check
 # exists to prevent. A URL here must be a page that cannot charge anyone.
+# Cited privacy policies, not payment links. Art. 13 DSGVO requires the notice
+# to point at each processor's own policy, so these have to be linkable while
+# the hosts around them stay unverified. Listed as exact URLs rather than by
+# host on purpose: exempting paypal.com wholesale would let a paypal.com/ncp/
+# button through, which is the shape that hid a EUR 1,200 charge.
 NON_PAYMENT_PROVIDER_LINKS: set[str] = {
     "https://stripe.com/privacy",
+    "https://www.paypal.com/de/legalhub/paypal/privacy-full",
 }
 
 # Providers whose links must be read before they can ship. paypal stays in this
@@ -1152,6 +1158,44 @@ def main() -> int:
             f"{mismatches}",
         )
 
+    print("\n=== every payment processor the site links to is disclosed ===")
+    # A payment button sends the visitor, and their data, to a third party
+    # acting as its own controller. Art. 13 DSGVO says the privacy notice has
+    # to name it. So the set of processors the shop links to and the set the
+    # Impressum discloses are the same fact in two files, and the shop is the
+    # one that changes.
+    #
+    # It had already drifted. The notice was written when Stripe was the only
+    # button, three PayPal.Me buttons went on the shop on 22 August 2026, and
+    # PayPal appeared nowhere in it: a processor receiving personal data,
+    # undisclosed, on the page money is spent on.
+    #
+    # The provider's name is derived from the host rather than retyped, so a
+    # fourth processor cannot be added to a hardcoded map that nobody updates.
+    # buy.stripe.com and paypal.me both yield their second-to-last label.
+    impressum_text = re.sub(r"<[^>]+>", " ", src["impressum.html"]).lower()
+    linked_processors = {
+        (urlsplit(u).hostname or "").lower().split(".")[-2]
+        for body in src.values()
+        for u, _text in verified_payment_anchors(body)
+        if len((urlsplit(u).hostname or "").split(".")) >= 2
+    }
+    check(
+        "the payment-processor scan found processors to check",
+        bool(linked_processors),
+        "no payment links found on any page at all, so the disclosure check "
+        "below compared nothing; either the shop lost its buttons or the "
+        "anchor scan has drifted off the markup",
+    )
+    for provider in sorted(linked_processors):
+        check(
+            f"the Impressum discloses {provider} as a payment processor",
+            provider in impressum_text,
+            f"the shop links to {provider}, and the Datenschutzerklärung never "
+            f"names it. A third party that receives the visitor's data has to "
+            f"be named under Art. 13 DSGVO",
+        )
+
     print("\n=== tax position stated the same way wherever it appears ===")
     vat_pages = {n: b for n, b in src.items() if re.search(r"VAT|UStG", b)}
     adds_vat = {n for n, b in vat_pages.items() if re.search(r"add(s)? no VAT|no VAT added", b)}
@@ -1318,6 +1362,46 @@ def main() -> int:
               "out of the sitemap is not the same as out of the index")
     check("robots.txt points at the sitemap",
           SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
+
+    # The domain is written twice: once as SITE, which every canonical, sitemap
+    # entry and preview URL above is compared against, and once in docs/CNAME,
+    # which is the only thing that makes GitHub Pages answer on that host at
+    # all. Nothing tied them together.
+    #
+    # That is "a fact restated somewhere else is a fact that can drift" with
+    # the worst blast radius in the repo. Every other instance of it makes one
+    # page say the wrong thing. This one takes the site down: change SITE alone
+    # and every URL points at a host Pages does not serve, change CNAME alone
+    # and Pages serves a host every URL disclaims. Both are a dead site, and
+    # both would have passed all 386 checks.
+    #
+    # The format matters as much as the value. Pages wants a bare hostname, so
+    # a scheme, a trailing slash or a path in this file silently stops the
+    # custom domain working, and the only symptom is the site being gone.
+    cname_path = DOCS / "CNAME"
+    check(
+        "docs/CNAME exists",
+        cname_path.is_file(),
+        "without it GitHub Pages serves the github.io address and the custom "
+        "domain 404s, however correct the DNS is",
+    )
+    if cname_path.is_file():
+        raw = cname_path.read_text(encoding="utf-8")
+        lines = [ln for ln in raw.splitlines() if ln.strip()]
+        host = SITE.split("//", 1)[-1].rstrip("/")
+        check(
+            "docs/CNAME names exactly the host the pages claim",
+            lines == [host],
+            f"CNAME says {lines!r}, every URL on the site says {host!r}; these "
+            f"are the same fact in two files and they have drifted apart",
+        )
+        check(
+            "docs/CNAME is a bare hostname",
+            lines and "/" not in lines[0] and ":" not in lines[0],
+            f"{lines[:1]!r}; Pages wants a hostname with no scheme, no path "
+            f"and no trailing slash, and rejects anything else by quietly "
+            f"dropping the custom domain",
+        )
 
     # docs/ is the web root: every file in it is served to the public. A plan
     # and a design spec were once committed to docs/superpowers/ and published,

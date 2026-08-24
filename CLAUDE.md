@@ -417,6 +417,37 @@ which made them useless as gates. Keep them asserting.
   confident SURVIVED lines, which is the third time that trap has been hit
   here.
 
+- **The domain is written twice, and the second copy is the site's life.**
+  `SITE` in `consistency_check.py` is what every canonical, sitemap entry and
+  preview URL is compared against; `docs/CNAME` is the only thing that makes
+  Pages answer on that host. Nothing tied them together. Every other instance
+  of a restated fact in this repo makes one page wrong; this one takes the
+  site down in either direction, and both directions would have passed all 386
+  checks. Three checks now: the file exists, it names exactly the host the
+  pages claim, and it is a bare hostname, because a scheme or a trailing slash
+  makes Pages drop the custom domain with no symptom but a missing site.
+
+- **The privacy notice named one payment processor and the shop had two.**
+  The Datenschutzerklärung was written when Stripe was the only button. Three
+  PayPal.Me buttons went on the shop on 22 August 2026 and PayPal appeared
+  nowhere in it: a third party receiving the visitor's data, acting as its own
+  controller, undisclosed under Art. 13 DSGVO, on the one page money is spent
+  on. The same list also promised that the `Cover-, Loudness-, Checklisten-
+  und Split-Sheet-Werkzeuge` run entirely in the browser, which is four of the
+  five and omits the delivery check, the tool a whole unreleased release gets
+  dropped into.
+
+  Both were hand-written lists beside a site that grew. The tools sentence is
+  now the invariant, `Alle Werkzeuge auf dieser Website`, which cannot go stale
+  when a sixth is added, and a check derives the processor names from the
+  payment links the pages actually carry rather than from a map someone has to
+  remember to update: `buy.stripe.com` and `paypal.me` both yield their
+  second-to-last label. Adding a processor without disclosing it now fails.
+
+  The cited PayPal privacy policy is exempted as an exact URL, never by host.
+  Exempting `paypal.com` wholesale would readmit the `paypal.com/ncp/` shape
+  that hid the EUR 1,200 charge, and a test proves that link is still blocked.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows
