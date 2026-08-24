@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+import shutil
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -102,11 +103,17 @@ def write_contact_sheet(
     )
     sheet = _compose_sheet(selected, title=title, columns=columns, cell_size=cell_size, background=background)
 
+    created = False
     try:
         result.output_dir.mkdir(parents=True, exist_ok=False)
+        created = True
         sheet.save(result.image_path, format="JPEG", quality=92, progressive=False, subsampling=0)
         result.html_path.write_text(render_html_index(result), encoding="utf-8")
     except OSError as error:
+        # A half-written packet looks like a real one but holds a truncated
+        # JPEG, so clear it rather than leave something that reviews wrongly.
+        if created:
+            shutil.rmtree(result.output_dir, ignore_errors=True)
         raise ContactSheetError(f"could not write contact-sheet packet: {error}") from error
     finally:
         sheet.close()
@@ -191,7 +198,7 @@ def render_html_index(result: ContactSheetResult) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(result.title)} — Coverforge contact sheet</title>
+  <title>{escape(result.title)}: Coverforge contact sheet</title>
   <style>
     :root {{ color-scheme: dark; --ink: #101116; --surface: #181a21; --bone: #f1ede3; --muted: #aaa79f; --line: #343844; --accent: #bf9a63; }}
     * {{ box-sizing: border-box; }}
@@ -254,13 +261,22 @@ def _positive_int(value: object, label: str) -> None:
 
 def _reject_output_inside_source_dirs(output_path: Path, sources: tuple[SourceImage, ...]) -> None:
     for source in sources:
-        try:
-            output_path.relative_to(source.path.resolve().parent)
-        except ValueError:
-            continue
-        raise ContactSheetError(
-            "contact-sheet output directory must be outside selected image directories"
-        )
+        # Both the folder the image was selected from and the folder its bytes
+        # actually live in. Curating variants as a folder of symlinks is normal,
+        # and resolving first would only ever test the link targets, letting the
+        # packet be written into the very folder being reviewed.
+        candidates = {
+            source.path.resolve().parent,
+            source.path.parent.resolve(),
+        }
+        for directory in candidates:
+            try:
+                output_path.relative_to(directory)
+            except ValueError:
+                continue
+            raise ContactSheetError(
+                "contact-sheet output directory must be outside selected image directories"
+            )
 
 
 def _compose_sheet(

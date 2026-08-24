@@ -1,8 +1,99 @@
-from PIL import Image
-import pytest
+import json
+from pathlib import Path
 
-from coverforge.contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
+import pytest
+from PIL import Image
+
+from coverforge.cli import main
+from coverforge.contactsheet import (
+    HTML_FILENAME,
+    ContactSheetError,
+    plan_contact_sheet,
+    write_contact_sheet,
+)
 from coverforge.imageops import inspect
+
+
+def test_cli_contactsheet_builds_packet(tmp_path, art_factory, capsys):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for _ in range(4):
+        path = art_factory()
+        path.rename(assets / path.name)
+
+    out = tmp_path / "packet"
+    assert (
+        main(
+            [
+                "contactsheet",
+                str(assets),
+                "-o",
+                str(out),
+                "--columns",
+                "2",
+                "--cell-size",
+                "300",
+                "--title",
+                "Lack of Fate — Drift",
+            ]
+        )
+        == 0
+    )
+
+    sheet = out / "CONTACT_SHEET.jpg"
+    index = out / "CONTACT_SHEET.html"
+    assert sheet.exists()
+    assert index.exists()
+    with Image.open(sheet) as im:
+        assert im.width > 300 and im.height > 300
+
+    body = index.read_text(encoding="utf-8")
+    assert "Lack of Fate — Drift" in body
+    assert "4 selected variant(s)" in body
+
+
+def test_cli_contactsheet_json_payload(tmp_path, art_factory, capsys):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for _ in range(3):
+        path = art_factory()
+        path.rename(assets / path.name)
+
+    out = tmp_path / "packet"
+    assert main(["contactsheet", str(assets), "-o", str(out), "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    contact = payload["contact_sheet"]
+    assert contact["source_count"] == 3
+    assert contact["columns"] == 4
+    assert contact["cell_size"] == 480
+    assert contact["contact_sheet"].endswith("CONTACT_SHEET.jpg")
+    assert contact["html_index"].endswith("CONTACT_SHEET.html")
+
+
+def test_cli_contactsheet_fails_when_output_inside_source(tmp_path, art_factory, capsys):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    for _ in range(2):
+        img = art_factory()
+        img.rename(assets / img.name)
+
+    out = assets / "packet"
+    assert (
+        main(
+            [
+                "contactsheet",
+                str(assets),
+                "-o",
+                str(out),
+            ]
+        )
+        == 2
+    )
+    assert (
+        "output directory must be outside selected image directories"
+        in capsys.readouterr().err
+    )
 
 
 def test_contact_sheet_writes_a_deterministic_offline_review_packet(art_factory, tmp_path):
@@ -98,3 +189,46 @@ def test_contact_sheet_escapes_hostile_variant_filenames_in_html(art_factory, tm
     html = (output / "CONTACT_SHEET.html").read_text(encoding="utf-8")
     assert hostile.name not in html
     assert "&lt;img src=x onerror=alert(1)&gt;.png" in html
+
+
+def test_output_is_refused_inside_a_folder_of_symlinked_sources(tmp_path):
+    """Curating variants as symlinks must not open a hole in the containment rule.
+
+    Resolving each source before taking its parent only ever tested the link
+    targets' directory, so a packet could be written straight into the folder
+    being reviewed.
+    """
+    real = tmp_path / "real"
+    picks = tmp_path / "picks"
+    real.mkdir()
+    picks.mkdir()
+    sources = []
+    for name in ("a", "b"):
+        Image.new("RGB", (400, 400), (90, 90, 90)).save(real / f"{name}.png")
+        (picks / f"{name}.png").symlink_to(real / f"{name}.png")
+        sources.append(inspect(picks / f"{name}.png"))
+
+    with pytest.raises(ContactSheetError):
+        write_contact_sheet(sources, picks / "review")
+
+    # A destination outside both folders still works.
+    assert write_contact_sheet(sources, tmp_path / "out").output_dir.exists()
+
+
+def test_a_failed_write_leaves_no_half_written_packet(tmp_path, monkeypatch):
+    """A truncated packet looks valid but reviews wrongly, so it must not survive."""
+    Image.new("RGB", (400, 400), (10, 10, 10)).save(tmp_path / "a.png")
+    source = inspect(tmp_path / "a.png")
+    out = tmp_path / "packet"
+
+    real_write_text = Path.write_text
+
+    def explode(self, *args, **kwargs):
+        if self.name == HTML_FILENAME:
+            raise OSError(28, "No space left on device")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", explode)
+    with pytest.raises(ContactSheetError):
+        write_contact_sheet([source], out)
+    assert not out.exists()
