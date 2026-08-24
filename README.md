@@ -5,9 +5,6 @@ in one command.
 
 **Free browser tools, nothing to install:**
 [Album Cover Size Checker](https://gabs-utilities.com/cover.html) ·
-[LUFS and True Peak Meter](https://gabs-utilities.com/loudness.html) ·
-[Release Delivery Check](https://gabs-utilities.com/delivery.html) ·
-[Music Release Checklist](https://gabs-utilities.com/release.html) ·
 [Split Sheet Maker](https://gabs-utilities.com/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
@@ -285,12 +282,9 @@ image fixtures, which are generated rather than committed:
 ```bash
 npm install playwright
 python tools/make_fixtures.py     # writes tools/fixtures/
-node tools/browser_test.js        # functional: parsing, loudness, checklist
+node tools/browser_test.js        # functional: cover and split-sheet tools
 node tools/a11y_test.js           # contrast, headings, landmarks, keyboard
 ```
-
-`verify_lufs.py` and `verify_truepeak.py` check the loudness maths against the
-EBU Tech 3341 test signals independently of the browser.
 
 Two more run in CI and need nothing installed:
 
@@ -301,8 +295,8 @@ python tools/sync_artifacts.py --check  # are the published copies stale?
 
 `consistency_check.py` asserts the things that have actually gone wrong: the
 rate table agreeing across every page that quotes it, no unverified payment link
-reaching a page, the cover tool and the checklist not contradicting each other,
-and no page making a network call, which is what "nothing is uploaded" means.
+reaching a page, and no page making a network call, which is what "nothing is
+uploaded" means.
 Each check is there because that exact thing broke once.
 
 ---

@@ -5,7 +5,7 @@
 
 The site had no icon at all: nine pages, no icon file, so every tab showed the
 browser's blank document glyph and every page load fired a 404 for
-/favicon.ico. Someone who leaves the loudness tool open in a crowded tab strip
+/favicon.ico. Someone who leaves a tool open in a crowded tab strip
 could not find it again, which is most of what a favicon is for.
 
 Three files because one format does not cover it. SVG for anything current,

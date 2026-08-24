@@ -121,8 +121,8 @@ def test_field_strips_tags_and_unescapes(tmp_path):
 
 
 def test_read_returns_the_pages_own_words():
-    title, headline, description = msc.read("loudness.html")
-    body = (DOCS / "loudness.html").read_text(encoding="utf-8")
+    title, headline, description = msc.read("cover.html")
+    body = (DOCS / "cover.html").read_text(encoding="utf-8")
     assert f"<title>{title}</title>" in body
     assert headline in body
     assert description in body

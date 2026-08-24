@@ -504,20 +504,19 @@ def main() -> int:
     print("\n=== every tool page names its siblings ===")
     # The internal link graph was a star: every tool linked home, none linked
     # to another tool. Nobody arrives on the landing page, so a visitor who
-    # found the loudness tool in a search result never learned the other four
-    # existed, and every page's authority had to travel through index.html.
+    # found one tool in a search result never learned the others existed, and
+    # every page's authority had to travel through index.html.
     # Read, never retyped. These labels were hardcoded here, which is the same
     # rule this file enforces on the pages being broken one level down inside
     # the checker: a name written twice can drift, and it did. Retitling the
     # pages left every page calling its siblings by names none of them used any
-    # more, and the landing page naming the same five links one way in its
+    # more, and the landing page naming the same links one way in its
     # structured data and another on its own cards, with 329 checks green.
     #
     # A page's name is its title. Everything else reads that.
     TOOL_PAGES = {
         page: page_identity(src[page])["name"]
-        for page in ("cover.html", "loudness.html", "release.html",
-                     "delivery.html", "splits.html")
+        for page in ("cover.html", "splits.html")
     }
     bylines = 0
     for name in TOOL_PAGES:
@@ -528,7 +527,7 @@ def main() -> int:
             if other != name and f'href="{other}"' not in body
         ]
         check(
-            f"{name} links to the other four tools",
+            f"{name} links to the other tool pages",
             not missing,
             "reachable only through the landing page nobody lands on: "
             + ", ".join(missing),
@@ -588,10 +587,9 @@ def main() -> int:
     # One wordmark for one site, and the page's own name beside it.
     #
     # Every tool page carried its own wordmark, and after the rename each one
-    # was a name the site had retired: COVERFORGE at the top of Album Cover
-    # Size Checker, LOUDNESS·CHECK at the top of LUFS and True Peak Meter. That
-    # is the first thing on the page, above the headline, and it survived four
-    # rounds of fixing the names further down because nothing read it.
+    # was a name the site had retired. That is the first thing on the page,
+    # above the headline, and it survived several rounds of fixing the names
+    # further down because nothing read it.
     #
     # The preview cards had already settled the pattern: the site's wordmark,
     # then the page's title beside it. The headers now match the cards, which
@@ -649,12 +647,9 @@ def main() -> int:
     # the site says it any more. A visitor met a product name in the first
     # sentence that appears nowhere else on the page they are reading.
     #
-    # Only the four retired names that are not substrings of a current title
-    # are listed, so this cannot fire on "Release Delivery Check" containing
-    # "Delivery Check". The comparison is case-sensitive on purpose: prose
-    # like "the cover and loudness checkers" is ordinary English, not a name.
-    RETIRED_NAMES = ("Coverforge", "Loudness Check", "Release Preflight",
-                     "Studio Shop")
+    # The comparison is case-sensitive on purpose so ordinary prose does not
+    # become a false positive.
+    RETIRED_NAMES = ("Coverforge", "Studio Shop")
     for page, body in src.items():
         prose = re.sub(r"<(script|style)\b.*?</\1>", " ", body, flags=re.S | re.I)
         prose = re.sub(r"<[^>]+>", " ", prose)
@@ -668,10 +663,9 @@ def main() -> int:
         )
 
     print("\n=== structured data says what the page itself says ===")
-    # No page carried any. Five distinct free tools and a rate card were being
-    # read as undifferentiated text, so nothing told a search engine that
-    # loudness.html is an application, that it costs nothing, or that the shop
-    # charges EUR 45 for a master.
+    # No page carried any. Distinct free tools and a rate card were being read
+    # as undifferentiated text, so nothing told a search engine what each page
+    # represented or that the shop charges EUR 45 for a master.
     #
     # Structured data restates facts the page already states, and a fact
     # written twice is a fact that can drift apart. That is not hypothetical
@@ -775,7 +769,7 @@ def main() -> int:
     listed = [item.get("url") for item in items]
     expected = [page_identity(src[t])["url"] for t in TOOL_PAGES]
     check(
-        "the landing page's structured list holds the five tools, in order",
+        "the landing page's structured list holds the current tools, in order",
         listed == expected,
         f"listed {listed}, expected {expected}",
     )
@@ -784,7 +778,7 @@ def main() -> int:
     # only the numbers passed the check above without moving a single URL.
     positions = [item.get("position") for item in items]
     check(
-        "the landing page's list numbers its items 1 to 5",
+        "the landing page numbers its current items consecutively",
         positions == list(range(1, len(items) + 1)) and bool(items),
         f"positions {positions}; the order a consumer reads is this field, "
         f"not the order the entries happen to sit in",
@@ -827,9 +821,9 @@ def main() -> int:
         )
 
     print("\n=== every page carries an icon, and the icons exist ===")
-    # There was no favicon at all: nine pages, no icon file, so every tab
+    # There was no favicon at all: multiple pages, no icon file, so every tab
     # showed the browser's blank document glyph and every page load fired a
-    # 404 for /favicon.ico. Someone who leaves the loudness tool open in a
+    # 404 for /favicon.ico. Someone who leaves a tool open in a
     # crowded tab strip could not find it again, which is the whole job of the
     # thing.
     #
@@ -863,7 +857,7 @@ def main() -> int:
         )
 
     print("\n=== the Preflight wordmark is one wordmark ===")
-    # Each tool page has its own wordmark (LOUDNESS-CHECK and so on), but the
+    # Each tool page has its own wordmark, but the
     # pages that carry the site's own name have to spell it the same way. The
     # 404 page was written with a third variant, PRE<b>.</b>FLIGHT, next to the
     # PRE<b>FLIGHT</b> that index.html and impressum.html already used. Nothing
@@ -942,8 +936,8 @@ def main() -> int:
     )
 
     # A card is a picture of what a page says, and nothing tied the picture to
-    # the page. Editing loudness.html's h1 left its card showing the old
-    # headline and all 250 checks passed, because they asserted the file
+    # its page. Editing a page headline left its card showing the old headline
+    # and all checks passed, because they asserted the file
     # existed and was unique, never that it said what the page says. That is
     # the drift this file exists to catch, one level down, in the checks this
     # file added an hour earlier.
@@ -1109,8 +1103,8 @@ def main() -> int:
     # about the tool pages naming each other, and the README was left out of
     # that fix while being exactly the same shape: a hand-typed list of names
     # beside a directory of pages. Renaming the pages left the front page of a
-    # public repository offering a "cover spec checker", a "delivery check" and
-    # a "split sheet", none of which is the name of anything on the site, and
+    # public repository offering hand-typed tool names that no longer matched
+    # anything on the site, and
     # every README check passed because they only ever asked whether the URLs
     # resolved.
     #
@@ -1185,22 +1179,19 @@ def main() -> int:
     # files on their machine, and it means a page with scripting off presents a
     # working-looking drop zone or a fillable sheet that silently does nothing.
     #
-    # Measured in Chromium with javaScriptEnabled false: cover, loudness and
-    # delivery each showed a full drop target that accepts a file and discards
-    # it, release showed checkboxes that never save, and splits showed thirteen
-    # live form fields with no total, no validation and a print button. That
-    # last one is the document that reaches GEMA and GVL, produced unchecked.
+    # Measured in Chromium with javaScriptEnabled false: the artwork page showed
+    # a full drop target that accepts a file and discards it, and the split
+    # sheet showed live form fields with no total, no validation and a print
+    # button. The latter is a document that reaches GEMA and GVL.
     #
     # Which pages need the notice is derived rather than listed, and the first
     # derivation was wrong in a way worth keeping: it looked for form controls
-    # in the static markup, which missed release.html, because that page builds
-    # every one of its 21 checklist items in JavaScript. Measured with
-    # scripting off it renders 358 characters of main text against 3361, so the
-    # page the notice matters most for was the one page the scan skipped.
+    # in the static markup, which can miss pages that build controls in
+    # JavaScript.
     #
     # A page needs scripting if it ships scripting. JSON-LD is data, not
-    # behaviour, so it does not count: exactly the five tool pages carry a real
-    # <script>, and index, shop, impressum and 404 carry none.
+    # behaviour, so it does not count. The interactive tool pages carry a real
+    # <script>; index, shop, impressum and 404 carry none.
     needs_js = {
         name: body for name, body in src.items() if "<script>" in body
     }
@@ -1219,9 +1210,8 @@ def main() -> int:
         )
 
     print("\n=== a page meant to be printed prints the document, not the site ===")
-    # splits.html exists to produce a signed sheet for GEMA and GVL, and
-    # release.html gets printed and worked through. Rendered in print media,
-    # the split sheet ended with a nav row of four sibling tools in purple,
+    # splits.html exists to produce a signed sheet for GEMA and GVL. Rendered
+    # in print media, the split sheet ended with a nav row of sibling tools,
     # plus "all tools" and "Impressum" links, under the signature block: site
     # chrome on an agreement someone puts their name to.
     #
@@ -1308,38 +1298,6 @@ def main() -> int:
         "the page quotes prices as totals without saying why no VAT is added",
     )
 
-    print("\n=== the tools do not contradict each other on delivery advice ===")
-    cover, release = src.get("cover.html", ""), src.get("release.html", "")
-    if cover and release:
-        cover_warns_png = "DistroKid documents JPG only" in cover
-        release_says_png_fine = re.search(r"JPG or PNG", release) is not None
-        check(
-            "cover.html and release.html agree about PNG",
-            not (cover_warns_png and release_says_png_fine),
-            "cover warns on PNG while release says PNG is fine",
-        )
-
-    loud, rel = src.get("loudness.html", ""), src.get("release.html", "")
-    for name, body in (("loudness.html", loud), ("release.html", rel)):
-        if body:
-            check(
-                f"{name} does not claim Spotify never asks for -14 LUFS",
-                "not a target Spotify asks you to hit" not in body
-                and "not a mastering target they" not in body,
-                "Spotify's own page says to target -14 LUFS; the advice can stand, the "
-                "attribution cannot",
-            )
-
-    print("\n=== measured figures are attributed to the thing that measured them ===")
-    if loud:
-        # -22.99 is the Python verifier's result. The browser computes -23.01.
-        # Quoting the former as what the page produces was wrong.
-        check(
-            "loudness.html does not quote the Python verifier's figure as its own",
-            "-22.99" not in loud,
-            "-22.99 comes from tools/verify_lufs.py; this page computes -23.01",
-        )
-
     print("\n=== nothing is uploaded, which every page promises ===")
     for name, body in src.items():
         script = "\n".join(re.findall(r"<script\b[^>]*>(.*?)</script>", body, re.S))
@@ -1348,7 +1306,7 @@ def main() -> int:
 
     print("\n=== one contact address, spelled one way ===")
     # `len(addrs) <= 1` was the whole check, and it passes on an empty set.
-    # Measured: stripping every mailto from all nine pages left 325 checks
+    # Measured: stripping every mailto from every page left all checks
     # green, with the site carrying no way to reach him at all. Booking starts
     # by email, so that is the business disappearing quietly.
     addrs = Counter(a for b in src.values() for a in re.findall(r'mailto:([^"?]+)', b))

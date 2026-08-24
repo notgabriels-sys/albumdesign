@@ -49,9 +49,6 @@ FONTS = Path("/usr/share/fonts/truetype/dejavu")
 CARDS = {
     "index.html": "share.png",
     "cover.html": "share-cover.png",
-    "loudness.html": "share-loudness.png",
-    "release.html": "share-release.png",
-    "delivery.html": "share-delivery.png",
     "splits.html": "share-splits.png",
     "shop.html": "share-shop.png",
     # impressum.html deliberately has none and points at the site card. It is
@@ -149,7 +146,7 @@ def draw_card(page: str, out: Path) -> None:
     # survives being shrunk to a thumbnail.
     d.rectangle([0, 0, W, 8], fill=ACCENT)
 
-    # The loudness page's meter bars, the one motif the site already owns.
+    # Meter bars, a visual motif the site already owns.
     # Decoration only: they carry no reading and state no number.
     #
     # They used to stand full height on the right, which cost the text a third

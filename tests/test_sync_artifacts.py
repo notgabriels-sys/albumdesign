@@ -67,7 +67,7 @@ class TestAgainstTheRealPages:
 
     def test_the_site_links_are_actually_present(self):
         # A rewrite that silently matched nothing would pass the test above.
-        body = sa.derive(ROOT / "docs" / "delivery.html")
+        body = sa.derive(ROOT / "docs" / "cover.html")
         assert f'href="{SITE}index.html"' in body
         assert f'href="{SITE}impressum.html"' in body
 

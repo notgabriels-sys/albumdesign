@@ -158,26 +158,9 @@ const PROBE = () => {
     await ctx.close();
   }
 
-  // Keyboard: the release checklist must be operable with Space and Enter.
-  console.log("\n=== keyboard operation ===");
+  console.log("\n=== file input accessibility ===");
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto("file://" + path.join(ROOT, "release.html"));
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
-  const first = page.locator("[role=checkbox]").first();
-  await first.focus();
-  await page.keyboard.press("Space");
-  check("Space ticks a checklist item", (await first.getAttribute("aria-checked")) === "true");
-  await page.keyboard.press("Enter");
-  check("Enter unticks it", (await first.getAttribute("aria-checked")) === "false");
-  const bar = page.locator("#track");
-  check("progressbar exposes value", (await bar.getAttribute("aria-valuenow")) === "0" &&
-    +(await bar.getAttribute("aria-valuemax")) > 0);
-  check("checkbox group is not an invalid list",
-    (await page.locator("ul[role=group]").count()) > 0 &&
-    (await page.locator("ul:not([role]) > li[role=checkbox]").count()) === 0);
-
   // The cover tool's file input must be the labelled, focusable control.
   await page.goto("file://" + path.join(ROOT, "cover.html"));
   const inputs = await page.evaluate(() => {
@@ -238,19 +221,6 @@ const PROBE = () => {
   };
 
   const drives = [
-    ["loudness", async pg => {
-      await pg.goto("file://" + path.join(ROOT, "loudness.html"));
-      await pg.setInputFiles("input[type=file]", path.join(FIX, "loud_44100.wav"));
-    }],
-    ["delivery", async pg => {
-      await pg.goto("file://" + path.join(ROOT, "delivery.html"));
-      await pg.setInputFiles("input[type=file]", [
-        path.join(FIX, "rel_track1_44100_24.wav"),
-        path.join(FIX, "rel_quiet_44100_24.wav"),
-        path.join(FIX, "rel_oddball_48000_16.wav"),
-        path.join(FIX, "silence.wav"),
-      ]);
-    }],
     ["cover", async pg => {
       await pg.goto("file://" + path.join(ROOT, "cover.html"));
       await pg.setInputFiles("input[type=file]", path.join(FIX, "nonsquare.jpg"));
