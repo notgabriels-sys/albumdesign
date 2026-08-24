@@ -13,19 +13,27 @@ so what it embeds leaves the machine.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
+import shutil
+import subprocess
+import sys
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
+from coverforge import audit as audit_module
 from coverforge import imageops
-from coverforge.audit import BundleAudit, run_audit
-from coverforge.build import build
-from coverforge.manifest import compare_manifests
+from coverforge.audit import BundleAudit, parse_manifest_json, run_audit
+from coverforge.build import build, manifest_capture_id
+from coverforge.manifest import compare_manifests, load_manifest
 from coverforge.cli import main
 from coverforge.imageops import ImageError, inspect
+from coverforge.package import PackageError, build_package
 from coverforge.preflight import ERROR, WARN, check
 from coverforge.specs import load_targets
 
@@ -54,6 +62,12 @@ def _swap_cover(bundle):
 
 
 class TestNothingCheckedIsNotClean:
+    def test_public_audit_rejects_an_invalid_programmatic_target(self, tmp_path):
+        invalid = replace(TARGETS[0], max_bytes="not-an-integer")
+
+        with pytest.raises(ValueError, match="max_bytes must be"):
+            run_audit([tmp_path / "missing"], [invalid], verify_hashes=True)
+
     def test_a_bundle_with_no_manifest_is_not_ok(self, bundle):
         _swap_cover(bundle)
         (bundle / "manifest.json").unlink()
@@ -72,6 +86,7 @@ class TestNothingCheckedIsNotClean:
         result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
         assert result.ok is True
         assert result.hashes_verified is True
+        assert result.package_members == {}
 
     def test_a_swapped_file_is_caught(self, bundle):
         _swap_cover(bundle)
@@ -107,8 +122,177 @@ class TestPackageChecksWhatItStamps:
         assert "checksum_mismatches" in summary
         assert summary["hashes_verified"] is True
 
+    def test_low_level_packaging_rejects_an_audit_that_did_not_hash_files(
+        self, bundle, tmp_path
+    ):
+        unchecked = run_audit(
+            [bundle],
+            TARGETS,
+            verify_hashes=False,
+            capture_package_bytes=True,
+        )[0]
+
+        with pytest.raises(PackageError, match="verified delivery-file hashes"):
+            build_package(unchecked, tmp_path / "unchecked.zip")
+
+    def test_an_edited_delivery_note_is_not_part_of_the_manifest_bound_zip(
+        self, bundle, tmp_path
+    ):
+        secret = "/Users/name/private/client-notes"
+        (bundle / "DELIVERY.md").write_text(secret, encoding="utf-8")
+        out = tmp_path / "pkg"
+
+        assert main(["package", str(bundle), "-o", str(out), "--only", "spotify,bandcamp"]) == 0
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            names = set(zf.namelist())
+            all_bytes = b"\n".join(zf.read(name) for name in names)
+
+        assert "DELIVERY.md" not in names
+        assert secret.encode() not in all_bytes
+
+    def test_an_oversized_manifest_inventory_cannot_leave_a_package_snapshot(
+        self, bundle, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(audit_module, "_MAX_MANIFEST_OUTPUTS", 1)
+
+        audited = run_audit(
+            [bundle],
+            TARGETS,
+            verify_hashes=True,
+            capture_package_bytes=True,
+        )[0]
+
+        assert audited.manifest_valid is False
+        assert len(audited.manifest_files) == 1
+        assert audited.package_members == {}
+        finding = next(
+            finding
+            for finding in audited.malformed_files
+            if "outputs contains 2 entries; maximum is 1" in finding
+        )
+        assert str(tmp_path) not in finding
+        with pytest.raises(PackageError, match="valid package inventory"):
+            build_package(audited, tmp_path / "oversized-inventory.zip")
+
+    def test_a_snapshot_byte_overflow_clears_every_captured_member(
+        self, bundle, tmp_path, monkeypatch
+    ):
+        manifest_path = bundle / "manifest.json"
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_size = manifest_path.stat().st_size
+        first_output_size = (bundle / payload["outputs"][0]["file"]).stat().st_size
+        snapshot_limit = manifest_size + first_output_size
+        monkeypatch.setattr(
+            audit_module,
+            "_MAX_CAPTURED_BUNDLE_BYTES",
+            snapshot_limit,
+        )
+
+        audited = run_audit(
+            [bundle],
+            TARGETS,
+            verify_hashes=True,
+            capture_package_bytes=True,
+        )[0]
+
+        assert audited.manifest_valid is False
+        assert audited.package_members == {}
+        finding = next(
+            finding
+            for finding in audited.malformed_files
+            if f"package snapshot exceeds the {snapshot_limit}-byte per-bundle safety limit"
+            in finding
+        )
+        assert str(tmp_path) not in finding
+        with pytest.raises(PackageError, match="valid package inventory"):
+            build_package(audited, tmp_path / "oversized-snapshot.zip")
+
+    def test_a_manifest_has_a_small_dedicated_read_limit(
+        self, bundle, monkeypatch
+    ):
+        manifest = bundle / "manifest.json"
+        monkeypatch.setattr(
+            audit_module, "MAX_MANIFEST_FILE_BYTES", manifest.stat().st_size - 1
+        )
+
+        with pytest.raises(ValueError, match="byte safety limit"):
+            run_audit([bundle], TARGETS, verify_hashes=True)
+        with pytest.raises(ValueError, match="byte safety limit"):
+            load_manifest(manifest)
+
+    def test_deep_json_is_reported_as_a_bounded_manifest_error(self):
+        nested = '{"value":' * 10_000 + "0" + "}" * 10_000
+
+        with pytest.raises(ValueError, match="nesting exceeds"):
+            parse_manifest_json(nested)
+
+    def test_a_late_invalid_bundle_leaves_no_partial_package_batch(
+        self, bundle, tmp_path, capsys
+    ):
+        invalid = tmp_path / "delivery-invalid"
+        shutil.copytree(bundle, invalid)
+        (invalid / "manifest.json").write_text("{", encoding="utf-8")
+        out = tmp_path / "packages"
+
+        assert (
+            main(
+                [
+                    "package",
+                    str(bundle),
+                    str(invalid),
+                    "-o",
+                    str(out),
+                    "--only",
+                    "spotify,bandcamp",
+                ]
+            )
+            == 2
+        )
+
+        assert list(out.glob("*.zip")) == []
+        assert list(out.glob(".coverforge-*")) == []
+        assert "package failed" in capsys.readouterr().err
+
+    def test_a_crowded_bundle_cannot_grow_a_forced_package_summary_without_bound(
+        self, bundle, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(audit_module, "MAX_BUNDLE_ENTRIES", 2)
+
+        audited = run_audit(
+            [bundle],
+            TARGETS,
+            verify_hashes=True,
+            capture_package_bytes=True,
+        )[0]
+
+        assert audited.manifest_valid is False
+        assert audited.package_members == {}
+        finding = next(
+            item
+            for item in audited.malformed_files
+            if "more than 2 directory entries" in item
+        )
+        assert str(tmp_path) not in finding
+        with pytest.raises(PackageError, match="valid package inventory"):
+            build_package(audited, tmp_path / "crowded.zip")
+
 
 class TestSymlinks:
+    @pytest.mark.parametrize("metadata_name", ["manifest.json", "DELIVERY.md"])
+    def test_a_build_refuses_to_write_metadata_through_a_symlink(
+        self, metadata_name, tmp_path, master
+    ):
+        out = tmp_path / "delivery"
+        out.mkdir()
+        precious = tmp_path / f"precious-{metadata_name}"
+        precious.write_text("keep this", encoding="utf-8")
+        (out / metadata_name).symlink_to(precious)
+
+        with pytest.raises(ImageError, match="symlink"):
+            build(inspect(master), TARGETS, out_dir=out, slug="lof001")
+
+        assert precious.read_text(encoding="utf-8") == "keep this"
+
     def test_a_contact_sheet_refuses_to_write_through_one(
         self, tmp_path, master, capsys
     ):
@@ -145,6 +329,204 @@ class TestSymlinks:
         assert "id_rsa" not in names
         assert "id_rsa" in summary["skipped_symlinks"]
 
+    def test_a_symlinked_manifest_is_not_treated_as_a_real_bundle_manifest(
+        self, bundle, tmp_path, capsys
+    ):
+        outside = tmp_path / "outside-manifest.json"
+        (bundle / "manifest.json").replace(outside)
+        (bundle / "manifest.json").symlink_to(outside)
+        out = tmp_path / "pkg"
+
+        assert (
+            main(
+                [
+                    "package",
+                    str(bundle),
+                    "-o",
+                    str(out),
+                    "--only",
+                    "spotify,bandcamp",
+                ]
+            )
+            == 2
+        )
+        assert "symlink" in capsys.readouterr().err
+        assert list(out.glob("*.zip")) == []
+
+    def test_bundle_discovery_does_not_follow_a_symlinked_child(
+        self, bundle, tmp_path
+    ):
+        parent = tmp_path / "parent"
+        parent.mkdir()
+        (parent / "outside-bundle").symlink_to(bundle, target_is_directory=True)
+
+        with pytest.raises(FileNotFoundError, match="no delivery bundle"):
+            run_audit([parent], TARGETS, verify_hashes=True)
+
+
+class TestManifestDrivenPackageInventory:
+    def test_unmanifested_regular_files_block_a_clean_audit(self, bundle):
+        (bundle / "private-notes.txt").write_text("do not send", encoding="utf-8")
+
+        result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
+        payload = result.as_dict()
+
+        assert payload.get("unmanifested_files") == ["private-notes.txt"]
+        assert result.ok is False
+
+    def test_force_never_puts_unmanifested_regular_files_in_the_zip(
+        self, bundle, tmp_path
+    ):
+        (bundle / "private-notes.txt").write_text("do not send", encoding="utf-8")
+        stale = bundle / "stale--spotify--3000x3000.jpg"
+        Image.new("RGB", (3000, 3000), "red").save(stale)
+        out = tmp_path / "pkg"
+
+        assert (
+            main(
+                [
+                    "package",
+                    str(bundle),
+                    "-o",
+                    str(out),
+                    "--only",
+                    "spotify,bandcamp",
+                    "--force",
+                ]
+            )
+            == 1
+        )
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            names = set(zf.namelist())
+            summary = json.loads(zf.read("COVERFORGE_PACKAGE.json"))
+
+        assert "private-notes.txt" not in names
+        assert stale.name not in names
+        assert summary.get("unmanifested_files") == [
+            "private-notes.txt",
+            stale.name,
+        ]
+
+    def test_package_output_must_not_be_inside_the_bundle(self, bundle, capsys):
+        assert (
+            main(
+                [
+                    "package",
+                    str(bundle),
+                    "-o",
+                    str(bundle),
+                    "--only",
+                    "spotify,bandcamp",
+                ]
+            )
+            == 2
+        )
+        assert "inside" in capsys.readouterr().err
+        assert list(bundle.glob("*.zip")) == []
+
+    def test_rejected_nested_output_does_not_create_a_directory(
+        self, bundle, capsys
+    ):
+        nested = bundle / "new-packages"
+
+        assert main(["package", str(bundle), "-o", str(nested)]) == 2
+        assert "inside" in capsys.readouterr().err
+        assert not nested.exists()
+
+    def test_summary_hashes_the_exact_bytes_written_to_each_zip_member(
+        self, bundle, tmp_path
+    ):
+        victim = bundle / "lof001--spotify--3000x3000.jpg"
+        audited = run_audit(
+            [bundle],
+            TARGETS,
+            verify_hashes=True,
+            capture_package_bytes=True,
+        )[0]
+        audited_bytes = victim.read_bytes()
+        victim.unlink()
+        victim.symlink_to(bundle / "lof001--bandcamp--3000x3000.jpg")
+
+        zip_path = tmp_path / "pkg.zip"
+        result = build_package(audited, zip_path)
+        assert result.ok is True
+
+        with zipfile.ZipFile(zip_path) as zf:
+            summary = json.loads(zf.read("COVERFORGE_PACKAGE.json"))
+            recorded = {item["name"]: item for item in summary["files"]}
+            archived = zf.read(victim.name)
+
+        assert archived == audited_bytes
+        assert victim.name not in summary["skipped_symlinks"]
+        assert recorded[victim.name]["bytes"] == len(archived)
+        assert recorded[victim.name]["sha256"] == hashlib.sha256(archived).hexdigest()
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFO required")
+    def test_a_fifo_cannot_hang_packaging_or_leak_its_local_path(
+        self, bundle, tmp_path
+    ):
+        victim = bundle / "lof001--spotify--3000x3000.jpg"
+        victim.unlink()
+        os.mkfifo(victim)
+        out = tmp_path / "pkg"
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "coverforge.cli",
+                "package",
+                str(bundle),
+                "-o",
+                str(out),
+                "--only",
+                "spotify,bandcamp",
+                "--force",
+            ],
+            cwd=Path(__file__).parents[1],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+        assert completed.returncode == 1, completed.stderr
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            summary = json.loads(zf.read("COVERFORGE_PACKAGE.json"))
+        assert str(tmp_path) not in json.dumps(summary)
+
+    def test_force_hashes_corrupt_bytes_before_image_decode(
+        self, bundle, tmp_path
+    ):
+        victim = bundle / "lof001--spotify--3000x3000.jpg"
+        victim.write_bytes(b"not an image")
+        out = tmp_path / "pkg-corrupt"
+
+        assert (
+            main(
+                [
+                    "package",
+                    str(bundle),
+                    "-o",
+                    str(out),
+                    "--only",
+                    "spotify,bandcamp",
+                    "--force",
+                ]
+            )
+            == 1
+        )
+        with zipfile.ZipFile(next(out.glob("*.zip"))) as zf:
+            summary = json.loads(zf.read("COVERFORGE_PACKAGE.json"))
+            assert zf.read(victim.name) == b"not an image"
+
+        assert summary["hashes_verified"] is True
+        assert summary["checksum_mismatches"]
+        assert any(victim.name in item for item in summary["malformed_files"])
+        diagnostics = " ".join(summary["malformed_files"])
+        assert "image decode failed: UnidentifiedImageError" in diagnostics
+        assert "BytesIO" not in diagnostics
+
 
 class TestManifestFilenamesAreUntrusted:
     def _retarget(self, bundle, value):
@@ -161,6 +543,7 @@ class TestManifestFilenamesAreUntrusted:
             "../outside--spotify--3000x3000.jpg",
             "../../etc/x--spotify--3000x3000.jpg",
             "sub/dir--spotify--3000x3000.jpg",
+            "..\\outside--spotify--3000x3000.jpg",
         ],
     )
     def test_a_path_is_refused(self, bundle, hostile):
@@ -194,6 +577,248 @@ class TestManifestFilenamesAreUntrusted:
         result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
         assert any("symlink" in m for m in result.malformed_files)
         assert result.ok is False
+
+
+class TestSchemaOneInventoryValidation:
+    def _rewrite(self, bundle, mutate, *, recapture=True):
+        path = bundle / "manifest.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        mutate(payload)
+        if recapture:
+            payload["capture_id"] = manifest_capture_id(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _audit(self, bundle):
+        return run_audit([bundle], TARGETS, verify_hashes=True)[0]
+
+    def test_schema_one_without_its_capture_id_is_not_clean(self, bundle):
+        self._rewrite(bundle, lambda payload: payload.pop("capture_id"), recapture=False)
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert result.ok is False
+
+    def test_boolean_true_is_not_schema_version_one(self, bundle):
+        self._rewrite(bundle, lambda payload: payload.__setitem__("schema_version", True))
+
+        result = self._audit(bundle)
+
+        assert result.manifest_valid is False
+        assert any("schema_version must be integer 1" in item for item in result.malformed_files)
+
+    def test_schema_one_rejects_an_unknown_root_field_that_could_leak_a_path(
+        self, bundle
+    ):
+        self._rewrite(
+            bundle,
+            lambda payload: payload.__setitem__("local_path", "/Users/name/private"),
+        )
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert any("unexpected root field" in item for item in result.malformed_files)
+
+    def test_schema_one_requires_every_output_field(self, bundle):
+        self._rewrite(bundle, lambda payload: payload["outputs"][0].pop("name"))
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert any("missing output field" in item for item in result.malformed_files)
+
+    def test_display_size_must_match_the_numeric_byte_count(self, bundle):
+        self._rewrite(
+            bundle,
+            lambda payload: payload["outputs"][0].__setitem__("size", "999 TB"),
+        )
+
+        result = self._audit(bundle)
+
+        assert result.manifest_valid is False
+        assert any("size does not match" in item for item in result.malformed_files)
+
+    def test_one_file_cannot_satisfy_two_manifest_targets(self, bundle):
+        def duplicate(payload):
+            first, second = payload["outputs"][:2]
+            second["file"] = first["file"]
+            data = (bundle / first["file"]).read_bytes()
+            second["bytes"] = len(data)
+            second["sha256"] = hashlib.sha256(data).hexdigest()
+
+        self._rewrite(bundle, duplicate)
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert any("duplicate manifest filename" in item for item in result.malformed_files)
+
+    def test_a_symlinked_first_entry_cannot_hide_a_duplicate_target(
+        self, bundle
+    ):
+        def duplicate(payload):
+            first = copy.deepcopy(payload["outputs"][0])
+            first["dimensions"] = "2999x2999"
+            first["file"] = first["file"].replace("3000x3000", "2999x2999")
+            (bundle / first["file"]).symlink_to(payload["outputs"][0]["file"])
+            payload["outputs"].insert(0, first)
+
+        self._rewrite(bundle, duplicate)
+
+        result = self._audit(bundle)
+
+        assert result.manifest_valid is False
+        assert any("duplicate manifest target" in item for item in result.malformed_files)
+
+    def test_one_target_cannot_be_both_produced_and_skipped(self, bundle):
+        def contradict(payload):
+            payload["skipped"].append(
+                {
+                    "target": payload["outputs"][0]["target"],
+                    "reason": "contradictory inventory",
+                }
+            )
+
+        self._rewrite(bundle, contradict)
+
+        result = self._audit(bundle)
+
+        assert result.manifest_valid is False
+        assert any("both outputs and skipped" in item for item in result.malformed_files)
+
+    def test_target_case_cannot_hide_an_output_skipped_collision(self, bundle):
+        def contradict(payload):
+            payload["skipped"].append(
+                {
+                    "target": payload["outputs"][0]["target"].upper(),
+                    "reason": "case-variant contradictory inventory",
+                }
+            )
+
+        self._rewrite(bundle, contradict)
+
+        result = self._audit(bundle)
+
+        assert result.manifest_valid is False
+        assert any("both outputs and skipped" in item for item in result.malformed_files)
+
+    def test_manifest_targets_must_match_the_target_in_each_filename(self, bundle):
+        def swap(payload):
+            first, second = payload["outputs"][:2]
+            first["file"], second["file"] = second["file"], first["file"]
+            for item in (first, second):
+                data = (bundle / item["file"]).read_bytes()
+                item["bytes"] = len(data)
+                item["sha256"] = hashlib.sha256(data).hexdigest()
+
+        self._rewrite(bundle, swap)
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert any("does not match manifest target" in item for item in result.malformed_files)
+
+    def test_manifest_slug_must_match_every_output_filename(self, bundle):
+        self._rewrite(bundle, lambda payload: payload.__setitem__("slug", "someone-else"))
+
+        result = self._audit(bundle)
+
+        assert result.as_dict().get("manifest_valid") is False
+        assert any("does not match manifest slug" in item for item in result.malformed_files)
+
+    def test_actual_image_encoding_must_match_the_claimed_format(self, bundle):
+        victim = bundle / "lof001--spotify--3000x3000.jpg"
+        Image.new("RGB", (3000, 3000), "green").save(victim, format="PNG")
+
+        def update(payload):
+            entry = next(item for item in payload["outputs"] if item["target"] == "spotify")
+            data = victim.read_bytes()
+            entry["bytes"] = len(data)
+            entry["sha256"] = hashlib.sha256(data).hexdigest()
+
+        self._rewrite(bundle, update)
+
+        result = self._audit(bundle)
+
+        assert result.format_mismatches
+        assert result.ok is False
+
+    def test_two_empty_json_objects_are_not_identical_manifest_captures(self):
+        result = compare_manifests({}, {}, Path("left.json"), Path("right.json"))
+
+        assert result["identical"] is False
+        assert result["delta"]["output_issues"]
+
+    def test_coverforge_generated_hyphenated_target_verifies_and_packages(
+        self, master, tmp_path, capsys
+    ):
+        spec = tmp_path / "targets.toml"
+        spec.write_text(
+            """
+[targets.artist-store]
+name = "Artist store"
+group = "direct"
+width = 3000
+height = 3000
+format = "jpeg"
+""".strip(),
+            encoding="utf-8",
+        )
+        bundle = tmp_path / "hyphenated"
+        common = ["--targets-file", str(spec)]
+
+        assert main(["build", str(master), "-o", str(bundle), *common]) == 0
+        assert main(["verify", str(bundle), *common]) == 0
+        assert main(["package", str(bundle), "-o", str(tmp_path / "pkg"), *common]) == 0
+
+        capsys.readouterr()
+        (bundle / "manifest.json").unlink()
+        assert main(["verify", str(bundle), *common]) == 1
+        assert "no manifest.json" in capsys.readouterr().out
+
+    def test_a_build_time_size_cap_finding_stays_blocking(
+        self, master, tmp_path, capsys
+    ):
+        spec = tmp_path / "tiny-cap.toml"
+        spec.write_text(
+            """
+[targets.tiny-cap]
+name = "Tiny capped target"
+group = "test"
+width = 64
+height = 64
+format = "jpeg"
+max_bytes = 1
+""".strip(),
+            encoding="utf-8",
+        )
+        bundle = tmp_path / "over-cap"
+        common = ["--targets-file", str(spec)]
+
+        assert main(["build", str(master), "-o", str(bundle), *common]) == 1
+        capsys.readouterr()
+        assert main(["verify", str(bundle), *common]) == 1
+        assert "size cap exceeded" in capsys.readouterr().out
+
+        package_out = tmp_path / "pkg-over-cap"
+        assert main(["package", str(bundle), "-o", str(package_out), *common]) == 1
+        assert list(package_out.glob("*.zip")) == []
+
+    def test_duplicate_json_keys_cannot_hide_private_text_in_a_package(
+        self, bundle, tmp_path, capsys
+    ):
+        path = bundle / "manifest.json"
+        raw = path.read_text(encoding="utf-8")
+        path.write_text(
+            raw.replace("{", '{\n  "slug": "/Users/name/private",', 1),
+            encoding="utf-8",
+        )
+        out = tmp_path / "pkg"
+
+        assert main(["package", str(bundle), "-o", str(out), "--force"]) == 2
+        assert "duplicate JSON key: slug" in capsys.readouterr().err
+        assert list(out.glob("*.zip")) == []
 
 
 class TestMalformedManifestDoesNotCrash:
@@ -270,11 +895,27 @@ class TestTheManifestsOwnIntegrity:
         assert "capture_id does not match" in capsys.readouterr().out
 
     def test_a_manifest_without_a_token_is_not_a_mismatch(self, bundle):
-        # Older captures carry no capture_id. Nothing to check is not a failure.
+        # A missing value cannot disagree, but schema version 1 requires one.
         self._edit(bundle, lambda p: p.pop("capture_id", None))
         result = run_audit([bundle], TARGETS, verify_hashes=True)[0]
         assert result.capture_id_mismatch is False
-        assert result.ok is True
+        assert result.manifest_valid is False
+        assert result.ok is False
+
+    def test_force_cannot_package_a_capture_id_mismatch(
+        self, bundle, tmp_path, capsys
+    ):
+        self._edit(
+            bundle,
+            lambda payload: payload["outputs"][0].__setitem__(
+                "name", "Edited without recapturing"
+            ),
+        )
+        out = tmp_path / "pkg"
+
+        assert main(["package", str(bundle), "-o", str(out), "--force"]) == 2
+        assert "valid package inventory" in capsys.readouterr().err
+        assert list(out.glob("*.zip")) == []
 
 
 class TestTheDiffComparesTheDisclaimer:
@@ -400,6 +1041,58 @@ class TestAMalformedManifestIsNotIdentical:
         assert diff["identical"] is True
         assert not diff["delta"]["output_issues"]
 
+    def test_the_same_missing_nested_field_on_both_sides_is_not_identical(
+        self, bundle, tmp_path
+    ):
+        other = tmp_path / "copy"
+        other.mkdir()
+        for destination in (bundle / "manifest.json", other / "manifest.json"):
+            payload = json.loads((bundle / "manifest.json").read_text())
+            payload["outputs"][0].pop("name", None)
+            destination.write_text(json.dumps(payload), encoding="utf-8")
+
+        diff = self._diff(bundle / "manifest.json", other / "manifest.json")
+        assert diff["identical"] is False
+        assert any(
+            "missing output field: name" in item
+            for item in diff["delta"]["output_issues"]
+        )
+
+    def test_the_same_duplicate_filename_on_both_sides_is_not_identical(
+        self, bundle, tmp_path
+    ):
+        payload = json.loads((bundle / "manifest.json").read_text())
+        payload["outputs"][1]["file"] = payload["outputs"][0]["file"]
+        payload["capture_id"] = manifest_capture_id(payload)
+        other = tmp_path / "copy"
+        other.mkdir()
+        for path in (bundle / "manifest.json", other / "manifest.json"):
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+        diff = self._diff(bundle / "manifest.json", other / "manifest.json")
+        assert diff["identical"] is False
+        assert any(
+            "duplicate manifest filename" in item
+            for item in diff["delta"]["output_issues"]
+        )
+
+    def test_two_identically_edited_capture_ids_are_not_called_identical(
+        self, bundle, tmp_path
+    ):
+        payload = json.loads((bundle / "manifest.json").read_text())
+        payload["outputs"][0]["name"] = "Edited without recapturing"
+        other = tmp_path / "copy"
+        other.mkdir()
+        for path in (bundle / "manifest.json", other / "manifest.json"):
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+        diff = self._diff(bundle / "manifest.json", other / "manifest.json")
+        assert diff["identical"] is False
+        assert any(
+            "capture_id does not match" in item
+            for item in diff["delta"]["output_issues"]
+        )
+
     def test_the_outputs_line_is_not_called_source_outputs(self, bundle, tmp_path, capsys):
         other = tmp_path / "copy"
         other.mkdir()
@@ -521,6 +1214,8 @@ _BLOCKING_LISTS = [
     "checksum_mismatches",
     "dimension_mismatches",
     "format_mismatches",
+    "unmanifested_files",
+    "size_cap_exceeded",
 ]
 
 
@@ -575,6 +1270,9 @@ class TestEveryFailureBlocksOkOnItsOwn:
 
     def test_a_capture_id_mismatch_blocks_ok_alone(self):
         assert _clean_audit(capture_id_mismatch=True).ok is False
+
+    def test_an_invalid_manifest_blocks_ok_alone(self):
+        assert _clean_audit(manifest_valid=False).ok is False
 
     def test_extra_targets_alone_do_not_block(self):
         # Deliberately not blocking: an extra file in the folder is worth

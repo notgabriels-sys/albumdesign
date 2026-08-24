@@ -122,7 +122,7 @@ def is_image_path(path: Path) -> bool:
     return path.suffix.lower() in READABLE_SUFFIXES
 
 
-def inspect(path: Path) -> SourceImage:
+def inspect(path: Path, *, data: bytes | None = None) -> SourceImage:
     """Read metadata, having confirmed there is an image behind it.
 
     Every frame after the first is still left alone, but frame zero is
@@ -134,9 +134,13 @@ def inspect(path: Path) -> SourceImage:
     on a file no decoder can produce an image from. `im.verify()` is not
     enough: it returned ok on that same file. Only `im.load()` catches it,
     and it costs 40 to 90 ms on a 3000px master.
+
+    When data is supplied, all metadata and decoded pixels come from that
+    captured byte snapshot rather than from a second read of the path.
     """
+    source = io.BytesIO(data) if data is not None else path
     try:
-        with Image.open(path) as im:
+        with Image.open(source) as im:
             im.load()
             info = im.info
             exif_orientation = 1
@@ -150,7 +154,7 @@ def inspect(path: Path) -> SourceImage:
                 height=im.height,
                 mode=im.mode,
                 file_format=(im.format or "?").lower(),
-                file_bytes=path.stat().st_size,
+                file_bytes=len(data) if data is not None else path.stat().st_size,
                 has_alpha=im.mode in ALPHA_MODES or "transparency" in info,
                 icc_description=_icc_description(info.get("icc_profile")),
                 exif_orientation=exif_orientation,

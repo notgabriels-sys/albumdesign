@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from . import report
-from .audit import run_audit
+from .audit import discover_bundle_dirs, run_audit
 from .build import build, summarise
 from .contactsheet import ContactSheetError, plan_contact_sheet, write_contact_sheet
 from .imageops import (
-    READABLE_SUFFIXES,
     ImageError,
     SourceImage,
     inspect,
@@ -215,24 +216,6 @@ def cmd_build(args) -> int:
             continue
         results.append(result)
 
-        # Building into an occupied directory overwrites silently and leaves
-        # anything it did not write sitting there. Zip that folder for a
-        # distributor and you ship stale art the manifest does not describe.
-        if not args.dry_run and result.outputs:
-            written = {o.path.name for o in result.outputs} | {"manifest.json", "DELIVERY.md"}
-            stale = sorted(
-                p.name
-                for p in out_dir.iterdir()
-                if p.is_file() and p.name not in written and p.suffix.lower() in READABLE_SUFFIXES
-            )
-            if stale:
-                print(
-                    f"warning: {out_dir} also holds {len(stale)} image(s) this build did not write "
-                    f"and manifest.json does not describe: {', '.join(stale[:6])}"
-                    + (" ..." if len(stale) > 6 else ""),
-                    file=sys.stderr,
-                )
-
         if not args.json:
             print(report.format_build(result, colour))
             print()
@@ -365,7 +348,7 @@ def cmd_audit(args) -> int:
 
     try:
         results = run_audit(bundles, targets, verify_hashes=verify_hashes)
-    except (ValueError, FileNotFoundError, TypeError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
         print(f"audit failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
@@ -418,6 +401,15 @@ def cmd_audit(args) -> int:
                 f"  checksum mismatch: {', '.join(result.checksum_mismatches)}"
             )
             exit_code = EXIT_FINDINGS
+        if result.unmanifested_files:
+            print(
+                "  unmanifested files: "
+                f"{', '.join(result.unmanifested_files)}"
+            )
+            exit_code = EXIT_FINDINGS
+        if result.size_cap_exceeded:
+            print(f"  size cap exceeded: {', '.join(result.size_cap_exceeded)}")
+            exit_code = EXIT_FINDINGS
 
         if result.extra_targets:
             print(f"  extra targets present: {', '.join(result.extra_targets)}")
@@ -432,63 +424,173 @@ def cmd_audit(args) -> int:
     return exit_code
 
 
-def _next_zip_name(out_dir: Path, base_name: str) -> Path:
+def _next_zip_name(
+    out_dir: Path, base_name: str, reserved: set[Path] | None = None
+) -> Path:
+    reserved = reserved or set()
     candidate = out_dir / f"{base_name}.zip"
-    if not candidate.exists():
+    if not candidate.exists() and not candidate.is_symlink() and candidate not in reserved:
         return candidate
 
     index = 1
     while True:
         candidate = out_dir / f"{base_name}-{index:02d}.zip"
-        if not candidate.exists():
+        if (
+            not candidate.exists()
+            and not candidate.is_symlink()
+            and candidate not in reserved
+        ):
             return candidate
         index += 1
+
+
+def _package_stage_path(out_dir: Path) -> Path:
+    fd, raw_path = tempfile.mkstemp(
+        prefix=".coverforge-batch-", suffix=".zip", dir=out_dir
+    )
+    try:
+        os.close(fd)
+    except OSError:
+        try:
+            Path(raw_path).unlink()
+        except OSError:
+            pass
+        raise
+    return Path(raw_path)
+
+
+def _commit_staged_packages(
+    staged: list[tuple[PackageResult, Path]],
+) -> list[PackageResult]:
+    """Publish a complete batch without overwriting a concurrently claimed name."""
+    reserved: list[Path] = []
+    try:
+        for _package, final_path in staged:
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            fd = os.open(final_path, flags, 0o600)
+            reserved.append(final_path)
+            os.close(fd)
+        for package, final_path in staged:
+            os.replace(package.zip_path, final_path)
+    except BaseException as exc:
+        for path in reserved:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        if isinstance(exc, OSError):
+            raise PackageError(
+                f"could not publish complete package batch: {exc}"
+            ) from None
+        raise
+
+    packages: list[PackageResult] = []
+    for package, final_path in staged:
+        packages.append(
+            PackageResult(
+                bundle=package.bundle,
+                zip_path=final_path,
+                slug=package.slug,
+                ok=package.ok,
+                files=package.files,
+            )
+        )
+    return packages
 
 
 def cmd_package(args) -> int:
     target_set = _load(args)
     targets = _selected(args, target_set)
     out_root = Path(args.out)
-    out_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Hash every file before packaging. This defaulted to False, so package
-        # ran a weaker check than verify and then wrote its verdict into
-        # COVERFORGE_PACKAGE.json: a bundle whose cover had been swapped failed
-        # verify and still shipped a zip stamped "ok": true.
-        results = run_audit(
-            [Path(raw) for raw in args.deliveries], targets, verify_hashes=True
+        bundles = discover_bundle_dirs(
+            [Path(raw) for raw in args.deliveries]
         )
-    except (ValueError, FileNotFoundError, TypeError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
         print(f"package failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
-    packages: list[PackageResult] = []
-    skipped = 0
-
-    for audit_result in results:
-        if not audit_result.ok and not args.force:
-            skipped += 1
-            continue
-
-        if audit_result.slug:
-            base = slugify(audit_result.slug)
-        else:
-            base = slugify(audit_result.bundle.name)
-        if args.name:
-            base = (
-                slugify(args.name)
-                if len(results) == 1
-                else slugify(f"{args.name}-{base}")
+    try:
+        destination_root = out_root.resolve(strict=False)
+        for bundle in bundles:
+            try:
+                destination_root.relative_to(bundle.resolve())
+            except ValueError:
+                continue
+            raise PackageError(
+                f"package output {out_root} is inside delivery bundle {bundle}"
             )
+        out_root.mkdir(parents=True, exist_ok=True)
+    except (OSError, RuntimeError, PackageError) as exc:
+        print(f"package failed: {exc}", file=sys.stderr)
+        return EXIT_USAGE
 
-        path = _next_zip_name(out_root, base)
+    staged: list[tuple[PackageResult, Path]] = []
+    reserved_paths: set[Path] = set()
+    skipped = 0
+    try:
+        for bundle in bundles:
+            try:
+                # Capture, stage and release one bundle at a time. Final names
+                # appear only after every bundle has completed successfully.
+                audit_result = run_audit(
+                    [bundle],
+                    targets,
+                    verify_hashes=True,
+                    capture_package_bytes=True,
+                )[0]
+            except (OSError, ValueError, TypeError) as exc:
+                print(f"package failed: {exc}", file=sys.stderr)
+                return EXIT_USAGE
+
+            if not audit_result.ok and not args.force:
+                skipped += 1
+                continue
+
+            if audit_result.slug:
+                base = slugify(audit_result.slug)
+            else:
+                base = slugify(audit_result.bundle.name)
+            if args.name:
+                base = (
+                    slugify(args.name)
+                    if len(bundles) == 1
+                    else slugify(f"{args.name}-{base}")
+                )
+
+            path = _next_zip_name(out_root, base, reserved_paths)
+            reserved_paths.add(path)
+            stage_path: Path | None = None
+            try:
+                stage_path = _package_stage_path(out_root)
+                package = build_package(audit_result, stage_path)
+            except (OSError, PackageError) as exc:
+                if stage_path is not None:
+                    try:
+                        stage_path.unlink()
+                    except OSError:
+                        pass
+                print(f"package failed: {exc}", file=sys.stderr)
+                return EXIT_USAGE
+            staged.append((package, path))
 
         try:
-            packages.append(build_package(audit_result, path))
+            packages = _commit_staged_packages(staged)
         except PackageError as exc:
             print(f"package failed: {exc}", file=sys.stderr)
             return EXIT_USAGE
+    finally:
+        for package, _final_path in staged:
+            try:
+                package.zip_path.unlink()
+            except OSError:
+                pass
 
     if args.json:
         payload = {
@@ -533,7 +635,7 @@ def cmd_manifest(args) -> int:
         left_payload, left_path = load_manifest(args.left)
         right_payload, right_path = load_manifest(args.right)
         diff = compare_manifests(left_payload, right_payload, left_path, right_path)
-    except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         print(f"manifest diff failed: {exc}", file=sys.stderr)
         return EXIT_USAGE
 

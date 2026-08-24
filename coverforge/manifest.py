@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from .audit import (
+    MAX_MANIFEST_FINDINGS,
+    MAX_MANIFEST_SKIPPED,
+    manifest_schema_errors,
+    read_manifest_file,
+)
+from .build import manifest_capture_id
+from .specs import MAX_SELECTED_TARGETS
 
 
 _OUTPUT_FIELDS = (
@@ -34,9 +42,7 @@ def _normalise_path(raw: str) -> Path:
 
 def load_manifest(path: str | Path) -> tuple[dict[str, Any], Path]:
     resolved = _normalise_path(path)
-    payload = json.loads(resolved.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"manifest payload in {resolved} is not a JSON object")
+    payload, _raw = read_manifest_file(resolved)
     return payload, resolved
 
 
@@ -53,7 +59,7 @@ def _normalise_outputs(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any
     if not isinstance(raw_outputs, list):
         raise TypeError("manifest outputs must be a list")
 
-    for index, item in enumerate(raw_outputs, start=1):
+    for index, item in enumerate(raw_outputs[:MAX_SELECTED_TARGETS], start=1):
         if not isinstance(item, dict):
             issues.append(f"output #{index} is not an object")
             continue
@@ -77,7 +83,16 @@ def _normalise_manifest(
     # A section that is the wrong shape was replaced with an empty one and
     # nothing recorded it, so damage on both sides cancelled out and the diff
     # called the pair identical. Name each one instead.
-    structure_issues: list[str] = []
+    structure_issues = manifest_schema_errors(payload)
+    capture_id = payload.get("capture_id")
+    if isinstance(capture_id, str):
+        try:
+            capture_matches = capture_id == manifest_capture_id(payload)
+        except (RecursionError, TypeError, ValueError):
+            structure_issues.append("capture_id could not be recomputed safely")
+        else:
+            if not capture_matches:
+                structure_issues.append("capture_id does not match the manifest contents")
 
     source = payload.get("source")
     if source is not None and not isinstance(source, dict):
@@ -92,12 +107,16 @@ def _normalise_manifest(
         structure_issues.append("skipped is not a list")
     if not isinstance(skipped, list):
         skipped = []
+    else:
+        skipped = skipped[:MAX_MANIFEST_SKIPPED]
 
     findings = payload.get("findings")
     if findings is not None and not isinstance(findings, list):
         structure_issues.append("findings is not a list")
     if not isinstance(findings, list):
         findings = []
+    else:
+        findings = findings[:MAX_MANIFEST_FINDINGS]
 
     output_issues = output_issues + structure_issues
 

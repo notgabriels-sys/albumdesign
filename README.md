@@ -205,9 +205,20 @@ Create a shareable package only after the same validation passes:
 coverforge package build/my-release -o release-packages
 ```
 
-Each ZIP includes `COVERFORGE_PACKAGE.json`, with the audit summary and hashes
-for the included files. `--force` can package a bundle with findings, but the
-command still exits non-zero so automation cannot mistake it for a clean pack.
+Each ZIP contains only the files declared by the validated manifest, the
+manifest itself, and `COVERFORGE_PACKAGE.json`, whose hashes describe the exact
+audited bytes written into the archive. `DELIVERY.md` remains beside the local
+build but is not packaged because schema version 1 does not bind its free-form
+text. Undeclared regular files block a clean audit and are never included, even
+with `--force`; the local-only `DELIVERY.md` sidecar is the named exception.
+Package output must be outside the delivery folder.
+When several bundles are packaged in one command, archives are staged one at a
+time and published only after the complete batch succeeds; a late unreadable
+bundle does not leave an unreported partial batch.
+
+`--force` can package a structurally valid bundle with delivery findings, but
+the command still exits non-zero so automation cannot mistake it for a clean
+pack. It cannot bypass an invalid or ambiguous manifest inventory.
 
 Compare two generated manifests or bundle folders when a revision arrives:
 
@@ -233,6 +244,11 @@ The manifest uses schema version 1. For a valid name it contains no local paths,
 so it is safe to hand to someone else. It records the SHA-256 of the source and
 every emitted output, byte counts, rendering facts, and a deterministic
 `capture_id` derived from the rest of the payload.
+
+Schema version 1 supports at most 64 selected targets per bundle. Manifests are
+limited to 1 MB, and an in-memory package snapshot is limited to 256 MB per
+bundle. These limits keep validation and packaging bounded for untrusted
+delivery folders; they do not change image size caps declared by target specs.
 
 That is a record of **the bytes this run read and wrote on your machine**. It is
 not proof of authorship, ownership, rights, approval, release-readiness, or
@@ -267,7 +283,10 @@ coverforge build master.png -o out/ --extra-targets ~/.config/coverforge.toml
 ```
 
 `--extra-targets` overrides matching keys and adds new ones; `--targets-file`
-replaces the built-in set entirely.
+replaces the built-in set entirely. Target keys must be portable filename
+components and may not differ only by letter case; target names must be
+non-empty. Use `--only` or `--group` if a larger catalogue needs to be split
+across bundles of at most 64 selected targets.
 
 ## Development
 
