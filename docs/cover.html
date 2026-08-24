@@ -1,10 +1,50 @@
-<title>Coverforge</title>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Album Cover Size Checker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.">
+<link rel="canonical" href="https://gabs-utilities.com/cover.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://gabs-utilities.com/cover.html">
+<meta property="og:title" content="Album Cover Size Checker">
+<meta property="og:description" content="Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.">
+<meta property="og:image" content="https://gabs-utilities.com/share-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Link preview card. Preflight Album Cover Size Checker, headline &quot;Will your cover art pass?&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Album Cover Size Checker",
+  "description": "Check album art against the size, shape, format and colour rules Spotify, Bandcamp, Apple Music and Beatport enforce. Runs in your browser, nothing uploaded.",
+  "url": "https://gabs-utilities.com/cover.html",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any browser",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  }
+}
+</script>
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
     --ink:#14161c; --muted:#5c6270; --accent:#5a46e0;
-    --pass:#1f9d57; --warn:#b0761c; --fail:#d23f34;
+    --pass:#197e46; --warn:#946318; --fail:#c5362c;
     --pass-bg:#e7f5ec; --warn-bg:#f7efdd; --fail-bg:#fbe8e6;
     --shadow:0 1px 2px rgba(20,22,28,.06),0 8px 24px rgba(20,22,28,.06);
   }
@@ -37,6 +77,8 @@
   .brand{font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
     font-weight:700;letter-spacing:.32em;font-size:15px;text-transform:uppercase}
   .brand b{color:var(--accent)}
+  .page{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.16em;font-size:12px;text-transform:uppercase;color:var(--accent)}
   .tag{color:var(--muted);font-size:13.5px}
   .priv{margin-left:auto;color:var(--muted);font-size:12px;letter-spacing:.03em;
     border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
@@ -106,35 +148,59 @@
   .srcnote{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0;padding:0 15px 16px}
   .tick{width:9px;height:9px;border-radius:50%;flex:none}
 
+  .siblings{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;font-size:13px;color:var(--muted)}
+  .siblings b{font-weight:600;color:var(--ink)}
+  .siblings a{color:var(--accent);text-decoration:none;font-weight:600}
+  .siblings a:hover{text-decoration:underline}
+  .siblings + footer{margin-top:14px;padding-top:0;border-top:0}
   footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
     display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;color:var(--muted);font-size:13px}
   footer a{color:var(--accent);text-decoration:none;font-weight:600}
   footer a:hover{text-decoration:underline}
   .cta{margin-left:auto}
   :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .skip{position:absolute;left:-9999px;color:var(--ink)}
+  .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  /* Shown only when scripting is off. Every tool here is JavaScript: that is
+     what keeps the files on the visitor's machine, and it also means there is
+     no server to fall back on. Without this the pages present a working-looking
+     drop zone, or a fillable sheet, that silently does nothing. */
+  .nojs{margin:0 0 22px;padding:14px 16px;border:1px solid var(--warn);
+    border-left-width:4px;border-radius:10px;background:var(--surface-2);
+    color:var(--ink);font-size:14.5px;line-height:1.55;max-width:70ch}
+  .nojs b{color:var(--warn)}
+  .drop:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+
 </style>
 
+<a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
+  <noscript><p class="nojs"><b>JavaScript is off, so this checker cannot run.</b> This tool runs entirely in your browser, which is what keeps your files on your machine. That also means there is no server to fall back on: with JavaScript turned off, nothing here can run. The drop zone below will accept a file and do nothing with it.</p></noscript>
   <header>
-    <span class="brand">COVER<b>FORGE</b></span>
+    <span class="brand">PRE<b>FLIGHT</b></span>
+    <span class="page">Album Cover Size Checker</span>
     <span class="tag">album art preflight</span>
     <span class="priv">runs in your browser · nothing uploaded</span>
   </header>
 
+  <main id="main">
   <h1>Will your cover art pass?</h1>
-  <p class="lede">Drop your artwork below. Coverforge checks size, shape, format and colour against what
+  <p class="lede">Drop your artwork below. It checks size, shape, format and colour against what
     Spotify, Bandcamp, Apple Music, Beatport and the rest actually require, before a wrong file gets your
     release bounced.</p>
 
-  <label class="drop" id="drop" tabindex="0" aria-label="Choose or drop a cover image">
-    <input type="file" id="file" accept="image/*">
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="image/*" aria-label="Choose or drop a cover image">
     <span class="glyph" aria-hidden="true"></span>
     <h2>Drop a cover image here</h2>
-    <p>or click to choose a file — it never leaves your device</p>
+    <p>or click to choose a file. It never leaves your device</p>
     <span class="formats">png · jpg · and others</span>
   </label>
 
-  <section class="results" id="results" aria-live="polite">
+  <p id="live" role="status" aria-live="polite" class="sr-only"></p>
+  <section class="results" id="results" tabindex="-1">
     <div class="verdict" id="verdict">
       <span class="dot"></span>
       <div><h3 id="vtitle"></h3><p id="vsub"></p></div>
@@ -161,13 +227,24 @@
         art tagged above 72 DPI, and SoundCloud's own upload form caps images at 2 MB, so keep a
         compressed copy for that. Specs were checked against platform documentation in August 2026
         and do drift, so confirm against your own distributor before release.</p>
+      <p class="srcnote">The minimums above are what each platform publishes. The
+        <code>coverforge</code> command-line tool is deliberately stricter for some of them, because
+        it refuses to render a target from a master too small to fill it honestly. If the two
+        disagree about a platform, that is why, and the reason is written next to each target in
+        <code>coverforge/targets.toml</code>.</p>
     </div>
   </section>
 
+  </main>
+  <nav class="siblings" aria-label="Other tools">
+    <b>Other free tools:</b>
+    <a href="splits.html">Split Sheet Maker</a>
+  </nav>
   <footer>
     <a href="index.html">← all tools</a>
-    <span>Coverforge — a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
-    <span class="cta">Need your tracks finished? <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <a href="impressum.html">Impressum</a>
+    <span>Album Cover Size Checker: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need your tracks finished? <a href="shop.html">See rates and book</a>, or email <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
   </footer>
 </div>
 
@@ -198,33 +275,44 @@
   ["dragleave","drop"].forEach(function(e){drop.addEventListener(e,function(ev){ev.preventDefault();drop.classList.remove("over")})});
   drop.addEventListener("drop",function(ev){var f=ev.dataTransfer.files[0];if(f)handle(f)});
   fileIn.addEventListener("change",function(){if(fileIn.files[0])handle(fileIn.files[0])});
-  drop.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();fileIn.click()}});
+
 
   function fmtBytes(n){var u=["B","KB","MB","GB"],i=0,v=n;while(v>=1024&&i<3){v/=1024;i++}return (i?v.toFixed(1):v)+" "+u[i]}
 
   function parseHeader(buf){
     var d=new DataView(buf), out={format:"unknown",width:0,height:0,mode:"unknown"};
-    // PNG
-    if(d.byteLength>24&&d.getUint32(0)===0x89504E47){
+    var n=d.byteLength;
+    // PNG. Needs 26 bytes: colour type is byte 25, so >24 was one short.
+    if(n>=26&&d.getUint32(0)===0x89504E47&&d.getUint32(12)===0x49484452){
       out.format="PNG"; out.width=d.getUint32(16); out.height=d.getUint32(20);
       var ct=d.getUint8(25);
       out.mode={0:"Grayscale",2:"RGB",3:"Palette",4:"Grayscale+A",6:"RGBA"}[ct]||"unknown";
       return out;
     }
-    // JPEG
-    if(d.byteLength>4&&d.getUint16(0)===0xFFD8){
+    // JPEG. Every read is bounds-checked: the buffer may end mid-segment, and
+    // an unguarded DataView read throws, which would kill the whole result.
+    if(n>4&&d.getUint16(0)===0xFFD8){
       out.format="JPEG"; var o=2;
-      while(o<d.byteLength){
-        if(d.getUint8(o)!==0xFF){o++;continue}
+      while(o+1<n){
+        if(d.getUint8(o)!==0xFF) break;        // not on a marker; do not resync,
+                                               // scanning ahead can lock onto an
+                                               // EXIF thumbnail's SOF and report
+                                               // the thumbnail's size as the cover
         var m=d.getUint8(o+1);
+        if(m===0xFF){o++;continue}             // legal fill bytes before a marker
+        if(m===0x00){o+=2;continue}            // stuffed byte in entropy data
+        if(m===0x01||(m>=0xD0&&m<=0xD9)){o+=2;continue} // TEM, RSTn, SOI, EOI: no length
+        if(o+4>n) break;
         if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){
+          if(o+10>n) break;
           out.height=d.getUint16(o+5); out.width=d.getUint16(o+7);
           var comp=d.getUint8(o+9);
           out.mode=comp===4?"CMYK":comp===1?"Grayscale":"RGB";
           return out;
         }
-        if(m===0xD8||m===0xD9||(m>=0xD0&&m<=0xD7)){o+=2;continue}
-        o+=2+d.getUint16(o+2);
+        var len=d.getUint16(o+2);
+        if(len<2) break;                       // malformed; fall back to the decoded size
+        o+=2+len;
       }
       return out;
     }
@@ -235,30 +323,110 @@
     return out;
   }
 
-  function handle(file){
-    var reader=new FileReader();
-    reader.onload=function(){
-      var info=parseHeader(reader.result); info.bytes=file.size;
-      var url=URL.createObjectURL(file), img=new Image();
-      img.onload=function(){ if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight} render(info,url) };
-      img.onerror=function(){ render(info,url) };
-      img.src=url;
-    };
-    reader.readAsArrayBuffer(file.slice(0,64*1024));
+  function safeParse(buf){
+    // A parser bug must never take the whole result down with it.
+    try{ return parseHeader(buf); }
+    catch(e){ return {format:"unknown",width:0,height:0,mode:"unknown"}; }
   }
 
-  function render(info,url){
+  function handle(file){
+    // Two-stage read. 64 KB covers most files, but a CMYK export from Photoshop
+    // carries a CMYK ICC profile of a megabyte or more, which pushes the frame
+    // header past that window. Missing it there would silently downgrade the
+    // hard CMYK rejection to a vague warning, on exactly the files this tool
+    // exists to catch, so widen the read and parse again.
+    var LOOK = 64*1024, WIDE = 8*1024*1024;
+    var finish=function(info){
+      info.bytes=file.size;
+      var url=URL.createObjectURL(file), img=new Image();
+      // Whether this browser could actually open the file, as opposed to
+      // whether a header handed us two numbers. Those are different questions
+      // and only one of them is evidence.
+      //
+      // Passed as an argument rather than stashed on `info`, because a stashed
+      // flag has a third state nothing sets. The first version tested
+      // `info.decoded===false`, which made `info.decoded=true` a dead
+      // assignment: deleting it changed no behaviour and a mutation sweep
+      // found it. `render` is reached through exactly one of these two
+      // handlers, so the answer is an argument and both call sites carry it.
+      img.onload=function(){
+        if(!info.width){info.width=img.naturalWidth;info.height=img.naturalHeight}
+        render(info,url,true);
+      };
+      img.onerror=function(){ render(info,url,false) };
+      img.src=url;
+    };
+    var read=function(bytes,cb){
+      var r=new FileReader();
+      r.onload=function(){cb(safeParse(r.result))};
+      r.onerror=function(){cb({format:"unknown",width:0,height:0,mode:"unknown"})};
+      r.readAsArrayBuffer(file.slice(0,bytes));
+    };
+    read(LOOK,function(info){
+      var incomplete = info.format==="JPEG" && (!info.width || info.mode==="unknown");
+      if(incomplete && file.size>LOOK) read(Math.min(file.size,WIDE),finish);
+      else finish(info);
+    });
+  }
+
+  function render(info,url,decoded){
     $("thumb").src=url;
-    var w=info.width,h=info.height,small=Math.min(w,h),large=Math.max(w,h);
+    // Chromium cannot decode TIFF, so a CMYK TIFF, the exact file this tool
+    // exists to catch, arrived with no dimensions and no colour mode. The
+    // square, resolution and colour checks all silently skipped themselves and
+    // the verdict came out "No blockers" while every platform tile read Fail.
+    //
+    // The guard used to be `!w||!h`, which asks whether we have numbers rather
+    // than whether anything was measured, and a PNG or JPEG header supplies
+    // numbers for free. Measured in Chromium: a 33-byte file holding a PNG
+    // signature and an IHDR and no image data at all was reported as a
+    // 3000 x 3000 cover, "Good to go, with notes", four checks passing. So was
+    // a PNG whose IHDR was edited to claim 40000 x 40000. Neither file
+    // contains an image. `decoded` is the answer to the other question.
+    //
+    // Its limit, measured rather than assumed: a PNG whose IHDR claims
+    // 5000 x 5000 with the real 3000 x 3000 image data left in place *does*
+    // decode here. Chromium fires onload, reports naturalWidth 5000, and
+    // img.decode() resolves, so naturalWidth is the header again and there is
+    // no second number to hold it against. The bottom row comes back fully
+    // transparent, but so does a legitimate cover with a transparent corner,
+    // and a guess is not a measurement. That file is caught by
+    // `coverforge check`, which decodes with Pillow and gets a real refusal.
+    // This page reports what a browser sees, and a browser sees 5000.
+    var decodeFailed = !decoded;
+    // A header's numbers are a claim. They are kept for the sentence that
+    // names them as a claim, and dropped from everything that would grade
+    // them, because otherwise the headline says nothing was measured while
+    // the square and resolution checks show PASS and all seven platform tiles
+    // below say Pass on a size nobody read. No TIFF exemption is needed here:
+    // parseHeader gives TIFF, GIF, BMP and WEBP no dimensions at all, so an
+    // undecodable one is unreadable on its own merits and a term exempting it
+    // would never fire.
+    var claimedW=info.width, claimedH=info.height;
+    var w=decodeFailed?0:info.width, h=decodeFailed?0:info.height;
+    var small=Math.min(w,h),large=Math.max(w,h);
     var checks=[];
+    var unreadable=!w||!h;
+    if(unreadable){
+      checks.push(["readable","fail", decodeFailed && claimedW && claimedH
+        ? "The header claims "+claimedW+" x "+claimedH+" px, but this browser could not "
+          +"decode the file, so nothing below was measured and that size is unconfirmed. "
+          +"A header with no image behind it is what a half-finished export or an "
+          +"interrupted copy leaves. Re-export it and run it again"
+        : "This browser could not decode the file, so its size, shape and colour were not checked. Export a JPEG and run it again"]);
+    }
 
     // format
-    if(info.format==="JPEG") checks.push(["format","pass","JPEG, the one format every distributor documents"]);
+    if(info.format==="JPEG") checks.push(["format","pass","JPEG, the format every distributor checked here documents"]);
     else if(info.format==="PNG") checks.push(["format","warn","PNG is accepted by most, but DistroKid documents JPG only. Export a JPEG to be safe"]);
-    else checks.push(["format","fail",(info.format==="unknown"?"Unrecognised file":info.format)+" is not accepted — export a JPEG"]);
+    // TIFF and GIF are not universally rejected: Spotify's provider spec lists
+    // TIFF, and Bandcamp, CD Baby and TuneCore all document GIF. Warn rather
+    // than fail, since "not accepted" would be wrong for those platforms.
+    else if(info.format==="unknown") checks.push(["format","fail","Unrecognised file. Export a JPEG"]);
+    else checks.push(["format","warn",info.format+" is accepted by some stores but not all. Export a JPEG, which every distributor checked here documents"]);
     // square
     if(w&&h){ if(w===h) checks.push(["square","pass",w+" x "+h]);
-      else checks.push(["square","fail",w+" x "+h+" is not square — crop it to 1:1"]); }
+      else checks.push(["square","fail",w+" x "+h+" is not square. Crop it to 1:1"]); }
     // resolution
     if(small){
       if(small<1400){
@@ -266,28 +434,43 @@
       } else if(small<HIGHEST_FLOOR){
         checks.push(["resolution","warn",small+"px clears the common 1400 floor, but "+HIGHEST_FLOOR_WHO+" requires "+HIGHEST_FLOOR+"px. Export at 3000"]);
       } else if(small<3000){
-        checks.push(["resolution","warn",small+"px is accepted, but 3000px is what every platform recommends"]);
-      } else if(large>DIST_MAX){
-        checks.push(["resolution","warn",large+"px is over the "+DIST_MAX+"px ceiling "+DIST_MAX_WHO+" enforce, they reject art this large. Keep this as your master and deliver a "+DIST_MAX+"px copy"]);
+        checks.push(["resolution","warn",small+"px is accepted, but 3000px is what most distributors recommend and what Spotify, Apple and Beatport ask for"]);
       } else {
         checks.push(["resolution","pass",w+" x "+h]);
       }
+      // Checked independently of the floor chain above: a 2000x4000 image is
+      // both under the recommendation and over the ceiling, and needs to hear
+      // about both.
+      if(large>DIST_MAX){
+        checks.push(["oversize","warn",large+"px is over the "+DIST_MAX+"px ceiling "+DIST_MAX_WHO+" enforce, they reject art this large. Keep this as your master and deliver a "+DIST_MAX+"px copy"]);
+      }
     }
     // colour
-    var m=info.mode;
+    // A PNG IHDR states a colour type in the same breath as the size, so an
+    // undecoded file's colour mode is the same kind of claim and is dropped
+    // with it. It lands in the "Colour mode unread" branch below, which is
+    // what actually happened.
+    var m=decodeFailed?"unknown":info.mode;
     if(m==="RGB") checks.push(["colour","pass","RGB"]);
-    else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by stores — convert to RGB / sRGB"]);
-    else if(m==="RGBA") checks.push(["colour","warn","Has an alpha channel — flatten onto a solid background"]);
-    else if(m&&m.indexOf("Grayscale")===0) checks.push(["colour","warn","Grayscale — convert to RGB to be safe"]);
-    else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG — re-export as RGB"]);
-    else checks.push(["colour","warn","Colour mode unread — make sure it is RGB / sRGB"]);
+    else if(m==="CMYK") checks.push(["colour","fail","CMYK is rejected by the stores checked here. Convert to RGB / sRGB"]);
+    else if(m==="RGBA") checks.push(["colour","warn","Has an alpha channel. Flatten onto a solid background"]);
+    // Grayscale+A matched the grayscale branch first and lost the flatten
+    // advice, so a transparent greyscale PNG heard nothing about its alpha
+    // while an RGBA file was told to flatten.
+    else if(m&&m.indexOf("Grayscale")===0&&/\+A$/.test(m)) checks.push(["colour","warn","Grayscale with an alpha channel. Flatten onto a solid background and convert to RGB"]);
+    else if(m&&m.indexOf("Grayscale")===0) checks.push(["colour","warn","Grayscale. Convert to RGB to be safe"]);
+    else if(m==="Palette") checks.push(["colour","warn","Indexed/palette PNG. Re-export as RGB"]);
+    else checks.push(["colour","warn","Colour mode unread. Make sure it is RGB / sRGB"]);
     // filesize
-    if(info.bytes>10*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is over the 10 MB ceiling TuneCore and Ditto enforce. Aim for 5 to 8 MB"]);
+    if(info.bytes>10*1024*1024) checks.push(["filesize","warn",fmtBytes(info.bytes)+" is over the 10 MB ceiling Ditto and DistroKid document. Aim for 5 to 8 MB"]);
     else checks.push(["filesize","pass",fmtBytes(info.bytes)]);
 
     // specs
     $("specs").innerHTML="";
-    [["Format",info.format],["Dimensions",w&&h?(w+" x "+h+" px"):"unknown"],
+    [["Format",info.format],
+     // Says "claimed" rather than printing the number bare, because this table
+     // sits directly under a verdict saying nothing was measured.
+     ["Dimensions",w&&h?(w+" x "+h+" px"):(decodeFailed&&claimedW&&claimedH?claimedW+" x "+claimedH+" px claimed, not decoded":"unknown")],
      ["Aspect",w&&h?(w===h?"1:1 square":(w/h).toFixed(2)+":1"):"—"],
      ["Colour",m],["Size",fmtBytes(info.bytes)]].forEach(function(r){
       var row=document.createElement("div");
@@ -306,18 +489,13 @@
       $("checks").appendChild(li);
     });
 
-    // verdict
-    var vt=$("vtitle"),vs=$("vsub"),dot=document.querySelector("#verdict .dot");
-    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
-    dot.style.background=col; vt.style.color=col;
-    if(worst==="fail"){vt.textContent="Not ready to upload";vs.textContent="Fix the red items below before you send this to a distributor.";}
-    else if(worst==="warn"){vt.textContent="Good to go, with notes";vs.textContent="No blockers. The amber items are worth tightening for the best result.";}
-    else{vt.textContent="Ready to ship";vs.textContent="This cover clears the common store and distributor requirements.";}
-
-    // platforms
-    $("platforms").innerHTML="";
+    // Platform results are worked out before the verdict, because the verdict
+    // used to be computed from `checks` alone and could not see them. A 3000px
+    // square JPEG at 5.8 MB read "Ready to ship: this cover clears the common
+    // store and distributor requirements" while the SoundCloud tile underneath
+    // it read Fail on that platform's 2 MB cap.
     var isSquare=(w===h);
-    PLATFORMS.forEach(function(p){
+    var plats=PLATFORMS.map(function(p){
       var st,label;
       if(!small||!isSquare){st="fail";label=!isSquare?"needs 1:1 square":"unknown size";}
       else if(p.min&&small<p.min){st="fail";label="needs "+p.min+"px, has "+small;}
@@ -325,14 +503,55 @@
       else if(p.name==="Instagram"&&small>p.rec){st="pass";label="downscaled to "+p.rec+"px on upload";}
       else if(small<p.rec){st="warn";label=small+"px ok · "+p.rec+" ideal";}
       else{st="pass";label=p.note;}
-      var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[st];
+      return {p:p,st:st,label:label};
+    });
+    var failedPlats=plats.filter(function(x){return x.st==="fail"}).map(function(x){return x.p.name});
+
+    // verdict
+    var vt=$("vtitle"),vs=$("vsub"),dot=document.querySelector("#verdict .dot");
+    var col={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[worst];
+    dot.style.background=col; vt.style.color=col;
+    if(unreadable){
+      // Nothing below was measured, so saying "no blockers" would be a verdict
+      // on a file this browser never opened.
+      vt.textContent="Could not check this file";
+      vs.textContent="Your browser could not decode it, so its size, shape and colour were not checked. Export a JPEG and run it again.";
+    }
+    else if(worst==="fail"){vt.textContent="Not ready to upload";vs.textContent="Fix the red items below before you send this to a distributor.";}
+    else if(worst==="warn"){
+      vt.textContent="Good to go, with notes";
+      vs.textContent="Nothing above failed outright. The amber items name the platforms and limits they apply to, so read them before you deliver.";
+    }
+    else{
+      vt.textContent="Ready to ship";
+      vs.textContent="This cover clears every check above.";
+    }
+    // Whatever the checks said, a failing tile is a platform this file will not
+    // clear, and the verdict has to admit it.
+    if(!unreadable&&failedPlats.length){
+      vs.textContent+=" It does not meet "+failedPlats.join(", ")+"; see the platform grid.";
+    }
+
+    // platforms
+    $("platforms").innerHTML="";
+    plats.forEach(function(x){
+      var col2={pass:"var(--pass)",warn:"var(--warn)",fail:"var(--fail)"}[x.st];
       var el=document.createElement("div"); el.className="plat";
-      el.innerHTML="<div class='n'>"+p.name+"<span class='tick' style='background:"+col2+"'></span></div>"+
-        "<div class='s'>"+label+"</div>";
+      var word={pass:"Pass",warn:"Check",fail:"Fail"}[x.st];
+      el.innerHTML="<div class='n'>"+x.p.name+"<span class='tick' style='background:"+col2+"' aria-hidden='true'></span></div>"+
+        // The label is a lowercase fragment written to follow a separator. Without
+        // one, "Pass" runs into the number and reads as a threshold ("Pass 1400")
+        // rather than a verdict plus the floor behind it.
+        "<div class='s'><b>"+word+"</b>: "+x.label+"</div>";
       $("platforms").appendChild(el);
     });
 
-    var r=$("results"); r.classList.add("show"); r.scrollIntoView({behavior:"smooth",block:"nearest"});
+    var r=$("results"); r.classList.add("show");
+    $("live").textContent = vt.textContent + ". " + checks.length + " checks, worst result " + worst + ".";
+    var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    r.scrollIntoView({behavior:reduce?"auto":"smooth",block:"nearest"});
   }
 })();
 </script>
+
+</html>
