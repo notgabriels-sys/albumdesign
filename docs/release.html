@@ -116,6 +116,14 @@
   .bar .row{flex-wrap:wrap;row-gap:10px}
   .skip{position:absolute;left:-9999px;color:var(--ink)}
   .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px}
+  /* Shown only when scripting is off. Every tool here is JavaScript: that is
+     what keeps the files on the visitor's machine, and it also means there is
+     no server to fall back on. Without this the pages present a working-looking
+     drop zone, or a fillable sheet, that silently does nothing. */
+  .nojs{margin:0 0 22px;padding:14px 16px;border:1px solid var(--warn);
+    border-left-width:4px;border-radius:10px;background:var(--surface-2);
+    color:var(--ink);font-size:14.5px;line-height:1.55;max-width:70ch}
+  .nojs b{color:var(--warn)}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 
   @media print{.bar .btns,.tag,.lede{display:none}body{background:#fff}}
@@ -123,6 +131,7 @@
 
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
+  <noscript><p class="nojs"><b>JavaScript is off, so this checklist cannot run.</b> This tool runs entirely in your browser, which is what keeps your files on your machine. That also means there is no server to fall back on: with JavaScript turned off, nothing here can run. The checklist does not appear at all below: every one of its items is built in the browser.</p></noscript>
   <header>
     <span class="brand">PRE<b>FLIGHT</b></span>
     <span class="page">Music Release Checklist</span>

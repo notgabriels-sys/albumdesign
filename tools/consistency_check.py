@@ -1158,6 +1158,44 @@ def main() -> int:
             f"{mismatches}",
         )
 
+    print("\n=== a page that needs scripting says so when there is none ===")
+    # Every tool here is JavaScript, which is exactly what keeps the visitor's
+    # files on their machine, and it means a page with scripting off presents a
+    # working-looking drop zone or a fillable sheet that silently does nothing.
+    #
+    # Measured in Chromium with javaScriptEnabled false: cover, loudness and
+    # delivery each showed a full drop target that accepts a file and discards
+    # it, release showed checkboxes that never save, and splits showed thirteen
+    # live form fields with no total, no validation and a print button. That
+    # last one is the document that reaches GEMA and GVL, produced unchecked.
+    #
+    # Which pages need the notice is derived rather than listed, and the first
+    # derivation was wrong in a way worth keeping: it looked for form controls
+    # in the static markup, which missed release.html, because that page builds
+    # every one of its 21 checklist items in JavaScript. Measured with
+    # scripting off it renders 358 characters of main text against 3361, so the
+    # page the notice matters most for was the one page the scan skipped.
+    #
+    # A page needs scripting if it ships scripting. JSON-LD is data, not
+    # behaviour, so it does not count: exactly the five tool pages carry a real
+    # <script>, and index, shop, impressum and 404 carry none.
+    needs_js = {
+        name: body for name, body in src.items() if "<script>" in body
+    }
+    check(
+        "the scripting-notice scan found interactive pages",
+        bool(needs_js),
+        "no page appears to carry a form control at all, so the check below "
+        "compared nothing and the markup pattern has drifted",
+    )
+    for name, body in sorted(needs_js.items()):
+        check(
+            f"{name} tells a visitor with scripting off that nothing will run",
+            "<noscript>" in body and 'class="nojs"' in body,
+            "this page has controls that do nothing without JavaScript, and "
+            "says so nowhere, so it looks broken rather than explained",
+        )
+
     print("\n=== every payment processor the site links to is disclosed ===")
     # A payment button sends the visitor, and their data, to a third party
     # acting as its own controller. Art. 13 DSGVO says the privacy notice has

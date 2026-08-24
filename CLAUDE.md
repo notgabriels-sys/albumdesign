@@ -448,6 +448,30 @@ which made them useless as gates. Keep them asserting.
   Exempting `paypal.com` wholesale would readmit the `paypal.com/ncp/` shape
   that hid the EUR 1,200 charge, and a test proves that link is still blocked.
 
+- **Every tool is JavaScript, and with scripting off they looked fine and did
+  nothing.** Measured in Chromium with `javaScriptEnabled: false`: cover,
+  loudness and delivery each rendered a full drop target that accepts a file
+  and discards it, and `splits.html` rendered thirteen live form fields with no
+  total, no validation and a working print button. That is the document that
+  reaches GEMA and GVL, produced unchecked, by a page that looked like it was
+  checking. No page mentioned JavaScript anywhere.
+
+  Each of the five now carries a `<noscript>` band saying what will not happen,
+  worded per page, and the check derives which pages need one instead of
+  listing them. **The first derivation was wrong and the way it was wrong is
+  the point:** it looked for form controls in the static markup, which missed
+  `release.html`, because that page builds all 21 checklist items in
+  JavaScript. With scripting off it renders 358 characters of main text against
+  3361. The page the notice mattered most for was the one page the scan
+  skipped. A page needs scripting if it *ships* scripting, so the test is a
+  real `<script>`; JSON-LD is data, not behaviour, and exactly the five tool
+  pages have one.
+
+  The copy was wrong too, in the same direction. `release.html` first said "you
+  can read the list, but ticking an item will not save your progress", which
+  describes a list that is not there. Rendering it is what showed that. Write
+  the notice after looking at the page, not from what you assume the page does.
+
 - **The repository's About box and topics are not in the repo.** They are
   settings, so nothing in `docs/` or `tools/` can set them and no check can
   see them. As of 23 August 2026 both are empty, which is why the repo shows
