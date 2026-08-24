@@ -82,7 +82,7 @@ class TestWhatIsAllowed:
         assert not unverified(page("https://stripe.com/privacy"))
 
     def test_an_unrelated_link_is_left_alone(self):
-        assert not unverified(page("https://notgabriels-sys.github.io/albumdesign/"))
+        assert not unverified(page("https://gabs-utilities.com/"))
 
     def test_a_mailto_is_not_a_payment_link(self):
         assert not unverified('<a href="mailto:hologrampeoplemusic@gmail.com">mail</a>')

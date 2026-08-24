@@ -4,17 +4,17 @@ Preflight your release artwork, then export the whole per-platform delivery pack
 in one command.
 
 **Free browser tools, nothing to install:**
-[Album Cover Size Checker](https://notgabriels-sys.github.io/albumdesign/cover.html) ·
-[LUFS and True Peak Meter](https://notgabriels-sys.github.io/albumdesign/loudness.html) ·
-[Release Delivery Check](https://notgabriels-sys.github.io/albumdesign/delivery.html) ·
-[Music Release Checklist](https://notgabriels-sys.github.io/albumdesign/release.html) ·
-[Split Sheet Maker](https://notgabriels-sys.github.io/albumdesign/splits.html)
+[Album Cover Size Checker](https://gabs-utilities.com/cover.html) ·
+[LUFS and True Peak Meter](https://gabs-utilities.com/loudness.html) ·
+[Release Delivery Check](https://gabs-utilities.com/delivery.html) ·
+[Music Release Checklist](https://gabs-utilities.com/release.html) ·
+[Split Sheet Maker](https://gabs-utilities.com/splits.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
 
 If you would rather someone else finished the record, the
-[rates are here](https://notgabriels-sys.github.io/albumdesign/shop.html):
+[rates are here](https://gabs-utilities.com/shop.html):
 mixing and mastering by Gabriel G Alonso, Berlin.
 
 You finish a cover, and then comes the boring half: 3000×3000 for the

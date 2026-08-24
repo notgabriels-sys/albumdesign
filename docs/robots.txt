@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://notgabriels-sys.github.io/albumdesign/sitemap.xml
+Sitemap: https://gabs-utilities.com/sitemap.xml

@@ -65,7 +65,7 @@ STRIP_LINE = re.compile(
 # footer resolves to nothing at all: every published copy carried a dead "all
 # tools" link, and after the Impressum went in, a dead Impressum link too.
 # Point them at the live site instead, which is where those pages actually are.
-SITE = "https://notgabriels-sys.github.io/albumdesign/"
+SITE = "https://gabs-utilities.com/"
 INTERNAL_HREF = re.compile(r'href="(?!https?:|mailto:|#)([A-Za-z0-9._-]+\.html)"')
 
 
