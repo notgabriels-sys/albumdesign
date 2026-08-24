@@ -17,3 +17,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["coverforge"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/coverforge",
+  "/tests",
+  "/README.md",
+  "/pyproject.toml",
+]
