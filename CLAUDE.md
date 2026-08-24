@@ -583,8 +583,15 @@ which made them useless as gates. Keep them asserting.
 
 ## The site is live
 
-https://notgabriels-sys.github.io/albumdesign/ serves `docs/` from `main`.
-Gabriel switched Pages on himself, because he had to: an Actions token is
+https://gabs-utilities.com/ serves `docs/` from `main`, through the `docs/CNAME`
+file. Gabriel registered the domain on 24 August 2026 and set the DNS himself.
+The old `notgabriels-sys.github.io/albumdesign/` address still redirects, so
+links shared before the switch keep working, but nothing in the repo should
+name it any more: `SITE` in `consistency_check.py` and `sync_artifacts.py` is
+the domain, and every canonical, sitemap entry and README link is compared
+against it.
+
+Pages was switched on by hand, because it had to be: an Actions token is
 refused with "Resource not accessible by integration" when it tries to *create*
 a Pages site, and the Pages REST path is blocked by this environment's proxy.
 Deploying to the existing site is fine, so pushes to `main` publish normally.

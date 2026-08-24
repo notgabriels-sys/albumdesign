@@ -29,6 +29,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
+# The site's own address, in one place.
+#
+# It used to be a local in the share-metadata section while two README scans
+# carried the path segment "albumdesign/" hardcoded in their regexes. Moving
+# to gabs-utilities.com made both of those match nothing, and the second one
+# said so: "matched link text for 0 of 5 tools". That is the counter earning
+# its keep on the very next change after it was written, and it is the same
+# lesson as everything else here: a fact written in two places drifts apart,
+# so read it, do not retype it.
+SITE = "https://gabs-utilities.com/"
+
 # A card button may only point at a payment host whose amount and product have
 # been read through the provider's API.
 #
@@ -1035,7 +1046,7 @@ def main() -> int:
     # docs/ leaves a dead link here and nothing notices, because nobody clicks
     # their own README.
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    linked = set(re.findall(r"albumdesign/([a-z]+\.html)", readme))
+    linked = set(re.findall(rf"{re.escape(SITE)}([a-z0-9]+\.html)", readme))
     check(
         "the README links to at least one page",
         bool(linked),
@@ -1085,7 +1096,7 @@ def main() -> int:
     named = 0
     for page, title in TOOL_PAGES.items():
         texts = re.findall(
-            rf"\[([^\]]+)\]\(https://[^)]*albumdesign/{re.escape(page)}\)", readme
+            rf"\[([^\]]+)\]\({re.escape(SITE + page)}\)", readme
         )
         if texts:
             named += 1
@@ -1258,7 +1269,6 @@ def main() -> int:
     # which is how three tool pages had been shipping. These checks exist so a
     # sixth tool cannot be added and quietly miss the whole set.
     print("\n=== share metadata ===")
-    SITE = "https://notgabriels-sys.github.io/albumdesign/"
     for name, body in src.items():
         url = SITE + name
         want = {
@@ -1315,10 +1325,11 @@ def main() -> int:
     # only looks at .html. Name what belongs here and reject the rest, so the
     # next stray directory is a red CI run rather than a live page.
     PUBLISHABLE = {".html", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".xml", ".txt", ".webmanifest"}
-    # .nojekyll is a GitHub Pages control file, not content: it stops Jekyll
-    # processing the directory. Named here rather than allowing every
-    # extensionless file, which would let a README back in.
-    ALLOWED_BY_NAME = {".nojekyll"}
+    # .nojekyll and CNAME are GitHub Pages control files, not content: the
+    # first stops Jekyll processing the directory, the second is what makes
+    # Pages serve the custom domain at all. Named here rather than allowing
+    # every extensionless file, which would let a README back in.
+    ALLOWED_BY_NAME = {".nojekyll", "CNAME"}
     strays = sorted(
         str(p.relative_to(DOCS))
         for p in DOCS.rglob("*")
