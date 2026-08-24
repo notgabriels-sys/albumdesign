@@ -20,7 +20,13 @@
 #              and each note says why. The web cover checker at docs/cover.html
 #              reports the PLATFORM'S published minimum, so the two answer
 #              different questions and will not always agree.
-#   max_bytes  hard file-size ceiling; quality is walked down to fit
+#   max_bytes  hard file-size ceiling; quality is walked down to fit. Like
+#              min_source, this is the ceiling THIS target renders to, which is
+#              not always the tightest number a distributor enforces: Apple
+#              accepts up to 30 MB, while the web checker warns at the 10 MB
+#              TuneCore and Ditto enforce, because that is the one most people
+#              hit first. In practice a 3000px q95 JPEG lands near 1 MB, so
+#              neither usually bites.
 #   fit        cover (scale + centre crop) | pad (scale to fit + fill)
 #   pad_style  blur | a #rrggbb colour. only used when fit = "pad"
 #   notes      shown in `coverforge targets`
