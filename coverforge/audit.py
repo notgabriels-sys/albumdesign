@@ -1,0 +1,437 @@
+"""Validate delivery folders after export."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image
+
+from .imageops import is_image_path
+from .specs import Target
+
+_OUTPUT_RE = re.compile(
+    r"(?P<slug>.+)--(?P<target>[a-z0-9_]+)--(?P<width>\d+)x(?P<height>\d+)\.(?P<ext>jpe?g|png)$"
+)
+
+
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(64 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+@dataclass
+class BundleAudit:
+    """Structured result of one audited delivery folder."""
+
+    bundle: Path
+    slug: str | None
+    checked_targets: list[str]
+    present_targets: list[str]
+    missing_targets: list[str]
+    extra_targets: list[str]
+    malformed_files: list[str]
+    missing_files: list[str]
+    bytes_mismatches: list[str]
+    checksum_mismatches: list[str]
+    dimension_mismatches: list[str]
+    format_mismatches: list[str]
+    manifest_present: bool
+    # The manifest's capture_id is a hash of its own contents, so it can be
+    # recomputed and compared. Nothing did: swap a delivery file, edit the
+    # manifest so its bytes and sha256 match the swap, leave capture_id alone,
+    # and verify said ok. "Hash-bound" only held against a manifest you already
+    # trusted, which is the case a portable manifest is meant to remove.
+    capture_id_mismatch: bool = False
+    # Whether any file's bytes were actually hashed against the manifest.
+    # Without this, a bundle with no manifest at all reached `ok` having
+    # verified nothing: `coverforge verify` on a folder whose cover had been
+    # swapped for a different image exited 0 and printed "ok".
+    hashes_verified: bool = False
+
+    @property
+    def ok(self) -> bool:
+        if not self.manifest_present:
+            return False
+        if self.capture_id_mismatch:
+            return False
+        return not (
+            self.missing_targets
+            or self.malformed_files
+            or self.missing_files
+            or self.bytes_mismatches
+            or self.checksum_mismatches
+            or self.dimension_mismatches
+            or self.format_mismatches
+        )
+
+    def as_dict(self) -> dict:
+        return {
+            "bundle": str(self.bundle),
+            "slug": self.slug,
+            "checked_targets": self.checked_targets,
+            "present_targets": self.present_targets,
+            "missing_targets": self.missing_targets,
+            "extra_targets": self.extra_targets,
+            "malformed_files": self.malformed_files,
+            "missing_files": self.missing_files,
+            "bytes_mismatches": self.bytes_mismatches,
+            "checksum_mismatches": self.checksum_mismatches,
+            "dimension_mismatches": self.dimension_mismatches,
+            "format_mismatches": self.format_mismatches,
+            "manifest_present": self.manifest_present,
+            "capture_id_mismatch": self.capture_id_mismatch,
+            "hashes_verified": self.hashes_verified,
+            "ok": self.ok,
+        }
+
+
+def _read_manifest(bundle: Path) -> tuple[dict, str | None]:
+    manifest_path = bundle / "manifest.json"
+    if not manifest_path.exists():
+        return {}, None
+
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError(f"invalid manifest payload in {manifest_path}")
+    return payload, str(payload.get("slug", "") or "") or None
+
+
+def _parse_output_name(filename: str) -> dict[str, str] | None:
+    match = _OUTPUT_RE.fullmatch(filename)
+    if not match:
+        return None
+    return match.groupdict()
+
+
+def _is_bundle(path: Path) -> bool:
+    if (path / "manifest.json").exists():
+        return True
+    return any(
+        _parse_output_name(child.name.lower()) is not None
+        for child in path.iterdir()
+        if child.is_file() and is_image_path(child)
+    )
+
+
+def _discover_bundle_dirs(paths: list[Path]) -> list[Path]:
+    bundles: list[Path] = []
+    seen: set[Path] = set()
+
+    def add(bundle: Path) -> None:
+        if bundle in seen:
+            return
+        seen.add(bundle)
+        bundles.append(bundle)
+
+    for raw in paths:
+        if raw.is_file():
+            if raw.name == "manifest.json":
+                add(raw.parent)
+            else:
+                raise ValueError(f"{raw} is not a delivery bundle file")
+            continue
+        if not raw.exists():
+            raise FileNotFoundError(f"{raw} does not exist")
+        if not raw.is_dir():
+            raise ValueError(f"{raw} is not a delivery path")
+        if _is_bundle(raw):
+            add(raw)
+            continue
+        for child in sorted(raw.iterdir()):
+            if child.is_dir() and _is_bundle(child):
+                add(child)
+
+    return bundles
+
+
+def _scan_without_manifest(
+    bundle: Path,
+) -> tuple[dict[str, str], list[str], str | None]:
+    present_by_target: dict[str, str] = {}
+    malformed: list[str] = []
+    slug: str | None = None
+
+    for child in sorted(bundle.iterdir()):
+        if not child.is_file() or not is_image_path(child):
+            continue
+        parsed = _parse_output_name(child.name.lower())
+        if not parsed:
+            continue
+
+        target = parsed["target"]
+        filename = child.name
+        if target in present_by_target:
+            malformed.append(f"duplicate target file for {target}: {filename}")
+            continue
+
+        if slug is None:
+            slug = parsed["slug"]
+        present_by_target[target] = filename
+
+    return present_by_target, malformed, slug
+
+
+def _read_image_dimensions(path: Path) -> tuple[int, int]:
+    with Image.open(path) as im:
+        return im.width, im.height
+
+
+def _check_bundle(
+    bundle: Path,
+    targets: list[Target],
+    expected_targets: dict[str, Target],
+    *,
+    verify_hashes: bool,
+) -> BundleAudit:
+    checked = [target.key for target in targets]
+    malformed: list[str] = []
+    bytes_mismatches: list[str] = []
+    checksum_mismatches: list[str] = []
+    missing_files: list[str] = []
+    dimension_mismatches: list[str] = []
+    format_mismatches: list[str] = []
+    hashed_any = False
+
+    manifest_payload, manifest_slug = _read_manifest(bundle)
+    manifest_present = bool(manifest_payload)
+    slug = manifest_slug
+
+    # Recompute the manifest's own integrity token from its contents. A
+    # manifest written by an older coverforge carries no capture_id at all, and
+    # that is not a mismatch, just nothing to check.
+    capture_id_mismatch = False
+    if manifest_present and manifest_payload.get("capture_id"):
+        from .build import manifest_capture_id
+
+        try:
+            expected_capture = manifest_capture_id(manifest_payload)
+        except (TypeError, ValueError):
+            capture_id_mismatch = True
+        else:
+            capture_id_mismatch = expected_capture != manifest_payload["capture_id"]
+
+    present_by_target: dict[str, str] = {}
+    if manifest_present:
+        outputs = manifest_payload.get("outputs")
+        if not isinstance(outputs, list):
+            raise ValueError(f"manifest missing outputs in {bundle}/manifest.json")
+
+        for item in outputs:
+            if not isinstance(item, dict):
+                malformed.append(f"non-object output entry in manifest for {bundle}")
+                continue
+
+            target_key = item.get("target")
+            filename = item.get("file")
+            if not isinstance(target_key, str) or not isinstance(filename, str):
+                malformed.append(
+                    f"bad manifest output entry in {bundle / 'manifest.json'}"
+                )
+                continue
+
+            target_key = target_key.strip()
+            filename = filename.strip()
+            if not target_key:
+                malformed.append(f"empty manifest target in {bundle / 'manifest.json'}")
+                continue
+            if not filename:
+                malformed.append(
+                    f"empty manifest filename for {target_key} in {bundle / 'manifest.json'}"
+                )
+                continue
+
+            if target_key in present_by_target:
+                malformed.append(f"duplicate manifest target: {target_key}")
+                continue
+
+            # Validate before recording the target as present. Recording first
+            # meant a rejected entry still counted towards present_targets, so
+            # the audit reported the cover as delivered while refusing to look
+            # at the thing the manifest named.
+            # A manifest is by design something you receive from someone else,
+            # so its filenames are untrusted text. `.` matches `/` in the name
+            # pattern, so "../../etc/x--spotify--3000x3000.jpg" parsed happily
+            # and bundle / filename reached outside the folder: verify then
+            # opened, sized and hashed that file and printed the result, while
+            # audit and package called the bundle complete without the real
+            # cover being present. A delivery file is one plain name in the
+            # folder, never a path.
+            if filename != Path(filename).name or Path(filename).is_absolute():
+                malformed.append(f"manifest filename is not a plain name: {filename}")
+                continue
+
+            output_path = bundle / filename
+            if output_path.is_symlink():
+                malformed.append(f"manifest entry is a symlink: {filename}")
+                continue
+
+            present_by_target[target_key] = filename
+            if not output_path.exists():
+                missing_files.append(filename)
+                continue
+
+            parsed = _parse_output_name(filename.lower())
+            if not parsed:
+                malformed.append(
+                    f"manifest filename not matching standard pattern: {filename}"
+                )
+                continue
+
+            expected_target = expected_targets.get(target_key)
+
+            try:
+                actual = _read_image_dimensions(output_path)
+            except OSError as exc:
+                malformed.append(f"cannot read output image {filename}: {exc}")
+                continue
+
+            if verify_hashes:
+                expected_bytes = item.get("bytes")
+                if expected_bytes is None:
+                    malformed.append(
+                        f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing bytes"
+                    )
+                elif not isinstance(expected_bytes, int):
+                    malformed.append(
+                        f"manifest entry for {target_key} has invalid bytes in {bundle / 'manifest.json'}"
+                    )
+                else:
+                    actual_bytes = output_path.stat().st_size
+                    if actual_bytes != expected_bytes:
+                        bytes_mismatches.append(
+                            f"{target_key}: expected {expected_bytes} bytes, got {actual_bytes} in {filename}"
+                        )
+
+                expected_sha = item.get("sha256")
+                if not expected_sha:
+                    malformed.append(
+                        f"manifest entry for {target_key} in {bundle / 'manifest.json'} missing sha256"
+                    )
+                elif not isinstance(expected_sha, str):
+                    malformed.append(
+                        f"manifest entry for {target_key} has invalid sha256 in {bundle / 'manifest.json'}"
+                    )
+                else:
+                    actual_sha = _sha256_file(output_path)
+                    hashed_any = True
+                    if actual_sha != expected_sha:
+                        checksum_mismatches.append(
+                            f"{target_key}: expected {expected_sha}, got {actual_sha} in {filename}"
+                        )
+
+            expected_from_name = f"{parsed['width']}x{parsed['height']}"
+            actual_dimensions = f"{actual[0]}x{actual[1]}"
+            if actual_dimensions != expected_from_name:
+                dimension_mismatches.append(
+                    f"{target_key}: actual size {actual_dimensions} does not match filename dimensions {expected_from_name} in {filename}"
+                )
+
+            if expected_target:
+                if parsed["width"] != str(expected_target.width) or parsed[
+                    "height"
+                ] != str(expected_target.height):
+                    dimension_mismatches.append(
+                        f"{target_key}: expected {expected_target.dimensions}, got {parsed['width']}x{parsed['height']} in {filename}"
+                    )
+                if parsed["ext"] != expected_target.extension:
+                    format_mismatches.append(
+                        f"{target_key}: expected {expected_target.extension}, got {parsed['ext']} in {filename}"
+                    )
+                if actual_dimensions != expected_target.dimensions:
+                    dimension_mismatches.append(
+                        f"{target_key}: actual size {actual_dimensions} does not match expected {expected_target.dimensions} in {filename}"
+                    )
+
+    else:
+        present_by_target, scan_malformed, detected_slug = _scan_without_manifest(
+            bundle
+        )
+        malformed.extend(scan_malformed)
+        if slug is None:
+            slug = detected_slug
+        for target_key, filename in present_by_target.items():
+            output_path = bundle / filename
+            expected_target = expected_targets.get(target_key)
+            if not expected_target:
+                continue
+            parsed = _parse_output_name(filename.lower()) or {}
+            if parsed:
+                if parsed["width"] != str(expected_target.width) or parsed[
+                    "height"
+                ] != str(expected_target.height):
+                    dimension_mismatches.append(
+                        f"{target_key}: expected {expected_target.dimensions}, got {parsed['width']}x{parsed['height']} in {filename}"
+                    )
+                if parsed["ext"] != expected_target.extension:
+                    format_mismatches.append(
+                        f"{target_key}: expected {expected_target.extension}, got {parsed['ext']} in {filename}"
+                    )
+
+            try:
+                actual = _read_image_dimensions(output_path)
+            except OSError as exc:
+                malformed.append(f"cannot read output image {filename}: {exc}")
+                continue
+
+            actual_dimensions = f"{actual[0]}x{actual[1]}"
+            if actual_dimensions != expected_target.dimensions:
+                dimension_mismatches.append(
+                    f"{target_key}: actual size {actual_dimensions} does not match expected {expected_target.dimensions} in {filename}"
+                )
+
+    present_targets = sorted(present_by_target)
+    present_set = set(present_targets)
+    expected_set = set(checked)
+    missing_targets = sorted(expected_set - present_set)
+    extra_targets = sorted(present_set - expected_set)
+
+    return BundleAudit(
+        bundle=bundle,
+        slug=slug,
+        checked_targets=checked,
+        present_targets=present_targets,
+        missing_targets=missing_targets,
+        extra_targets=extra_targets,
+        malformed_files=malformed,
+        missing_files=missing_files,
+        bytes_mismatches=bytes_mismatches,
+        checksum_mismatches=checksum_mismatches,
+        dimension_mismatches=dimension_mismatches,
+        format_mismatches=format_mismatches,
+        manifest_present=manifest_present,
+        capture_id_mismatch=capture_id_mismatch,
+        hashes_verified=hashed_any,
+    )
+
+
+def run_audit(
+    paths: list[Path],
+    targets: list[Target],
+    *,
+    verify_hashes: bool = False,
+) -> list[BundleAudit]:
+    """Validate selected targets in each delivery bundle path."""
+    bundles = _discover_bundle_dirs(paths)
+    if not bundles:
+        raise FileNotFoundError("no delivery bundle directories found")
+
+    expected_targets = {target.key: target for target in targets}
+    results = [
+        _check_bundle(
+            bundle,
+            targets,
+            expected_targets,
+            verify_hashes=verify_hashes,
+        )
+        for bundle in sorted(bundles)
+    ]
+
+    return results
