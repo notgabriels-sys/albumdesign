@@ -2,12 +2,10 @@
 
     uv run --with pillow python tools/make_fixtures.py
 
-Writes into tools/fixtures/. The WAV is a stereo 1 kHz sine at exactly
--23.0 dBFS, which a correct BS.1770 meter must read as -23.0 LUFS.
+Writes the image fixtures into tools/fixtures/.
 """
-import math
-import struct
-import wave
+import io
+import zlib
 from pathlib import Path
 
 from PIL import Image
@@ -19,38 +17,44 @@ Image.new("RGB", (3000, 3000), (20, 140, 90)).save(d / "good_3000.jpg", quality=
 Image.new("RGB", (4000, 4000), (20, 140, 90)).save(d / "over_4000.jpg", quality=90)
 Image.new("CMYK", (3000, 3000)).save(d / "cmyk_3000.jpg")
 Image.new("RGB", (1200, 1600), (200, 50, 50)).save(d / "nonsquare.jpg", quality=90)
+
+# Square but under the 1400px floor most distributors enforce. Nothing in the
+# set was below it, so the resolution FAIL branch could be turned into a pass
+# with no browser assertion noticing.
+Image.new("RGB", (1000, 1000), (60, 90, 160)).save(d / "small_1000.jpg", quality=90)
+
+# Not an image at all, under a name the picker accepts. The header sniffer
+# reports "unknown" and the browser cannot decode it, so this drives both the
+# format FAIL and readable FAIL branches, neither of which had a fixture.
+(d / "notanimage.jpg").write_bytes(b"this is not an image, not even slightly" * 40)
 Image.new("RGBA", (3000, 3000), (10, 10, 10, 128)).save(d / "alpha_3000.png")
 
-rate, secs, amp = 48000, 12, 10 ** (-23.0 / 20.0)
-with wave.open(str(d / "sine_-23dBFS.wav"), "w") as w:
-    w.setnchannels(2)
-    w.setsampwidth(2)
-    w.setframerate(rate)
-    frames = bytearray()
-    for i in range(rate * secs):
-        v = int(amp * math.sin(2 * math.pi * 1000 * i / rate) * 32767)
-        frames += struct.pack("<hh", v, v)
-    w.writeframes(bytes(frames))
+# A PNG signature and an IHDR and nothing else: 33 bytes claiming to be a
+# 3000 x 3000 RGB cover, with no image data behind the claim. Cut from a real
+# PNG rather than typed out, so the header is a header and not an
+# approximation of one. It is what a half-finished export or an interrupted
+# copy leaves on disk, and the cover page used to report it as a 3000 x 3000
+# cover, "Good to go, with notes", with every platform tile reading Pass.
+_real = io.BytesIO()
+Image.new("RGB", (3000, 3000), (20, 140, 90)).save(_real, format="PNG")
+_png = _real.getvalue()
+assert _png[12:16] == b"IHDR" and len(_png) > 33, "PNG layout is not what this fixture cuts"
+(d / "png_header_only.png").write_bytes(_png[:33])
 
-# Edge cases: silence and a clip shorter than the 400 ms BS.1770 block. Both
-# used to render "+Infinity dB" in the platform table.
-for name, secs in (("silence.wav", 4), ("tiny_200ms.wav", 0.2)):
-    with wave.open(str(d / name), "w") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes(struct.pack("<hh", 0, 0) * int(rate * secs))
+# The same shape, but with the IHDR edited to claim a size the file could not
+# possibly hold, and the chunk CRC recomputed so the header is internally
+# valid. Nothing here is measured, so nothing here may be graded.
+_bomb = bytearray(_png[:33])
+_bomb[16:20] = (40000).to_bytes(4, "big")
+_bomb[20:24] = (40000).to_bytes(4, "big")
+_bomb[29:33] = zlib.crc32(bytes(_bomb[12:29])).to_bytes(4, "big")
+(d / "png_claims_40000.png").write_bytes(bytes(_bomb) + _png[33:])
 
-# Inter-sample peak case: sine at fs/4 phased so every sample lands at +-0.707.
-# Sample peak reads -3.01 dBFS; a real true-peak meter must report about 0 dBTP.
-with wave.open(str(d / "intersample_peak.wav"), "w") as w:
-    w.setnchannels(2)
-    w.setsampwidth(2)
-    w.setframerate(rate)
-    fr = bytearray()
-    for i in range(rate * 6):
-        v = int(0.999 * math.sin(2 * math.pi * (rate / 4) * i / rate + math.pi / 4) * 32767)
-        fr += struct.pack("<hh", v, v)
-    w.writeframes(bytes(fr))
+# A CMYK TIFF: the exact file the cover tool exists to catch, and the one
+# Chromium cannot decode. Dimensions and colour never load, so the size, shape
+# and colour checks skipped themselves and the verdict read "No blockers".
+Image.new("CMYK", (2400, 1800)).save(d / "cmyk_nonsquare.tif")
 
-print("fixtures written to", d)
+# Greyscale with alpha matched the grayscale branch first and lost the flatten
+# advice that an RGBA file gets.
+Image.new("LA", (3000, 3000), (120, 128)).save(d / "gray_alpha_3000.png")
