@@ -91,8 +91,14 @@ VERIFIED_PAYMENT_HOSTS: set[str] = {"buy.stripe.com", "paypal.me"}
 # are listed one exact URL at a time rather than by loosening the rule above,
 # because "the host contains stripe" is exactly the sloppiness this check
 # exists to prevent. A URL here must be a page that cannot charge anyone.
+# Cited privacy policies, not payment links. Art. 13 DSGVO requires the notice
+# to point at each processor's own policy, so these have to be linkable while
+# the hosts around them stay unverified. Listed as exact URLs rather than by
+# host on purpose: exempting paypal.com wholesale would let a paypal.com/ncp/
+# button through, which is the shape that hid a EUR 1,200 charge.
 NON_PAYMENT_PROVIDER_LINKS: set[str] = {
     "https://stripe.com/privacy",
+    "https://www.paypal.com/de/legalhub/paypal/privacy-full",
 }
 
 # Providers whose links must be read before they can ship. paypal stays in this
@@ -128,6 +134,28 @@ def _host_is_verified(url: str) -> bool:
     if host.startswith("www."):
         host = host[4:]
     return host in VERIFIED_PAYMENT_HOSTS
+
+
+def print_block(body: str) -> str | None:
+    """The contents of the page's `@media print` rule, or None if unreadable.
+
+    Brace-matched rather than regexed, because the block contains nested rules
+    and a lazy pattern stops at the first inner closing brace. Returning None
+    on an unbalanced block keeps the caller from asserting against an empty
+    string, which would report every rule as missing from markup nobody read.
+    """
+    start = re.search(r"@media\s+print\s*\{", body)
+    if not start:
+        return None
+    depth = 1
+    for i, ch in enumerate(body[start.end():]):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return body[start.end():start.end() + i]
+    return None
 
 
 def unverified_payment_links(body: str) -> list[str]:
@@ -1152,6 +1180,112 @@ def main() -> int:
             f"{mismatches}",
         )
 
+    print("\n=== a page that needs scripting says so when there is none ===")
+    # Every tool here is JavaScript, which is exactly what keeps the visitor's
+    # files on their machine, and it means a page with scripting off presents a
+    # working-looking drop zone or a fillable sheet that silently does nothing.
+    #
+    # Measured in Chromium with javaScriptEnabled false: cover, loudness and
+    # delivery each showed a full drop target that accepts a file and discards
+    # it, release showed checkboxes that never save, and splits showed thirteen
+    # live form fields with no total, no validation and a print button. That
+    # last one is the document that reaches GEMA and GVL, produced unchecked.
+    #
+    # Which pages need the notice is derived rather than listed, and the first
+    # derivation was wrong in a way worth keeping: it looked for form controls
+    # in the static markup, which missed release.html, because that page builds
+    # every one of its 21 checklist items in JavaScript. Measured with
+    # scripting off it renders 358 characters of main text against 3361, so the
+    # page the notice matters most for was the one page the scan skipped.
+    #
+    # A page needs scripting if it ships scripting. JSON-LD is data, not
+    # behaviour, so it does not count: exactly the five tool pages carry a real
+    # <script>, and index, shop, impressum and 404 carry none.
+    needs_js = {
+        name: body for name, body in src.items() if "<script>" in body
+    }
+    check(
+        "the scripting-notice scan found interactive pages",
+        bool(needs_js),
+        "no page appears to carry a form control at all, so the check below "
+        "compared nothing and the markup pattern has drifted",
+    )
+    for name, body in sorted(needs_js.items()):
+        check(
+            f"{name} tells a visitor with scripting off that nothing will run",
+            "<noscript>" in body and 'class="nojs"' in body,
+            "this page has controls that do nothing without JavaScript, and "
+            "says so nowhere, so it looks broken rather than explained",
+        )
+
+    print("\n=== a page meant to be printed prints the document, not the site ===")
+    # splits.html exists to produce a signed sheet for GEMA and GVL, and
+    # release.html gets printed and worked through. Rendered in print media,
+    # the split sheet ended with a nav row of four sibling tools in purple,
+    # plus "all tools" and "Impressum" links, under the signature block: site
+    # chrome on an agreement someone puts their name to.
+    #
+    # The byline is deliberately kept. On a printed document it says where the
+    # document came from, which is worth having.
+    for name in sorted(n for n, b in src.items() if "@media print" in b):
+        rules = print_block(src[name])
+        # An unbalanced block would otherwise leave an empty string here, and
+        # every assertion below would fail on markup nobody had actually read.
+        # Say that plainly instead of reporting it as missing rules.
+        check(
+            f"{name}'s print block could be read",
+            rules is not None,
+            "the @media print braces do not balance, so the rules below were "
+            "never examined",
+        )
+        if rules is None:
+            continue
+        for hidden in (".siblings", "footer a"):
+            check(
+                f"{name} hides {hidden!r} when printed",
+                hidden in rules,
+                f"a printed page carrying {hidden} puts website navigation on "
+                f"a document somebody works from or signs",
+            )
+
+    print("\n=== every payment processor the site links to is disclosed ===")
+    # A payment button sends the visitor, and their data, to a third party
+    # acting as its own controller. Art. 13 DSGVO says the privacy notice has
+    # to name it. So the set of processors the shop links to and the set the
+    # Impressum discloses are the same fact in two files, and the shop is the
+    # one that changes.
+    #
+    # It had already drifted. The notice was written when Stripe was the only
+    # button, three PayPal.Me buttons went on the shop on 22 August 2026, and
+    # PayPal appeared nowhere in it: a processor receiving personal data,
+    # undisclosed, on the page money is spent on.
+    #
+    # The provider's name is derived from the host rather than retyped, so a
+    # fourth processor cannot be added to a hardcoded map that nobody updates.
+    # buy.stripe.com and paypal.me both yield their second-to-last label.
+    impressum_text = re.sub(r"<[^>]+>", " ", src["impressum.html"]).lower()
+    linked_processors = {
+        (urlsplit(u).hostname or "").lower().split(".")[-2]
+        for body in src.values()
+        for u, _text in verified_payment_anchors(body)
+        if len((urlsplit(u).hostname or "").split(".")) >= 2
+    }
+    check(
+        "the payment-processor scan found processors to check",
+        bool(linked_processors),
+        "no payment links found on any page at all, so the disclosure check "
+        "below compared nothing; either the shop lost its buttons or the "
+        "anchor scan has drifted off the markup",
+    )
+    for provider in sorted(linked_processors):
+        check(
+            f"the Impressum discloses {provider} as a payment processor",
+            provider in impressum_text,
+            f"the shop links to {provider}, and the Datenschutzerklärung never "
+            f"names it. A third party that receives the visitor's data has to "
+            f"be named under Art. 13 DSGVO",
+        )
+
     print("\n=== tax position stated the same way wherever it appears ===")
     vat_pages = {n: b for n, b in src.items() if re.search(r"VAT|UStG", b)}
     adds_vat = {n for n, b in vat_pages.items() if re.search(r"add(s)? no VAT|no VAT added", b)}
@@ -1318,6 +1452,46 @@ def main() -> int:
               "out of the sitemap is not the same as out of the index")
     check("robots.txt points at the sitemap",
           SITE + "sitemap.xml" in (DOCS / "robots.txt").read_text(encoding="utf-8"))
+
+    # The domain is written twice: once as SITE, which every canonical, sitemap
+    # entry and preview URL above is compared against, and once in docs/CNAME,
+    # which is the only thing that makes GitHub Pages answer on that host at
+    # all. Nothing tied them together.
+    #
+    # That is "a fact restated somewhere else is a fact that can drift" with
+    # the worst blast radius in the repo. Every other instance of it makes one
+    # page say the wrong thing. This one takes the site down: change SITE alone
+    # and every URL points at a host Pages does not serve, change CNAME alone
+    # and Pages serves a host every URL disclaims. Both are a dead site, and
+    # both would have passed all 386 checks.
+    #
+    # The format matters as much as the value. Pages wants a bare hostname, so
+    # a scheme, a trailing slash or a path in this file silently stops the
+    # custom domain working, and the only symptom is the site being gone.
+    cname_path = DOCS / "CNAME"
+    check(
+        "docs/CNAME exists",
+        cname_path.is_file(),
+        "without it GitHub Pages serves the github.io address and the custom "
+        "domain 404s, however correct the DNS is",
+    )
+    if cname_path.is_file():
+        raw = cname_path.read_text(encoding="utf-8")
+        lines = [ln for ln in raw.splitlines() if ln.strip()]
+        host = SITE.split("//", 1)[-1].rstrip("/")
+        check(
+            "docs/CNAME names exactly the host the pages claim",
+            lines == [host],
+            f"CNAME says {lines!r}, every URL on the site says {host!r}; these "
+            f"are the same fact in two files and they have drifted apart",
+        )
+        check(
+            "docs/CNAME is a bare hostname",
+            lines and "/" not in lines[0] and ":" not in lines[0],
+            f"{lines[:1]!r}; Pages wants a hostname with no scheme, no path "
+            f"and no trailing slash, and rejects anything else by quietly "
+            f"dropping the custom domain",
+        )
 
     # docs/ is the web root: every file in it is served to the public. A plan
     # and a design spec were once committed to docs/superpowers/ and published,
