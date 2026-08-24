@@ -1,9 +1,81 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Studio Shop</title>
+<title>Mixing and Mastering Rates</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
+<link rel="canonical" href="https://gabs-utilities.com/shop.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://gabs-utilities.com/shop.html">
+<meta property="og:title" content="Mixing and Mastering Rates">
+<meta property="og:description" content="Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.">
+<meta property="og:image" content="https://gabs-utilities.com/share-shop.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Link preview card. Preflight Mixing and Mastering Rates, headline &quot;Get your music finished, or grab the tools I use&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": "Mixing and Mastering Rates",
+  "description": "Book mixing and mastering with Gabriel G Alonso, and buy production resources. Berlin.",
+  "url": "https://gabs-utilities.com/shop.html",
+  "serviceType": "Audio mixing and mastering",
+  "provider": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  },
+  "areaServed": "Worldwide",
+  "hasOfferCatalog": {
+    "@type": "OfferCatalog",
+    "name": "Mixing and mastering rates",
+    "itemListElement": [
+      {
+        "@type": "Offer",
+        "name": "Mastering, one track",
+        "price": "45",
+        "priceCurrency": "EUR"
+      },
+      {
+        "@type": "Offer",
+        "name": "Mastering, 4-track EP",
+        "price": "135",
+        "priceCurrency": "EUR"
+      },
+      {
+        "@type": "Offer",
+        "name": "Mixing, one track",
+        "price": "160",
+        "priceCurrency": "EUR"
+      },
+      {
+        "@type": "Offer",
+        "name": "Mixing, 4-track EP",
+        "price": "480",
+        "priceCurrency": "EUR"
+      },
+      {
+        "@type": "Offer",
+        "name": "Mix + master, one track",
+        "price": "190",
+        "priceCurrency": "EUR"
+      },
+      {
+        "@type": "Offer",
+        "name": "Mix + master, 4-track EP",
+        "price": "570",
+        "priceCurrency": "EUR"
+      }
+    ]
+  }
+}
+</script>
 <style>
   :root{
     --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
@@ -27,6 +99,8 @@
   .top{display:flex;align-items:baseline;gap:16px;padding:22px 0;flex-wrap:wrap}
   .brand{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:.34em;font-size:14px;text-transform:uppercase}
   .brand b{color:var(--accent)}
+  .page{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.16em;font-size:12px;text-transform:uppercase;color:var(--accent)}
   .nav{margin-left:auto;display:flex;gap:18px;font-size:13.5px}
   .nav a{color:var(--muted);text-decoration:none}
   .nav a:hover{color:var(--accent)}
@@ -50,11 +124,19 @@
   .buy:hover{background:var(--accent-2)}
   .buy.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
   .buy.ghost:hover{border-color:var(--accent)}
+  .card .fine{margin:0 0 14px;color:var(--faint);font-size:12px;line-height:1.5;flex:none}
   .soon{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.06em;color:var(--faint);
     border:1px solid var(--line);border-radius:6px;padding:2px 7px}
   .payrow{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:14px}
   .payrow .buy{flex:none}
   .paynote{margin:0;color:var(--faint);font-size:12.5px;line-height:1.5;flex:1;min-width:240px}
+  .paylinks{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+  .paylabel{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint)}
+  .paylink{display:inline-block;font-size:13.5px;font-weight:600;color:var(--accent);
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;text-decoration:none;min-height:44px;line-height:22px}
+  .paylink:hover{border-color:var(--accent)}
   .svc{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
   table{width:100%;border-collapse:collapse;font-size:14.5px}
   th,td{padding:12px 16px;border-bottom:1px solid var(--line);text-align:left}
@@ -84,7 +166,8 @@
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
   <div class="top">
-    <span class="brand">STUDIO<b>·</b>SHOP</span>
+    <span class="brand">PRE<b>FLIGHT</b></span>
+    <span class="page">Mixing and Mastering Rates</span>
     <nav class="nav">
       <a href="index.html">Home</a>
       <a href="index.html#tools">Tools</a>
@@ -106,39 +189,71 @@
       <table>
         <thead><tr><th scope="col">Service</th><th scope="col" style="text-align:right">Per track</th><th scope="col" style="text-align:right">4-track EP</th><th scope="col"><span class="sr-only">Book</span></th></tr></thead>
         <tbody>
-          <tr><th scope="row">Mastering</th><td class="n">€25</td><td class="n">€75</td>
+          <tr><th scope="row">Mastering</th><td class="n">€45</td><td class="n">€135</td>
             <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mastering%20booking" aria-label="Book mastering">Book &#8594;</a></td></tr>
-          <tr><th scope="row">Mixing</th><td class="n">€90</td><td class="n">€270</td>
+          <tr><th scope="row">Mixing</th><td class="n">€160</td><td class="n">€480</td>
             <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mixing%20booking" aria-label="Book mixing">Book &#8594;</a></td></tr>
-          <tr><th scope="row">Mix + master</th><td class="n">€110</td><td class="n">€330</td>
+          <tr><th scope="row">Mix + master</th><td class="n">€190</td><td class="n">€570</td>
             <td style="text-align:right"><a class="book" href="mailto:hologrampeoplemusic@gmail.com?subject=Mix%20%2B%20master%20booking" aria-label="Book mix and master">Book &#8594;</a></td></tr>
         </tbody>
       </table>
     </div></div>
     <div class="payrow">
-      <a class="buy" href="https://buy.stripe.com/fZu00icvwaw29Eec09abK01" target="_blank" rel="noopener" aria-label="Pay by card, opens Stripe in a new tab">Pay by card</a>
-      <p class="paynote">Booking starts by email and a short brief, so we agree the work before any money moves.
-        Once the scope is set you can pay by card on a secure Stripe page, which shows the exact amount before
-        you confirm. Bank transfer also works if you prefer.</p>
+      <a class="buy" href="mailto:hologrampeoplemusic@gmail.com?subject=Booking%20enquiry" aria-label="Start a booking by email">Start a booking</a>
+      <p class="paynote"><b>Prices on this page are the total.</b> As a Kleinunternehmer under §19
+        UStG I add no VAT, so the amount you see is the amount you pay. Send the brief first and we
+        agree the work before any money moves. Card, PayPal and bank transfer all work, and an
+        invoice follows whichever you use.</p>
     </div>
+    <div class="paylinks">
+      <span class="paylabel" id="paylabel">Pay by card, one track</span>
+      <a class="paylink" href="https://buy.stripe.com/dRm28q3Z06fM6s27JTabK02"
+         aria-label="Pay for mastering of one track, 45 euro, by card">Mastering, pay €45</a>
+      <a class="paylink" href="https://buy.stripe.com/bJe5kC0MO5bI3fQ5BLabK03"
+         aria-label="Pay for mixing of one track, 160 euro, by card">Mixing, pay €160</a>
+      <a class="paylink" href="https://buy.stripe.com/00w8wOcvw6fMaIiggpabK04"
+         aria-label="Pay for mixing and mastering of one track, 190 euro, by card">Mix + master, pay €190</a>
+    </div>
+    <div class="paylinks">
+      <span class="paylabel">Pay by PayPal, one track</span>
+      <a class="paylink" href="https://paypal.me/gabrielgga00/45EUR"
+         aria-label="Pay for mastering of one track, 45 euro, by PayPal">Mastering, pay €45</a>
+      <a class="paylink" href="https://paypal.me/gabrielgga00/160EUR"
+         aria-label="Pay for mixing of one track, 160 euro, by PayPal">Mixing, pay €160</a>
+      <a class="paylink" href="https://paypal.me/gabrielgga00/190EUR"
+         aria-label="Pay for mixing and mastering of one track, 190 euro, by PayPal">Mix + master, pay €190</a>
+    </div>
+    <p class="paynote" style="margin-top:10px">EP rates are booked by email, not by these links, because
+      they depend on the number of tracks.</p>
   </section>
 
   <section>
     <h2 class="label">Production resources</h2>
     <div class="cards">
       <div class="card">
-        <div class="kh"><h3>Duress — Vol. 1</h3><span class="soon">soon</span></div>
-        <p>Techno sample pack: raw kicks, metallic percussion, textured hats, sub and rumble, plus loops at 130 and 134 bpm.</p>
+        <div class="kh"><h3>Duress — Vol. 1</h3><span class="price">€18</span></div>
+        <p>Techno sample pack in the Lack of Fate world: raw, sub and distorted kicks, metallic
+          percussion and foley, textured hats, sub and rumble bass, dark stabs and drones, risers
+          and room tone, plus drum and top loops at 130 and 134 bpm. Key-labelled where it is
+          tonal. WAV, 24-bit, 44.1 kHz. Royalty-free for your own productions.</p>
+        <p class="fine"><b>In production.</b> Join the list and you get told the day it lands.</p>
         <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Duress%20Vol.%201">Email me when it drops</a>
       </div>
       <div class="card">
-        <div class="kh"><h3>Techno Mastering Chain</h3><span class="soon">soon</span></div>
-        <p>My Bitwig master-bus template: gain staging, tone, glue and true-peak safe limiting, ready to drop on your master.</p>
-        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Mastering%20Chain">Email me when it drops</a>
+        <div class="kh"><h3>Master Start</h3><span class="price">€15</span></div>
+        <p>My Bitwig master-bus chain, in the order I actually build it: trim, surgical EQ, tone EQ,
+          glue compression, saturation, dynamic EQ, stereo with a mono-safe low end, true-peak
+          limiting at -1 dBTP, metering left visible at the end. Two variants, streaming and club.</p>
+        <p class="fine"><b>A starting point, not a one-click master.</b> A fixed chain cannot master
+          every track. You are buying the signal flow and the reasoning, laid out so you can read it
+          and adapt it. In production.</p>
+        <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Master%20Start">Email me when it drops</a>
       </div>
       <div class="card">
-        <div class="kh"><h3>Preset Pack</h3><span class="soon">soon</span></div>
+        <div class="kh"><h3>Preset Pack</h3><span class="price">€12</span></div>
         <p>Signature synth and FX patches from the Lack of Fate and Hologram People sessions.</p>
+        <p class="fine"><b>In production.</b> Contents are still being decided, so this one is
+          listed without a file list on purpose.</p>
         <a class="buy ghost" href="mailto:hologrampeoplemusic@gmail.com?subject=Notify%20me%3A%20Preset%20Pack">Email me when it drops</a>
       </div>
     </div>
@@ -146,7 +261,8 @@
 
   </main>
   <footer>
-    <span>Studio Shop — Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <span>Mixing and Mastering Rates: Gabriel G Alonso. <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+    <a href="impressum.html">Impressum</a>
     <span class="proj">Fate Through · Lack of Fate · Hologram People</span>
   </footer>
 </div>
