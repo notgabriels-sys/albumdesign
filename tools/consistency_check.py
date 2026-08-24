@@ -136,6 +136,28 @@ def _host_is_verified(url: str) -> bool:
     return host in VERIFIED_PAYMENT_HOSTS
 
 
+def print_block(body: str) -> str | None:
+    """The contents of the page's `@media print` rule, or None if unreadable.
+
+    Brace-matched rather than regexed, because the block contains nested rules
+    and a lazy pattern stops at the first inner closing brace. Returning None
+    on an unbalanced block keeps the caller from asserting against an empty
+    string, which would report every rule as missing from markup nobody read.
+    """
+    start = re.search(r"@media\s+print\s*\{", body)
+    if not start:
+        return None
+    depth = 1
+    for i, ch in enumerate(body[start.end():]):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return body[start.end():start.end() + i]
+    return None
+
+
 def unverified_payment_links(body: str) -> list[str]:
     """Payment links in `body` that nobody has read the objects behind.
 
@@ -1206,20 +1228,18 @@ def main() -> int:
     # The byline is deliberately kept. On a printed document it says where the
     # document came from, which is worth having.
     for name in sorted(n for n, b in src.items() if "@media print" in b):
-        rules = "".join(re.findall(r"@media print\{(.*?)\n  \}|@media print\{([^\n]*)\}",
-                                   src[name], re.S)[0] or "")
-        block = re.search(r"@media print\s*\{", src[name])
-        tail = src[name][block.end():]
-        depth, end = 1, 0
-        for i, ch in enumerate(tail):
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i
-                    break
-        rules = tail[:end]
+        rules = print_block(src[name])
+        # An unbalanced block would otherwise leave an empty string here, and
+        # every assertion below would fail on markup nobody had actually read.
+        # Say that plainly instead of reporting it as missing rules.
+        check(
+            f"{name}'s print block could be read",
+            rules is not None,
+            "the @media print braces do not balance, so the rules below were "
+            "never examined",
+        )
+        if rules is None:
+            continue
         for hidden in (".siblings", "footer a"):
             check(
                 f"{name} hides {hidden!r} when printed",
