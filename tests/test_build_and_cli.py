@@ -3,14 +3,16 @@ import io
 import json
 import re
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
+import coverforge.build as build_module
 from coverforge.build import build, output_name
 from coverforge.cli import main
-from coverforge.imageops import inspect
+from coverforge.imageops import ImageError, inspect
 from coverforge.specs import load_targets
 
 ALL_TARGETS = load_targets().select()
@@ -126,11 +128,43 @@ def test_written_manifest_is_portable_while_build_result_remains_owner_local(
         capture_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
     assert manifest["capture_id"] == f"cfp_{hashlib.sha256(canonical).hexdigest()[:20]}"
-
     owner_local = result.as_dict()
     assert owner_local["master"] == str(master)
     assert owner_local["out_dir"] == str(out)
 
+
+def test_manifest_source_facts_come_from_the_exact_bytes_that_rendered(
+    tmp_path
+):
+    master = tmp_path / "changing.png"
+    Image.new("RGB", (32, 32), "red").save(master)
+    earlier_inspection = inspect(master)
+    Image.new("RGBA", (64, 48), (1, 2, 3, 128)).save(master)
+    captured_bytes = master.read_bytes()
+    target = replace(
+        ALL_TARGETS[0],
+        key="proof",
+        width=8,
+        height=8,
+        format="png",
+        min_source=0,
+        max_bytes=None,
+    )
+
+    result = build(
+        earlier_inspection,
+        [target],
+        out_dir=tmp_path / "delivery",
+        slug="release",
+    )
+    manifest = json.loads((result.out_dir / "manifest.json").read_text())
+
+    assert result.source.dimensions == "64x48"
+    assert result.source.mode == "RGBA"
+    assert manifest["source"]["dimensions"] == "64x48"
+    assert manifest["source"]["mode"] == "RGBA"
+    assert manifest["source"]["bytes"] == len(captured_bytes)
+    assert manifest["source"]["sha256"] == hashlib.sha256(captured_bytes).hexdigest()
 
 def test_build_rejects_path_bearing_programmatic_slug_before_writing(master, tmp_path):
     out = tmp_path / "delivery"
@@ -141,6 +175,79 @@ def test_build_rejects_path_bearing_programmatic_slug_before_writing(master, tmp
     assert not out.exists()
 
 
+def test_build_rejects_empty_programmatic_target_name_before_writing(master, tmp_path):
+    out = tmp_path / "delivery"
+    target = replace(ALL_TARGETS[0], name="")
+
+    with pytest.raises(ValueError, match="name must be a non-empty string"):
+        build(inspect(master), [target], out_dir=out, slug="lof001", dry_run=True)
+
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "changes, message",
+    [
+        ({"format": "gif"}, "format must be one of"),
+        ({"quality": True}, "quality must be an integer"),
+        ({"width": True}, "width and height must be integers"),
+        ({"min_source": True}, "min_source must be a non-negative integer"),
+        ({"max_bytes": True}, "max_bytes must be a positive integer"),
+        ({"fit": "stretch"}, "fit must be one of"),
+        ({"pad_style": 123}, "pad_style must be"),
+        ({"name": "n" * 257}, "name exceeds 256"),
+    ],
+)
+def test_build_validates_every_programmatic_target_field_before_writing(
+    master, tmp_path, changes, message
+):
+    out = tmp_path / "delivery"
+    target = replace(ALL_TARGETS[0], **changes)
+
+    with pytest.raises(ValueError, match=message):
+        build(inspect(master), [target], out_dir=out, slug="lof001", dry_run=True)
+
+    assert not out.exists()
+
+
+def test_build_rejects_more_targets_than_schema_v1_can_record(master, tmp_path):
+    out = tmp_path / "delivery"
+    targets = [replace(ALL_TARGETS[0], key=f"target_{index}") for index in range(65)]
+
+    with pytest.raises(ValueError, match="at most 64"):
+        build(inspect(master), targets, out_dir=out, slug="lof001", dry_run=True)
+
+    assert not out.exists()
+
+
+def test_cli_reports_an_oversized_target_selection_without_traceback(tmp_path, capsys):
+    targets_file = tmp_path / "targets.toml"
+    targets_file.write_text(
+        "\n".join(
+            f"[targets.target_{index}]\nwidth = 100\nheight = 100\nformat = \"jpeg\"\n"
+            for index in range(65)
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "build",
+                str(tmp_path / "missing.png"),
+                "-o",
+                str(tmp_path / "out"),
+                "--targets-file",
+                str(targets_file),
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert "at most 64" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_cli_targets_json(capsys):
     assert main(["targets", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -149,6 +256,32 @@ def test_cli_targets_json(capsys):
         "spotify",
         "instagram_story",
     }
+
+
+def test_cli_reports_case_insensitive_target_key_collision_without_traceback(
+    tmp_path, capsys
+):
+    targets_file = tmp_path / "targets.toml"
+    targets_file.write_text(
+        """
+[targets.Artwork]
+width = 100
+height = 100
+format = "jpeg"
+
+[targets.artwork]
+width = 200
+height = 200
+format = "png"
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["targets", "--targets-file", str(targets_file)]) == 2
+    captured = capsys.readouterr()
+    assert "target spec error" in captured.err
+    assert "collide case-insensitively" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_cli_check_is_clean_for_a_good_master(master, capsys):
@@ -419,7 +552,9 @@ def test_cli_package_creates_delivery_zip(tmp_path, master):
     assert summary["ok"] is True
     assert summary["hashes_verified"] is True
     assert summary["checked_targets"] == [target.key for target in ALL_TARGETS]
-    assert len(summary["files"]) == len(ALL_TARGETS) + 2
+    # Outputs plus the hash-bound manifest. DELIVERY.md stays in the local
+    # bundle because schema v1 does not bind its free-form text.
+    assert len(summary["files"]) == len(ALL_TARGETS) + 1
 
 
 def test_cli_package_json_payload(tmp_path, master, capsys):
@@ -664,14 +799,95 @@ def test_dry_run_reports_the_files_it_would_write(master, tmp_path, capsys):
     assert not out.exists()
 
 
-def test_building_into_an_occupied_directory_warns_about_stale_art(master, tmp_path, capsys):
-    """Stale covers in a delivery folder are not in the manifest, so zipping it
-    for a distributor ships art nothing accounts for."""
+def test_json_dry_run_contains_the_planned_target_files(master, tmp_path, capsys):
+    out = tmp_path / "dry-json"
+
+    assert (
+        main(
+            [
+                "build",
+                str(master),
+                "-o",
+                str(out),
+                "--name",
+                "Dry JSON",
+                "--dry-run",
+                "--json",
+                "--only",
+                "spotify,bandcamp",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    result = payload["builds"][0]
+
+    assert result["outputs"] == []
+    assert [item["target"] for item in result["planned"]] == [
+        "bandcamp",
+        "spotify",
+    ]
+    assert all(item["file"].startswith("dry-json--") for item in result["planned"])
+    assert not out.exists()
+
+
+def test_a_late_encode_failure_does_not_change_an_existing_bundle(
+    master, tmp_path, monkeypatch
+):
+    base = ALL_TARGETS[0]
+    targets = [
+        replace(base, key="alpha", width=8, height=8, format="png", min_source=0, max_bytes=None),
+        replace(base, key="beta", width=8, height=8, format="png", min_source=0, max_bytes=None),
+    ]
+    out = tmp_path / "bundle"
+    build(inspect(master), targets, out_dir=out, slug="release")
+    before = {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()}
+    Image.new("RGB", (4000, 4000), "red").save(master)
+    real_encode = build_module.imageops.encode
+    calls = 0
+
+    def fail_second(image, target):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise ImageError("simulated second encode failure")
+        return real_encode(image, target)
+
+    monkeypatch.setattr(build_module.imageops, "encode", fail_second)
+
+    with pytest.raises(ImageError, match="second encode failure"):
+        build(inspect(master), targets, out_dir=out, slug="release")
+
+    assert {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()} == before
+    assert list(tmp_path.glob(".coverforge-build-*")) == []
+
+
+def test_building_into_an_occupied_directory_refuses_stale_art(master, tmp_path, capsys):
+    """A successful rebuild must also pass its resulting inventory audit."""
     out = tmp_path / "pack"
     assert main(["build", str(master), "-o", str(out), "--name", "First"]) in (0, 1)
     capsys.readouterr()
-    assert main(["build", str(master), "-o", str(out), "--name", "Second"]) in (0, 1)
+    before = {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()}
+
+    assert main(["build", str(master), "-o", str(out), "--name", "Second"]) == 2
     err = capsys.readouterr().err
 
-    assert "manifest.json does not describe" in err
+    assert "new manifest would not declare" in err
     assert "first--" in err
+    assert {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()} == before
+
+
+def test_full_to_subset_rebuild_fails_before_changing_any_bundle_file(master, tmp_path):
+    base = ALL_TARGETS[0]
+    targets = [
+        replace(base, key="alpha", width=8, height=8, format="png", min_source=0, max_bytes=None),
+        replace(base, key="beta", width=8, height=8, format="png", min_source=0, max_bytes=None),
+    ]
+    out = tmp_path / "pack"
+    build(inspect(master), targets, out_dir=out, slug="release")
+    before = {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()}
+
+    with pytest.raises(ImageError, match="new manifest would not declare"):
+        build(inspect(master), targets[:1], out_dir=out, slug="release")
+
+    assert {path.name: path.read_bytes() for path in out.iterdir() if path.is_file()} == before

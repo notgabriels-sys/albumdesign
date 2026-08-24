@@ -9,6 +9,7 @@ pack.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,20 @@ def test_a_target_key_cannot_contain_path_separators(tmp_path):
         load_targets(extra=spec)
 
 
-@pytest.mark.parametrize("key", ["..", ".", "a/b", "a\\b", ".hidden", ""])
+def test_direct_build_rejects_an_unsafe_programmatic_target(master, tmp_path):
+    out = tmp_path / "pack"
+    out.mkdir()
+    unsafe = replace(WEB_THUMB[0], key="stage/../../escaped")
+
+    with pytest.raises(ValueError, match="key must use only"):
+        build(inspect(master), [unsafe], out_dir=out, slug="safe")
+
+    assert not (tmp_path / "escaped--600x600.jpg").exists()
+
+
+@pytest.mark.parametrize(
+    "key", ["..", ".", "a/b", "a\\b", ".hidden", "bad:key", "bad key", ""]
+)
 def test_rejected_keys(tmp_path, key):
     spec = tmp_path / "t.toml"
     # Single-quoted TOML keys are literal, so a backslash stays a backslash

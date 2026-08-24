@@ -72,6 +72,68 @@ format = "png"
     assert "spotify" in targets.targets  # built-ins survive the merge
 
 
+def test_target_keys_cannot_differ_only_by_case_within_one_file(tmp_path):
+    path = _write(
+        tmp_path,
+        """
+[targets.Artwork]
+width = 100
+height = 100
+format = "jpeg"
+
+[targets.artwork]
+width = 200
+height = 200
+format = "png"
+""",
+    )
+
+    with pytest.raises(SpecError, match="collide case-insensitively"):
+        load_targets(path)
+
+
+def test_overlay_target_keys_cannot_differ_from_base_only_by_case(tmp_path):
+    base = tmp_path / "base.toml"
+    base.write_text(
+        """
+[targets.Artwork]
+width = 100
+height = 100
+format = "jpeg"
+""",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "overlay.toml"
+    overlay.write_text(
+        """
+[targets.artwork]
+width = 200
+height = 200
+format = "png"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SpecError, match="collide case-insensitively"):
+        load_targets(base, extra=overlay)
+
+
+def test_empty_target_name_is_rejected(tmp_path):
+    path = _write(
+        tmp_path,
+        """
+[targets.artwork]
+name = ""
+width = 100
+height = 100
+format = "jpeg"
+""",
+    )
+
+    with pytest.raises(SpecError, match="name must be a non-empty string"):
+        load_targets(path)
+
+
 @pytest.mark.parametrize(
     "body, message",
     [
@@ -84,6 +146,10 @@ format = "png"
             "pad_style must be",
         ),
         ('[targets.x]\nwidth = 10\nheight = 10\nformat = "jpeg"\nquality = 0\n', "quality must be"),
+        ('[targets.x]\nwidth = 10\nheight = 10\nformat = "jpeg"\nquality = true\n', "quality must be an integer"),
+        ('[targets.x]\nwidth = 10\nheight = 10\nformat = "jpeg"\nmin_source = -1\n', "min_source must be"),
+        ('[targets.x]\nwidth = 10\nheight = 10\nformat = "jpeg"\nmax_bytes = true\n', "max_bytes must be"),
+        ('[targets.x]\nname = 3\nwidth = 10\nheight = 10\nformat = "jpeg"\n', "name must be"),
         ("[nothing]\n", "no [targets.*] tables"),
     ],
 )
@@ -96,3 +162,8 @@ def test_malformed_targets_are_rejected(tmp_path, body, message):
 def test_missing_file(tmp_path):
     with pytest.raises(SpecError, match="not found"):
         load_targets(tmp_path / "nope.toml")
+
+
+def test_targets_path_io_error_is_a_spec_error(tmp_path):
+    with pytest.raises(SpecError, match="could not read targets file"):
+        load_targets(tmp_path)
