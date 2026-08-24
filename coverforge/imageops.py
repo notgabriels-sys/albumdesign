@@ -123,9 +123,21 @@ def is_image_path(path: Path) -> bool:
 
 
 def inspect(path: Path) -> SourceImage:
-    """Read metadata without committing to a full decode of every frame."""
+    """Read metadata, having confirmed there is an image behind it.
+
+    Every frame after the first is still left alone, but frame zero is
+    decoded, because `im.width` and `im.height` come out of the container's
+    header and a header will state a size for a file that holds no pixels.
+    Measured: a PNG whose IHDR was edited to claim 5000x5000, with the real
+    3000x3000 image data left in place, opened cleanly and `coverforge check`
+    reported `5000x5000 RGB PNG 33 KB` and `ok 10/10 targets clear`, exit 0,
+    on a file no decoder can produce an image from. `im.verify()` is not
+    enough: it returned ok on that same file. Only `im.load()` catches it,
+    and it costs 40 to 90 ms on a 3000px master.
+    """
     try:
         with Image.open(path) as im:
+            im.load()
             info = im.info
             exif_orientation = 1
             try:
