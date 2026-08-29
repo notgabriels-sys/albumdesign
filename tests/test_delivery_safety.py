@@ -1408,3 +1408,86 @@ class TestVerifyExitsNonZeroWhenNothingWasVerified:
         assert result.missing_files == []
         assert result.manifest_present is False
         assert result.ok is False
+
+
+class TestAManifestCannotShrinkItsOwnAudit:
+    """A manifest declaring nothing must not therefore be audited against nothing.
+
+    `hashes_verified` exists because "a bundle with no manifest at all reached
+    `ok` having verified nothing". The neighbouring case is a manifest that IS
+    present and valid but declares no outputs: `readable_outputs` is then zero,
+    `hashes_verified` is False, and every mismatch list is empty, so `ok` reads
+    only the empty lists. `ok` does not consult `hashes_verified`, and it is
+    right not to, because `coverforge audit` legitimately never hashes.
+
+    What actually refuses these bundles is that `checked_targets` comes from
+    the target set rather than from the manifest, so a target nobody delivered
+    is missing whatever the manifest says. Nothing asserted that. A refactor
+    towards "audit what the manifest declares", which reads like a
+    simplification, would turn all three of these green with the suite passing
+    and `verify` printing ok over zero hashed bytes.
+
+    Measured against the real CLI before writing this: all three already exit
+    non-zero today. These pin the reason.
+    """
+
+    def _rewrite(self, bundle, mutate):
+        path = bundle / "manifest.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        mutate(payload)
+        payload["capture_id"] = manifest_capture_id(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _audit(self, bundle):
+        return run_audit([bundle], TARGETS, verify_hashes=True)[0]
+
+    def test_the_honest_bundle_is_clean_so_these_cases_mean_something(self, bundle):
+        result = self._audit(bundle)
+        assert result.ok is True
+        assert result.hashes_verified is True
+        assert result.missing_targets == []
+
+    def test_emptying_the_outputs_list_does_not_empty_the_audit(self, bundle):
+        """The delivery files are all still on disk; only the inventory lies."""
+        self._rewrite(bundle, lambda payload: payload.__setitem__("outputs", []))
+
+        result = self._audit(bundle)
+
+        assert result.ok is False
+        assert result.hashes_verified is False, "nothing was hashed, so nothing may be vouched for"
+        assert result.missing_targets, "a target nobody declared is still a target nobody delivered"
+        assert result.unmanifested_files, "ten files on disk are not in the inventory"
+
+    def test_moving_every_target_to_skipped_does_not_empty_the_audit(self, bundle):
+        """`skipped` is a legitimate outcome for a master below every floor, so
+        this is the shape most likely to be waved through."""
+        def mutate(payload):
+            payload["skipped"] = [
+                {"target": o["target"], "reason": "source below min_source"}
+                for o in payload["outputs"]
+            ]
+            payload["outputs"] = []
+
+        self._rewrite(bundle, mutate)
+
+        result = self._audit(bundle)
+
+        assert result.ok is False
+        assert result.hashes_verified is False
+        assert result.missing_targets
+
+    def test_removing_the_files_too_does_not_make_the_bundle_clean(self, bundle):
+        """Neither list can fire on content, so only `checked_targets` is left."""
+        self._rewrite(bundle, lambda payload: payload.__setitem__("outputs", []))
+        for path in list(bundle.glob("*.jpg")) + list(bundle.glob("*.png")):
+            path.unlink()
+
+        result = self._audit(bundle)
+
+        assert result.ok is False
+        assert result.hashes_verified is False
+        assert result.unmanifested_files == [], "nothing is on disk to be unmanifested"
+        assert result.missing_targets, (
+            "with both content lists empty, the only thing refusing this bundle is "
+            "that checked_targets comes from the target set and not the manifest"
+        )
