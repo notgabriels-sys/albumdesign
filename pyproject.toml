@@ -3,6 +3,7 @@ name = "coverforge"
 version = "0.1.0"
 description = "Preflight and delivery-pack builder for release artwork"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = ["pillow>=10.0"]
 keywords = [
@@ -13,9 +14,6 @@ keywords = [
   "image-processing",
   "preflight",
 ]
-# No "License ::" classifier and no `license` field: this repository carries no
-# LICENSE file, so there is nothing to declare. Naming one here would be the
-# package asserting terms nobody granted.
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: End Users/Desktop",
@@ -48,5 +46,6 @@ include = [
   "/coverforge",
   "/tests",
   "/README.md",
+  "/LICENSE",
   "/pyproject.toml",
 ]
