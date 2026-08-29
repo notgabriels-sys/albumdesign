@@ -115,7 +115,7 @@ platform's published minimum instead, which is why the two do not always agree.
 ## Commands
 
 ```bash
-coverforge targets                         # list target definitions
+coverforge targets                         # list targets, their sources, and how old the specs are
 coverforge check ART... [--strict]         # preflight; writes nothing
 coverforge build ART... -o DIR             # render a delivery pack
 coverforge sheet ART... -o SHEET.jpg       # quick single-JPEG variant grid

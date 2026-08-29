@@ -106,6 +106,28 @@ def test_inspect_refuses_a_size_the_file_does_not_hold(tmp_path):
         inspect(path)
 
 
+def test_inspect_refuses_the_same_lie_when_handed_bytes(tmp_path):
+    """The `data=` path must refuse what the path form refuses.
+
+    `inspect` grew a `data=` parameter so a captured byte snapshot can be read
+    instead of the file a second time. That is a second entrance to the same
+    room: the header-claim guard above only proves anything about the entrance
+    it walks through, and nothing was covering this one.
+    """
+    path = _png_claiming(tmp_path, 5000, 5000)
+    with pytest.raises(ImageError, match="truncated"):
+        inspect(path, data=path.read_bytes())
+
+
+def test_inspect_reads_a_real_image_when_handed_bytes(tmp_path):
+    """The other half: refusing every byte snapshot would pass the test above."""
+    path = tmp_path / "real.png"
+    Image.new("RGB", (300, 300), (20, 140, 90)).save(path)
+    src = inspect(path, data=path.read_bytes())
+    assert (src.width, src.height) == (300, 300)
+    assert src.file_bytes == len(path.read_bytes())
+
+
 def test_inspect_refuses_a_header_with_no_image_behind_it(tmp_path):
     """The 33-byte version: a signature and an IHDR and nothing else.
 
