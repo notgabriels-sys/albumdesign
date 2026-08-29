@@ -516,7 +516,7 @@ def main() -> int:
     # A page's name is its title. Everything else reads that.
     TOOL_PAGES = {
         page: page_identity(src[page])["name"]
-        for page in ("cover.html", "splits.html")
+        for page in ("cover.html", "splits.html", "specs.html")
     }
     bylines = 0
     for name in TOOL_PAGES:

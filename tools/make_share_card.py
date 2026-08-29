@@ -51,6 +51,7 @@ CARDS = {
     "cover.html": "share-cover.png",
     "splits.html": "share-splits.png",
     "shop.html": "share-shop.png",
+    "specs.html": "share-specs.png",
     # impressum.html deliberately has none and points at the site card. It is
     # a legal notice, not something anyone shares on purpose.
 }

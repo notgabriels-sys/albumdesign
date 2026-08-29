@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Cover Art Requirements by Platform</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="description" content="What Spotify, Apple Music, Bandcamp, Beatport, SoundCloud and Instagram ask for in release cover art, each with the page it came from and the date it was last read.">
+<link rel="canonical" href="https://gabs-utilities.com/specs.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:locale" content="en_GB">
+<meta property="og:url" content="https://gabs-utilities.com/specs.html">
+<meta property="og:title" content="Cover Art Requirements by Platform">
+<meta property="og:description" content="What Spotify, Apple Music, Bandcamp, Beatport, SoundCloud and Instagram ask for in release cover art, each with the page it came from and the date it was last read.">
+<meta property="og:image" content="https://gabs-utilities.com/share-specs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Link preview card. Preflight Cover Art Requirements by Platform, headline &quot;Every cover art spec, with its source&quot;, by Gabriel G Alonso, mixing and mastering, Berlin.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "name": "Cover Art Requirements by Platform",
+  "description": "What Spotify, Apple Music, Bandcamp, Beatport, SoundCloud and Instagram ask for in release cover art, each with the page it came from and the date it was last read.",
+  "url": "https://gabs-utilities.com/specs.html",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Gabriel G Alonso"
+  }
+}
+</script>
+<style>
+  :root{
+    --ground:#f4f5f7; --surface:#ffffff; --surface-2:#f9fafb; --line:#e3e5ec;
+    --ink:#14161c; --muted:#5c6270; --accent:#5a46e0;
+    --shadow:0 1px 2px rgba(20,22,28,.06),0 8px 24px rgba(20,22,28,.06);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}}
+  :root[data-theme="dark"]{
+    --ground:#0b0c10; --surface:#14161c; --surface-2:#181b22; --line:#272b34;
+    --ink:#e7e9ee; --muted:#8a90a0; --accent:#8b7cff;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.35);}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .mono{font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace}
+  /* Every link, not just the ones in the nav and footer. The note's prose
+     links were unstyled and inherited the browser default blue, which the
+     contrast check measured at 1.83:1 against the dark ground. */
+  a{color:var(--accent)}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 64px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:22px}
+  .brand{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.3em;font-size:15px;text-transform:uppercase}
+  .brand b{color:var(--accent)}
+  .page{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:700;
+    letter-spacing:.16em;font-size:12px;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:29px;line-height:1.2;margin:0 0 10px;text-wrap:balance}
+  .lede{color:var(--muted);margin:0 0 6px;max-width:62ch}
+  .reviewed{color:var(--muted);font-size:13.5px;margin:0 0 26px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);
+    margin:34px 0 12px}
+  .spec{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .spec h3{margin:0 0 10px;font-size:17px}
+  .spec dl{margin:0}
+  .spec dl div{display:grid;grid-template-columns:200px 1fr;gap:6px 18px;
+    padding:7px 0;border-top:1px solid var(--line)}
+  .spec dl div:first-child{border-top:0}
+  dt{color:var(--muted);font-size:13px}
+  dd{margin:0}
+  .src,.nosrc{display:inline-block;margin-top:10px;font-size:13px}
+  .src{color:var(--accent)}
+  .nosrc{color:var(--muted)}
+  .note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin:0 0 8px;color:var(--muted);font-size:14px}
+  nav.tools{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:10px 18px;font-size:14px}
+  nav.tools a{color:var(--accent)}
+  footer{margin-top:26px;color:var(--muted);font-size:13px;
+    display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  footer a{color:var(--accent)}
+  footer .cta{margin-top:2px}
+  @media (max-width:560px){.spec dl div{grid-template-columns:1fr}}
+</style>
+
+<main class="wrap">
+  <header>
+    <span class="brand">PRE<b>FLIGHT</b></span>
+    <span class="page">Cover Art Requirements by Platform</span>
+    <span class="tag">the numbers, and where each one came from</span>
+  </header>
+
+  <h1>Every cover art spec, with its source</h1>
+  <p class="lede">What Spotify, Apple Music, Bandcamp, Beatport, SoundCloud and Instagram ask for in release cover art, each with the page it came from and the date it was last read.</p>
+  <p class="reviewed">Last reviewed 2026-08. Platforms change these without
+    much warning, so treat every number here as a starting point and check it
+    against whatever your distributor currently demands.</p>
+
+  <p class="note"><b>Two different numbers, kept apart.</b> "What the platform
+    says" is the store's own published requirement, quoted from the page linked
+    beneath it. "What this project delivers" is the file the
+    <a href="https://github.com/notgabriels-sys/albumdesign">command line tool</a>
+    renders for that target, which is sometimes deliberately stricter. Where a
+    row carries no source link, nobody recorded one; that is a statement about
+    this repository, not a claim that the number was invented.</p>
+
+      <h2 id="dsp">Stores and streaming</h2>
+      <article class="spec">
+        <h3>Bandcamp</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px JPEG, up to 10 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>1400px is the floor; Bandcamp upscales its own thumbnails from what you give it, so feed it 3000.</dd></div>
+        </dl>
+        <a class="src" href="https://get.bandcamp.help/hc/en-us/articles/23020723502231" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <article class="spec">
+        <h3>Spotify (via distributor)</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px JPEG, up to 10 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>Spotify itself accepts 640 to 10000 and wants the highest you have. 1600 is the floor because TuneCore enforces it; other distributors sit at 1000-1400.</dd></div>
+        </dl>
+        <a class="src" href="https://support.spotify.com/us/artists/article/cover-art-requirements/" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <article class="spec">
+        <h3>Apple Music</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px JPEG, up to 30 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>Apple documents 1400 minimum and 3000 recommended, and its artist page asks for 4000. 3000 here because delivering the recommended size is the point of this target. Strictest of the DSPs: flattened RGB, no alpha, baseline (non-progressive) JPEG.</dd></div>
+        </dl>
+        <a class="src" href="https://help.apple.com/itc/musicspec/" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <article class="spec">
+        <h3>Beatport</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px JPEG, up to 10 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>Beatport publishes no minimum, only a preferred 3000x3000, so the 1400 floor here is ours: below that a 3000px render is mostly invented pixels. It can reject art tagged above 72 DPI.</dd></div>
+        </dl>
+        <a class="src" href="https://greenroomsupport.beatport.com/hc/en-us/articles/19096342438164-What-size-release-cover-artwork-do-you-accept" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <article class="spec">
+        <h3>SoundCloud (on-platform upload)</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">1400 &times; 1400 px JPEG, up to 2 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>The upload form takes 800px minimum but caps the file under 2MB, so this is the target most likely to need quality walked down. Distributing THROUGH SoundCloud is a different spec, see soundcloud_distro.</dd></div>
+        </dl>
+        <a class="src" href="https://help.soundcloud.com/hc/en-us/articles/46022345620123-Edit-and-customize-your-tracks" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <article class="spec">
+        <h3>SoundCloud (digital distribution)</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px JPEG, up to 10 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>SoundCloud for Artists distribution requires 3000x3000 and a perfect square, which is a different and stricter spec than the on-platform upload.</dd></div>
+        </dl>
+        <a class="src" href="https://help.soundcloud.com/hc/en-us/articles/40259650089243-Artwork-Guidelines-for-Digital-Distribution" rel="nofollow noopener" target="_blank">Source</a>
+      </article>
+      <h2 id="social">Social</h2>
+      <article class="spec">
+        <h3>Instagram post (1:1)</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">1080 &times; 1080 px JPEG, up to 8 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>Square feed post.</dd></div>
+        </dl>
+        <span class="nosrc">No published source recorded</span>
+      </article>
+      <article class="spec">
+        <h3>Instagram story (9:16)</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">1080 &times; 1920 px JPEG, up to 8 MB</dd></div>
+          <div><dt>What the platform says</dt><dd>Square art centred on a blurred blow-up of itself, so nothing gets cropped.</dd></div>
+        </dl>
+        <span class="nosrc">No published source recorded</span>
+      </article>
+      <h2 id="web">Web</h2>
+      <article class="spec">
+        <h3>Web thumbnail</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">600 &times; 600 px JPEG, up to 300 KB</dd></div>
+          <div><dt>What the platform says</dt><dd>Label site / press listings.</dd></div>
+        </dl>
+        <span class="nosrc">No published source recorded</span>
+      </article>
+      <h2 id="archive">Archive</h2>
+      <article class="spec">
+        <h3>Flattened archive master</h3>
+        <dl>
+          <div><dt>What this project delivers</dt><dd class="mono">3000 &times; 3000 px PNG</dd></div>
+          <div><dt>What the platform says</dt><dd>Lossless sRGB PNG to hand to a label or keep as the canonical delivered master.</dd></div>
+        </dl>
+        <span class="nosrc">No published source recorded</span>
+      </article>
+
+  <nav class="tools">
+    <b>Check a file:</b>
+    <a href="cover.html">Album Cover Size Checker</a>
+    <a href="splits.html">Split Sheet Maker</a>
+    <a href="shop.html">Mixing and mastering</a>
+  </nav>
+
+  <footer>
+    <a href="index.html">&larr; all tools</a>
+    <a href="impressum.html">Impressum</a>
+    <span>Generated from
+      <a href="https://github.com/notgabriels-sys/albumdesign/blob/main/coverforge/targets.toml">targets.toml</a>,
+      the same file the command line tool reads, so this page and the tool
+      cannot disagree.</span>
+    <span>Cover Art Requirements by Platform: a free tool by <b>Gabriel G Alonso</b>, mixing &amp; mastering, Berlin.</span>
+    <span class="cta">Need the record finished? <a href="shop.html">See rates and book</a>,
+      or email <a href="mailto:hologrampeoplemusic@gmail.com">hologrampeoplemusic@gmail.com</a></span>
+  </footer>
+</main>
+</html>

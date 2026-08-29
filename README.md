@@ -5,7 +5,8 @@ in one command.
 
 **Free browser tools, nothing to install:**
 [Album Cover Size Checker](https://gabs-utilities.com/cover.html) ·
-[Split Sheet Maker](https://gabs-utilities.com/splits.html)
+[Split Sheet Maker](https://gabs-utilities.com/splits.html) ·
+[Cover Art Requirements by Platform](https://gabs-utilities.com/specs.html)
 
 They run entirely in your browser. Nothing is uploaded, so unreleased masters
 stay on your machine.
@@ -320,8 +321,16 @@ Each check is there because that exact thing broke once.
 
 ---
 
+## Licence
+
+MIT. See [LICENSE](LICENSE). Use it, fork it, ship it in something you sell;
+keep the copyright notice.
+
 ## Gabriel Tools + Code
 
-Part of Gabriel García Alonso's public tool/product ecosystem. Browse the master catalog for related audio tools, repositories, Hologram People soundware, and services:
+Part of Gabriel García Alonso's public tool/product ecosystem. Browse the master
+catalog for related audio tools, repositories, soundware, and services:
 
-[Gabriel Tools + Code](https://gabriel-tools-and-code.notgabriels960914.chatgpt.site/)
+[Gabriel Tools + Code](https://tools.gabs-utilities.com/) ·
+[Mixing and mastering](https://audio.gabs-utilities.com/) ·
+[gabs-utilities.com](https://gabs-utilities.com/)
