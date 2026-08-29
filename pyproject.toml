@@ -2,8 +2,33 @@
 name = "coverforge"
 version = "0.1.0"
 description = "Preflight and delivery-pack builder for release artwork"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["pillow>=10.0"]
+keywords = [
+  "album-art",
+  "cover-art",
+  "artwork",
+  "music-release",
+  "image-processing",
+  "preflight",
+]
+# No "License ::" classifier and no `license` field: this repository carries no
+# LICENSE file, so there is nothing to declare. Naming one here would be the
+# package asserting terms nobody granted.
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Graphics",
+]
+
+[project.urls]
+Homepage = "https://gabs-utilities.com/"
+Repository = "https://github.com/notgabriels-sys/albumdesign"
+Issues = "https://github.com/notgabriels-sys/albumdesign/issues"
 
 [project.scripts]
 coverforge = "coverforge.cli:main"
