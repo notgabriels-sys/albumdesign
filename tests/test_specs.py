@@ -1,6 +1,7 @@
 import pytest
 
-from coverforge.specs import SpecError, load_targets
+from coverforge.specs import SpecError, TargetSet, load_targets
+from datetime import date as _date
 
 
 def test_builtin_targets_load():
@@ -167,3 +168,120 @@ def test_missing_file(tmp_path):
 def test_targets_path_io_error_is_a_spec_error(tmp_path):
     with pytest.raises(SpecError, match="could not read targets file"):
         load_targets(tmp_path)
+
+
+# --- `coverforge targets` tells you how old the numbers are, and where they came from ---
+#
+# CLAUDE.md: "Keep the source and retrieval date for any numeric requirement."
+# Both were in the file and neither was in the one command a human runs to read
+# the specs: `source` was reachable only through `targets --json`, and the
+# review date printed as a bare stamp that prompts nobody.
+
+
+def _head(reviewed: str, today: _date) -> str:
+    from coverforge.report import format_targets
+    return format_targets(TargetSet(reviewed=reviewed), colour=False, today=today).splitlines()[0]
+
+
+@pytest.mark.parametrize(
+    "reviewed,today,expected",
+    [
+        ("2026-08", _date(2026, 8, 29), "(this month)"),
+        ("2026-07", _date(2026, 8, 29), "(1 month ago)"),
+        ("2025-11", _date(2026, 8, 29), "(9 months ago)"),
+        ("2025-12", _date(2026, 1, 1), "(1 month ago)"),
+    ],
+)
+def test_review_date_is_aged_against_a_fixed_today(reviewed, today, expected):
+    """`today` is injected so this is a test and not a reading of the clock."""
+    assert expected in _head(reviewed, today)
+
+
+def test_a_fresh_review_does_not_nag():
+    head = _head("2026-08", _date(2026, 8, 29))
+    assert "verify against your distributor" in head
+    assert "re-reading the platform pages" not in head
+
+
+def test_a_stale_review_says_so_at_the_boundary_and_past_it():
+    """6 months is this project's own prompt, so the wording must say whose it is."""
+    from coverforge.report import STALE_AFTER_MONTHS
+
+    assert STALE_AFTER_MONTHS == 6
+    just_inside = _head("2026-03", _date(2026, 8, 29))   # 5 months
+    at_boundary = _head("2026-02", _date(2026, 8, 29))   # 6 months
+    assert "re-reading the platform pages" not in just_inside
+    assert "re-reading the platform pages" in at_boundary
+    assert "this project" in at_boundary, "a house rule must not read as a platform requirement"
+
+
+@pytest.mark.parametrize("bad", ["soon", "2026-13", "2026", "", "2026-00"])
+def test_an_unreadable_review_date_is_not_reported_as_fresh(bad):
+    """"0 months old" and "unreadable" are different answers.
+
+    Printing the first for the second would be the file vouching for itself.
+    An empty stamp prints no age line at all, which is the honest nothing.
+    """
+    from coverforge.report import review_age
+
+    months, phrase = review_age(bad, _date(2026, 8, 29))
+    assert months is None
+    assert "cannot be worked out" in phrase
+
+
+def test_a_review_date_in_the_future_is_called_wrong_not_fresh():
+    head = _head("2026-12", _date(2026, 8, 29))
+    assert "in the future" in head and "fix the date" in head
+
+
+def _provenance_lines(rendered: str) -> list[str]:
+    """The lines that state where a target's numbers came from.
+
+    Matched exactly, not by substring over the whole render. Scanning the whole
+    document for a word like "invented" hits Beatport's note, which says a
+    render below its floor is "mostly invented pixels" and is correct prose.
+    """
+    return [line.strip() for line in rendered.splitlines()]
+
+
+def test_every_target_states_where_its_numbers_came_from():
+    from coverforge.report import format_targets
+
+    ts = load_targets()
+    lines = _provenance_lines(format_targets(ts, colour=False, today=_date(2026, 8, 29)))
+    for target in ts:
+        expected = target.source or "no source recorded"
+        assert expected in lines, f"{target.key} does not say where its numbers came from"
+
+
+def test_the_cited_and_uncited_targets_are_both_really_there():
+    """Neither half may be empty, or one of the two branches above is untested."""
+    from coverforge.report import format_targets
+
+    ts = load_targets()
+    lines = _provenance_lines(format_targets(ts, colour=False, today=_date(2026, 8, 29)))
+    cited = [t for t in ts if t.source]
+    uncited = [t for t in ts if not t.source]
+    assert cited and uncited, "one branch has no target exercising it"
+    assert lines.count("no source recorded") == len(uncited)
+    for target in cited:
+        assert lines.count(target.source) >= 1
+
+
+def test_a_missing_source_is_described_as_missing_not_as_a_choice():
+    """instagram_post's 1080 is Instagram's own documented size; nobody wrote
+    the link down.
+
+    "no source recorded" is a claim about this file, which is checkable.
+    "chosen by this project" would be a claim about the number, and a false
+    one. This asserts the sentinel wording itself rather than scanning the
+    whole render, so a target's prose cannot satisfy or break it.
+    """
+    from coverforge.report import format_targets
+
+    ts = load_targets()
+    lines = _provenance_lines(format_targets(ts, colour=False, today=_date(2026, 8, 29)))
+    sentinels = {line for line in lines if "source" in line and "://" not in line}
+    assert sentinels == {"no source recorded"}, sentinels
+    for overclaim in ("chosen", "our own", "invented", "made up", "estimated"):
+        assert overclaim not in "no source recorded"

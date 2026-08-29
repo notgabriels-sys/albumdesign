@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
+from datetime import date
 
 from .build import BuildResult, output_name, plan
 from .imageops import SourceImage, human_bytes
@@ -113,10 +115,60 @@ def format_build(result: BuildResult, colour: bool) -> str:
     return "\n".join(lines)
 
 
-def format_targets(target_set: TargetSet, colour: bool) -> str:
+# How old the recorded review date may get before `targets` starts pushing
+# back. This is THIS PROJECT'S prompt to go and re-read the platform pages, not
+# a number any platform publishes, and the wording says so rather than dressing
+# a house rule up as a requirement.
+STALE_AFTER_MONTHS = 6
+
+_YYYY_MM = re.compile(r"^(\d{4})-(\d{2})$")
+
+
+def review_age(reviewed: str, today: date) -> tuple[int | None, str]:
+    """Months between a `YYYY-MM` review stamp and today, plus how to say it.
+
+    Returns `(None, reason)` when the stamp cannot be read as a date, because
+    "0 months old" and "unreadable" are different answers and printing the
+    first for the second would be the file vouching for itself.
+    """
+    m = _YYYY_MM.match(reviewed.strip())
+    if not m:
+        return None, "not a YYYY-MM date, so its age cannot be worked out"
+    year, month = int(m.group(1)), int(m.group(2))
+    if not 1 <= month <= 12:
+        return None, "names no real month, so its age cannot be worked out"
+    months = (today.year - year) * 12 + (today.month - month)
+    if months < 0:
+        return months, f"dated {abs(months)} month(s) in the future, so it is wrong"
+    if months == 0:
+        return months, "this month"
+    if months == 1:
+        return months, "1 month ago"
+    return months, f"{months} months ago"
+
+
+def format_targets(target_set: TargetSet, colour: bool, today: date | None = None) -> str:
+    """Render the target table.
+
+    `today` is a parameter so the age line can be tested at a fixed date. It
+    defaults to the real one; a renderer that could only be checked against the
+    clock could not be checked at all.
+    """
+    today = today or date.today()
     lines = []
     if target_set.reviewed:
-        lines.append(f"specs last reviewed {target_set.reviewed} - verify against your distributor")
+        months, phrase = review_age(target_set.reviewed, today)
+        head = f"specs last reviewed {target_set.reviewed} ({phrase})"
+        if months is None or months < 0:
+            lines.append(_paint(f"{head} - fix the date in targets.toml", _COLOUR[WARN], colour))
+        elif months >= STALE_AFTER_MONTHS:
+            lines.append(_paint(
+                f"{head} - past the {STALE_AFTER_MONTHS} months this project "
+                f"allows before re-reading the platform pages. Check the source "
+                f"links below before you deliver",
+                _COLOUR[WARN], colour))
+        else:
+            lines.append(f"{head} - verify against your distributor")
         lines.append("")
 
     for group in target_set.groups:
@@ -131,6 +183,16 @@ def format_targets(target_set: TargetSet, colour: bool) -> str:
             )
             if target.notes:
                 lines.append(f"  {'':<17} {_paint(target.notes, _COLOUR[INFO], colour)}")
+            # Where the numbers came from. This was in `targets --json` and
+            # nowhere a human could see it, so the one command you run to read
+            # the specs could not tell you which of them carry a citation.
+            #
+            # "no source recorded" is deliberately a statement about this file
+            # and not about the number. instagram_post's 1080 is Instagram's
+            # own documented size; nobody wrote the link down. Saying "this
+            # project chose it" would be the stronger claim, and a false one.
+            provenance = target.source or "no source recorded"
+            lines.append(f"  {'':<17} {_paint(provenance, _COLOUR[INFO], colour)}")
         lines.append("")
     return "\n".join(lines).rstrip()
 
